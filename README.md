@@ -3,6 +3,8 @@
 [![CI](https://github.com/organismzero/palworld-save-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/organismzero/palworld-save-viewer/actions/workflows/ci.yml)
 [![Licence: GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue.svg)](LICENSE)
 
+**[Open the viewer →](https://organismzero.github.io/palworld-save-viewer/)**
+
 A visual browser for Palworld save files. Drop in a save and get an interactive
 map of your world, a browsable collection of every pal you own, a guild and
 player dashboard, and a base and inventory explorer with global item search.
