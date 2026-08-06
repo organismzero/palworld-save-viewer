@@ -142,8 +142,13 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# PalWorld Level data files
-data/
+# Real save data. Never commit anything from here — see
+# test/golden/leak.golden.test.ts.
+#
+# No trailing slash on purpose: `data/` matches a directory but not a *symlink*
+# to one, and pointing `data` at a save kept elsewhere is a normal thing to do.
+# With the slash, `git add -A` stages that symlink.
+data
 
 # Throwaway M0 spike harness. Holds a copy of the game world map, which must
 # never be committed — see SOURCES.md.
