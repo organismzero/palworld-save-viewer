@@ -1,0 +1,646 @@
+{
+  "_comment": [
+    "Hand-written fixture covering every GVAS wrapper shape the readers meet.",
+    "This file is NEVER regenerated - it is the specification for src/parse/gvas.ts.",
+    "If a save format change introduces a new wrapper shape, add it here by hand",
+    "with a test, rather than editing this file to match whatever the parser does."
+  ],
+
+  "scalars": {
+    "anInt": { "id": null, "value": 42, "type": "IntProperty" },
+    "anInt64": { "id": null, "value": 577253, "type": "Int64Property" },
+    "aFloat": { "id": null, "value": 96.29998779296875, "type": "FloatProperty" },
+    "aBoolTrue": { "value": true, "id": null, "type": "BoolProperty" },
+    "aBoolFalse": { "value": false, "id": null, "type": "BoolProperty" },
+    "aName": { "id": null, "value": "SamuraiDog", "type": "NameProperty" },
+    "aStr": { "id": null, "value": "Fixtura", "type": "StrProperty" },
+    "anEmptyStr": { "id": null, "value": "", "type": "StrProperty" },
+
+    "_comment_byte": "ByteProperty double-nests. .value is an object, NOT the number.",
+    "aByte": {
+      "id": null,
+      "value": { "type": "None", "value": 36 },
+      "type": "ByteProperty"
+    },
+    "aByteZero": {
+      "id": null,
+      "value": { "type": "None", "value": 0 },
+      "type": "ByteProperty"
+    },
+
+    "_comment_enum": "EnumProperty double-nests the same way, with a string payload.",
+    "anEnum": {
+      "id": null,
+      "value": { "type": "EPalGenderType", "value": "EPalGenderType::Female" },
+      "type": "EnumProperty"
+    },
+    "anEnumNoPrefix": {
+      "id": null,
+      "value": { "type": "None", "value": "Bare" },
+      "type": "EnumProperty"
+    },
+
+    "aNullValue": { "id": null, "value": null, "type": "StrProperty" }
+  },
+
+  "structs": {
+    "_comment_scalar_struct": "Guid and DateTime are STRUCTS whose payload is a bare scalar at .value.",
+    "aGuid": {
+      "struct_type": "Guid",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": "fa02fa02-fa02-4fff-8fff-fa02fa02fa02",
+      "type": "StructProperty"
+    },
+    "anUpperHyphenGuid": {
+      "struct_type": "Guid",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": "FA06FA06-FA06-4FFF-8FFF-FA06FA06FA06",
+      "type": "StructProperty"
+    },
+    "aZeroGuid": {
+      "struct_type": "Guid",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "StructProperty"
+    },
+    "aDateTime": {
+      "struct_type": "DateTime",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": 639200000000000000,
+      "type": "StructProperty"
+    },
+
+    "_comment_object_struct": "Vector is a struct whose payload is an object.",
+    "aVector": {
+      "struct_type": "Vector",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": {
+        "x": -295971.3947138115,
+        "y": 190554.45703293625,
+        "z": 113.2363314511517
+      },
+      "type": "StructProperty"
+    },
+
+    "_comment_fixed": "FixedPoint64 stores HP multiplied by 1000.",
+    "aFixedPoint64": {
+      "struct_type": "FixedPoint64",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": {
+        "Value": { "id": null, "value": 927000, "type": "Int64Property" }
+      },
+      "type": "StructProperty"
+    },
+
+    "aTransform": {
+      "rotation": { "x": 0.0, "y": 0.0, "z": 0.515, "w": 0.857 },
+      "translation": {
+        "x": -353595.44812956697,
+        "y": 270320.0584302732,
+        "z": 7061.546807523208
+      },
+      "scale3d": { "x": 1.0, "y": 1.0, "z": 1.0 }
+    },
+
+    "aSlotId": {
+      "struct_type": "PalCharacterSlotId",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": {
+        "ContainerId": {
+          "struct_type": "PalContainerId",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "value": {
+            "ID": {
+              "struct_type": "Guid",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": "fa04fa04-fa04-4fff-8fff-fa04fa04fa04",
+              "type": "StructProperty"
+            }
+          },
+          "type": "StructProperty"
+        },
+        "SlotIndex": { "id": null, "value": 24, "type": "IntProperty" }
+      },
+      "type": "StructProperty"
+    }
+  },
+
+  "arrays": {
+    "nameArray": {
+      "array_type": "NameProperty",
+      "id": null,
+      "value": { "values": ["TrainerATK_UP_1", "Legend"] },
+      "type": "ArrayProperty"
+    },
+    "enumArray": {
+      "array_type": "EnumProperty",
+      "id": null,
+      "value": {
+        "values": [
+          "EPalWazaID::Unique_SamuraiDog_Bite",
+          "EPalWazaID::StoneShotgun"
+        ]
+      },
+      "type": "ArrayProperty"
+    },
+    "guidArray": {
+      "array_type": "StructProperty",
+      "id": null,
+      "value": {
+        "prop_name": "OldOwnerPlayerUIds",
+        "prop_type": "StructProperty",
+        "values": ["FA02FA02-FA02-4FFF-8FFF-FA02FA02FA02"],
+        "type_name": "Guid",
+        "id": "00000000-0000-0000-0000-000000000000"
+      },
+      "type": "ArrayProperty"
+    },
+    "structArray": {
+      "array_type": "StructProperty",
+      "id": null,
+      "value": {
+        "prop_name": "GotStatusPointList",
+        "prop_type": "StructProperty",
+        "values": [
+          {
+            "StatusName": { "id": null, "value": "最大HP", "type": "NameProperty" },
+            "StatusPoint": { "id": null, "value": 7, "type": "IntProperty" }
+          },
+          {
+            "StatusName": { "id": null, "value": "捕獲率", "type": "NameProperty" },
+            "StatusPoint": { "id": null, "value": 2, "type": "IntProperty" }
+          },
+          {
+            "StatusName": { "id": null, "value": "未知のステータス", "type": "NameProperty" },
+            "StatusPoint": { "id": null, "value": 1, "type": "IntProperty" }
+          }
+        ]
+      },
+      "type": "ArrayProperty"
+    },
+    "emptyArray": {
+      "array_type": "NameProperty",
+      "id": null,
+      "value": { "values": [] },
+      "type": "ArrayProperty"
+    },
+    "_comment_map": "MapProperty puts the entry array directly at .value, with no .values.",
+    "mapProperty": {
+      "key_type": "StructProperty",
+      "value_type": "StructProperty",
+      "id": null,
+      "value": [{ "key": "a", "value": 1 }],
+      "type": "MapProperty"
+    },
+    "_comment_arrayvalues": "ArrayProperty of structs nests the array under .value.values.",
+    "arrayPropertyOfStructs": {
+      "array_type": "StructProperty",
+      "id": null,
+      "value": { "values": [{ "MapObjectId": { "value": "ItemChest" } }] },
+      "type": "ArrayProperty"
+    }
+  },
+
+  "characters": [
+    {
+      "_comment": "A fully populated pal - every optional field present.",
+      "key": {
+        "PlayerUId": {
+          "struct_type": "Guid",
+          "value": "fa02fa02-fa02-4fff-8fff-fa02fa02fa02",
+          "type": "StructProperty"
+        },
+        "InstanceId": {
+          "struct_type": "Guid",
+          "value": "fa06fa06-fa06-4fff-8fff-fa06fa06fa06",
+          "type": "StructProperty"
+        },
+        "DebugName": { "id": null, "value": "", "type": "StrProperty" }
+      },
+      "value": {
+        "RawData": {
+          "array_type": "ByteProperty",
+          "id": null,
+          "value": {
+            "object": {
+              "SaveParameter": {
+                "struct_type": "PalIndividualCharacterSaveParameter",
+                "value": {
+                  "CharacterID": {
+                    "id": null,
+                    "value": "BOSS_SamuraiDog",
+                    "type": "NameProperty"
+                  },
+                  "Gender": {
+                    "id": null,
+                    "value": {
+                      "type": "EPalGenderType",
+                      "value": "EPalGenderType::Female"
+                    },
+                    "type": "EnumProperty"
+                  },
+                  "Level": {
+                    "id": null,
+                    "value": { "type": "None", "value": 9 },
+                    "type": "ByteProperty"
+                  },
+                  "Exp": { "id": null, "value": 663, "type": "Int64Property" },
+                  "Rank": {
+                    "id": null,
+                    "value": { "type": "None", "value": 3 },
+                    "type": "ByteProperty"
+                  },
+                  "Talent_HP": {
+                    "id": null,
+                    "value": { "type": "None", "value": 71 },
+                    "type": "ByteProperty"
+                  },
+                  "Talent_Shot": {
+                    "id": null,
+                    "value": { "type": "None", "value": 84 },
+                    "type": "ByteProperty"
+                  },
+                  "Talent_Defense": {
+                    "id": null,
+                    "value": { "type": "None", "value": 48 },
+                    "type": "ByteProperty"
+                  },
+                  "Hp": {
+                    "struct_type": "FixedPoint64",
+                    "value": {
+                      "Value": {
+                        "id": null,
+                        "value": 927000,
+                        "type": "Int64Property"
+                      }
+                    },
+                    "type": "StructProperty"
+                  },
+                  "IsRarePal": {
+                    "value": true,
+                    "id": null,
+                    "type": "BoolProperty"
+                  },
+                  "NickName": {
+                    "id": null,
+                    "value": "Biscuit",
+                    "type": "StrProperty"
+                  },
+                  "PassiveSkillList": {
+                    "array_type": "NameProperty",
+                    "id": null,
+                    "value": { "values": ["TrainerATK_UP_1", "Legend"] },
+                    "type": "ArrayProperty"
+                  },
+                  "EquipWaza": {
+                    "array_type": "EnumProperty",
+                    "id": null,
+                    "value": {
+                      "values": [
+                        "EPalWazaID::Unique_SamuraiDog_Bite",
+                        "EPalWazaID::StoneShotgun"
+                      ]
+                    },
+                    "type": "ArrayProperty"
+                  },
+                  "OwnerPlayerUId": {
+                    "struct_type": "Guid",
+                    "value": "fa02fa02-fa02-4fff-8fff-fa02fa02fa02",
+                    "type": "StructProperty"
+                  },
+                  "OldOwnerPlayerUIds": {
+                    "array_type": "StructProperty",
+                    "id": null,
+                    "value": {
+                      "prop_name": "OldOwnerPlayerUIds",
+                      "prop_type": "StructProperty",
+                      "values": ["fa02fa02-fa02-4fff-8fff-fa02fa02fa02"],
+                      "type_name": "Guid"
+                    },
+                    "type": "ArrayProperty"
+                  },
+                  "LastJumpedLocation": {
+                    "struct_type": "Vector",
+                    "value": { "x": -295971.39, "y": 190554.45, "z": 113.23 },
+                    "type": "StructProperty"
+                  },
+                  "OwnedTime": {
+                    "struct_type": "DateTime",
+                    "value": 639200000000000000,
+                    "type": "StructProperty"
+                  },
+                  "SlotId": {
+                    "struct_type": "PalCharacterSlotId",
+                    "value": {
+                      "ContainerId": {
+                        "struct_type": "PalContainerId",
+                        "value": {
+                          "ID": {
+                            "struct_type": "Guid",
+                            "value": "fa04fa04-fa04-4fff-8fff-fa04fa04fa04",
+                            "type": "StructProperty"
+                          }
+                        },
+                        "type": "StructProperty"
+                      },
+                      "SlotIndex": {
+                        "id": null,
+                        "value": 24,
+                        "type": "IntProperty"
+                      }
+                    },
+                    "type": "StructProperty"
+                  }
+                },
+                "type": "StructProperty"
+              }
+            },
+            "unknown_bytes": [0, 0, 0, 0],
+            "group_id": "fa08fa08-fa08-4fff-8fff-fa08fa08fa08",
+            "trailing_bytes": [0, 0, 0, 0]
+          },
+          "type": "ArrayProperty"
+        }
+      }
+    },
+    {
+      "_comment": "A near-empty pal - only CharacterID. Exercises the sparsity path.",
+      "key": {
+        "PlayerUId": {
+          "struct_type": "Guid",
+          "value": "00000000-0000-0000-0000-000000000000",
+          "type": "StructProperty"
+        },
+        "InstanceId": {
+          "struct_type": "Guid",
+          "value": "aaaaaaaa-1111-2222-3333-444444444444",
+          "type": "StructProperty"
+        }
+      },
+      "value": {
+        "RawData": {
+          "array_type": "ByteProperty",
+          "value": {
+            "object": {
+              "SaveParameter": {
+                "value": {
+                  "CharacterID": {
+                    "id": null,
+                    "value": "Sheepball",
+                    "type": "NameProperty"
+                  }
+                },
+                "type": "StructProperty"
+              }
+            },
+            "group_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "type": "ArrayProperty"
+        }
+      }
+    },
+    {
+      "_comment": "A player. Note IsPlayer and the absence of any container ids.",
+      "key": {
+        "PlayerUId": {
+          "struct_type": "Guid",
+          "value": "fa03fa03-fa03-4fff-8fff-fa03fa03fa03",
+          "type": "StructProperty"
+        },
+        "InstanceId": {
+          "struct_type": "Guid",
+          "value": "cccccccc-1111-2222-3333-444444444444",
+          "type": "StructProperty"
+        }
+      },
+      "value": {
+        "RawData": {
+          "array_type": "ByteProperty",
+          "value": {
+            "object": {
+              "SaveParameter": {
+                "value": {
+                  "IsPlayer": {
+                    "value": true,
+                    "id": null,
+                    "type": "BoolProperty"
+                  },
+                  "NickName": {
+                    "id": null,
+                    "value": "Fixtura",
+                    "type": "StrProperty"
+                  },
+                  "Level": {
+                    "id": null,
+                    "value": { "type": "None", "value": 36 },
+                    "type": "ByteProperty"
+                  },
+                  "Exp": {
+                    "id": null,
+                    "value": 577253,
+                    "type": "Int64Property"
+                  },
+                  "Hp": {
+                    "struct_type": "FixedPoint64",
+                    "value": {
+                      "Value": {
+                        "id": null,
+                        "value": 1200000,
+                        "type": "Int64Property"
+                      }
+                    },
+                    "type": "StructProperty"
+                  },
+                  "GotStatusPointList": {
+                    "array_type": "StructProperty",
+                    "value": {
+                      "prop_name": "GotStatusPointList",
+                      "prop_type": "StructProperty",
+                      "values": [
+                        {
+                          "StatusName": {
+                            "id": null,
+                            "value": "最大HP",
+                            "type": "NameProperty"
+                          },
+                          "StatusPoint": {
+                            "id": null,
+                            "value": 7,
+                            "type": "IntProperty"
+                          }
+                        }
+                      ]
+                    },
+                    "type": "ArrayProperty"
+                  },
+                  "LastJumpedLocation": {
+                    "struct_type": "Vector",
+                    "value": { "x": -295971.39, "y": 190554.45, "z": 113.23 },
+                    "type": "StructProperty"
+                  }
+                },
+                "type": "StructProperty"
+              }
+            },
+            "group_id": "fa08fa08-fa08-4fff-8fff-fa08fa08fa08"
+          },
+          "type": "ArrayProperty"
+        }
+      }
+    },
+    {
+      "_comment": "Malformed - RawData.value.object is missing entirely.",
+      "key": {
+        "InstanceId": {
+          "struct_type": "Guid",
+          "value": "dddddddd-1111-2222-3333-444444444444",
+          "type": "StructProperty"
+        }
+      },
+      "value": {
+        "RawData": { "array_type": "ByteProperty", "value": {}, "type": "ArrayProperty" }
+      }
+    }
+  ],
+
+  "mapObjects": [
+    {
+      "_comment": "A chest. The container link is in ConcreteModel.ModuleMap, NOT RawData.",
+      "MapObjectId": { "id": null, "value": "ItemChest", "type": "NameProperty" },
+      "Model": {
+        "struct_type": "PalMapObjectModelSaveData",
+        "value": {
+          "RawData": {
+            "array_type": "ByteProperty",
+            "value": {
+              "instance_id": "fa07fa07-fa07-4fff-8fff-fa07fa07fa07",
+              "concrete_model_instance_id": "fa00fa00-fa00-4fff-8fff-fa00fa00fa00",
+              "base_camp_id_belong_to": "fa01fa01-fa01-4fff-8fff-fa01fa01fa01",
+              "group_id_belong_to": "fa08fa08-fa08-4fff-8fff-fa08fa08fa08",
+              "hp": { "current": 4488, "max": 4500 },
+              "initital_transform_cache": {
+                "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+                "translation": {
+                  "x": -326852.42578125,
+                  "y": 226363.02734375,
+                  "z": -879.3872680664062
+                },
+                "scale3d": { "x": 1, "y": 1, "z": 1 }
+              },
+              "build_player_uid": "fa02fa02-fa02-4fff-8fff-fa02fa02fa02"
+            },
+            "type": "ArrayProperty"
+          }
+        },
+        "type": "StructProperty"
+      },
+      "ConcreteModel": {
+        "struct_type": "PalMapObjectConcreteModelSaveData",
+        "value": {
+          "ModuleMap": {
+            "key_type": "EnumProperty",
+            "value_type": "StructProperty",
+            "value": [
+              {
+                "key": "EPalMapObjectConcreteModelModuleType::ItemContainer",
+                "value": {
+                  "RawData": {
+                    "array_type": "ByteProperty",
+                    "value": {
+                      "target_container_id": "fa05fa05-fa05-4fff-8fff-fa05fa05fa05",
+                      "slot_attribute_indexes": [],
+                      "drop_item_at_disposed": true
+                    },
+                    "type": "ArrayProperty"
+                  }
+                }
+              },
+              {
+                "key": "EPalMapObjectConcreteModelModuleType::PasswordLock",
+                "value": {
+                  "RawData": {
+                    "array_type": "ByteProperty",
+                    "value": { "lock_state": 1, "password": "1234" },
+                    "type": "ArrayProperty"
+                  }
+                }
+              }
+            ],
+            "type": "MapProperty"
+          },
+          "RawData": {
+            "array_type": "ByteProperty",
+            "value": {
+              "instance_id": "fa00fa00-fa00-4fff-8fff-fa00fa00fa00",
+              "model_instance_id": "fa07fa07-fa07-4fff-8fff-fa07fa07fa07",
+              "concrete_model_type": "PalMapObjectItemChestModel"
+            },
+            "type": "ArrayProperty"
+          }
+        },
+        "type": "StructProperty"
+      }
+    },
+    {
+      "_comment": "A world rock - no base, no container, no modules of interest.",
+      "MapObjectId": {
+        "id": null,
+        "value": "DamagableRock0002",
+        "type": "NameProperty"
+      },
+      "Model": {
+        "value": {
+          "RawData": {
+            "value": {
+              "instance_id": "11111111-2222-3333-4444-555555555555",
+              "base_camp_id_belong_to": "00000000-0000-0000-0000-000000000000",
+              "group_id_belong_to": "00000000-0000-0000-0000-000000000000",
+              "hp": { "current": 4500, "max": 4500 },
+              "initital_transform_cache": {
+                "translation": { "x": -300000.0, "y": 200000.0, "z": 100.0 }
+              },
+              "build_player_uid": "00000000-0000-0000-0000-000000000000"
+            },
+            "type": "ArrayProperty"
+          }
+        },
+        "type": "StructProperty"
+      },
+      "ConcreteModel": {
+        "value": {
+          "ModuleMap": {
+            "value": [
+              {
+                "key": "EPalMapObjectConcreteModelModuleType::StatusObserver",
+                "value": {
+                  "RawData": {
+                    "array_type": "ByteProperty",
+                    "value": { "values": [] },
+                    "type": "ArrayProperty"
+                  }
+                }
+              }
+            ],
+            "type": "MapProperty"
+          },
+          "RawData": {
+            "value": {
+              "concrete_model_type": "PalMapObjectItemDropOnDamagModel"
+            },
+            "type": "ArrayProperty"
+          }
+        },
+        "type": "StructProperty"
+      }
+    }
+  ]
+}

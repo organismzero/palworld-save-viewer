@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Design tokens — "field survey terminal".
+
+   Base is a cold near-black with a green-blue cast rather than neutral grey;
+   that cast is what lets the nine element hues read as data rather than decor.
+
+   Rule that holds the whole palette together: `signal` is the ONLY UI accent
+   (focus, active, selection). The element colours are data colours and must
+   never be used for chrome.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-abyss: oklch(0.145 0.012 250);
+  --color-surface: oklch(0.19 0.014 250);
+  --color-raised: oklch(0.235 0.016 250);
+  --color-line: oklch(0.32 0.018 250);
+  --color-muted: oklch(0.62 0.02 250);
+  --color-text: oklch(0.94 0.008 250);
+  --color-signal: oklch(0.78 0.15 190);
+
+  /* Element hues, normalised to near-equal perceptual lightness in OKLCH.
+     The raw values in PalworldSaveTools' skills.json are Tailwind v3 defaults
+     with wildly uneven lightness — Dark (#6B21A8) sits at L≈0.38 and vanishes
+     on a dark ground, Ice (#67E8F9) at L≈0.86 and screams. Source hex is kept
+     in the comment on each line; see src/lib/color.ts for the canonical table. */
+  --color-el-neutral: oklch(0.72 0.02 260); /* #9CA3AF */
+  --color-el-fire: oklch(0.72 0.16 28); /* #EF4444 */
+  --color-el-water: oklch(0.72 0.15 250); /* #3B82F6 */
+  --color-el-electric: oklch(0.8 0.15 85); /* #FBBF24 — yellow needs +L */
+  --color-el-grass: oklch(0.78 0.16 150); /* #4ADE80 */
+  --color-el-dark: oklch(0.62 0.16 305); /* #6B21A8 — lifted hard */
+  --color-el-dragon: oklch(0.72 0.14 282); /* #818CF8 */
+  --color-el-earth: oklch(0.74 0.13 300); /* #A78BFA — hue pushed off Dragon */
+  --color-el-ice: oklch(0.82 0.12 205); /* #67E8F9 */
+
+  --font-display:
+    'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Martian Mono Variable', ui-monospace, 'SF Mono', monospace;
+
+  --radius-chip: 2px;
+  --radius-control: 6px;
+  --radius-panel: 10px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-abyss);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Every GUID, coordinate, IV, level, count and timestamp is monospaced with
+     tabular figures. This single rule does more for the instrument feel than
+     any other decision in the design. */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The workhorse label treatment. */
+  .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  ::selection {
+    background-color: color-mix(in oklch, var(--color-signal) 30%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
+
+  /* A native dialog is display:none until opened; these restore the layout the
+     modal wants without needing a wrapper element inside it. */
+  dialog[open] {
+    display: block;
+  }
+
+  /* One rule covering every animation and transition in the app, including
+     Tailwind's `animate-*` utilities and any third-party CSS. Motion driven
+     from JavaScript checks the same media query at its own source — see
+     `CountUp` in components/charts.tsx.
+
+     Durations are collapsed to 0.01ms rather than 0 so that animation and
+     transition *end* events still fire; setting them to zero suppresses those
+     events entirely and silently breaks anything sequenced off them. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Depth without glassmorphism or drop shadows: a 1px top highlight is what
+     makes a dark surface look crafted rather than flat. */
+  .raised-edge {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+}

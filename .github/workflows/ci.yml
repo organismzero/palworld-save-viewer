@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel a superseded run rather than paying for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `tsc -b` runs as part of `pnpm build`, but running it first means a
+      # type error is reported as a type error rather than as a build failure.
+      - run: pnpm typecheck
+
+      # Unit tests only. The golden suite needs a real save, which is
+      # gitignored and must never be in CI — it self-skips, so running it here
+      # would report a false pass.
+      - run: pnpm test
+
+      - run: pnpm build
