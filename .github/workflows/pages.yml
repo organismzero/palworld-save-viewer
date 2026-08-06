@@ -50,12 +50,17 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # The build takes ~30s; the rest is GitHub sitting on `deployment_queued`,
-      # which for this repository has run 9-10 minutes every time. That is right
-      # on the action's own 10-minute default, so deploys were failing on queue
-      # time rather than on anything in the artifact. Thirty minutes is slack,
-      # not an expectation — a healthy deploy still finishes in well under one.
+      # Do not add `timeout:` here expecting it to help. The action hard-caps it
+      # at MAX_TIMEOUT = 600000 (`Math.min(timeoutInput, MAX_TIMEOUT)` in
+      # src/internal/deployment.js), so a larger value is clamped back to ten
+      # minutes and only earns a warning in the log. Ten minutes is the ceiling.
+      #
+      # That matters because the build takes ~30s and everything after it is
+      # GitHub holding at `deployment_queued`. When that queue runs long, the
+      # deploy fails on wait time with a perfectly good artifact, and there is
+      # no knob on our side for it. Re-running does not help either: the
+      # deployment record is keyed on the commit and a timed-out one is left
+      # cancelled, so a retry reattaches and fails in seconds. Push a new commit
+      # or dispatch the workflow to get a fresh deployment.
       - id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          timeout: 1800000
