@@ -6,19 +6,33 @@ on:
   # Lets a deploy be re-run from the Actions tab without an empty commit.
   workflow_dispatch:
 
+# Publishing force-pushes a branch, so this needs write access to the
+# repository rather than the `pages`/`id-token` pair the Actions Pages
+# pipeline used.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# One deploy at a time, and never cancel one in flight: a half-finished deploy
-# would leave the live site serving a mix of two builds.
+# One deploy at a time, and never cancel one in flight: two force-pushes
+# racing would leave the live site serving a mix of two builds.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  # This publishes by force-pushing the build to a `gh-pages` branch rather
+  # than through actions/deploy-pages. That action waits on GitHub's
+  # deployment queue and hard-caps its own `timeout` input at ten minutes
+  # (MAX_TIMEOUT = 600000, `Math.min(timeoutInput, MAX_TIMEOUT)` in
+  # src/internal/deployment.js), so when the queue ran long every deploy
+  # failed on wait time with a perfectly good artifact and nothing on our
+  # side could extend it. Pushing a branch finishes in seconds and never
+  # touches that queue.
+  #
+  # The trade is that branch-based Pages builds do count against the soft
+  # limit of 10 builds per hour, which custom workflows are exempt from.
+  # That is fine at this repository's deploy rate, but it is the thing to
+  # look at first if deploys start being rejected in a busy hour.
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,30 +51,26 @@ jobs:
       # different name sets VITE_BASE instead of editing the config.
       - run: pnpm build
 
-      - uses: actions/configure-pages@v5
+      # Without this, Pages runs the build through Jekyll, which silently
+      # drops files and directories whose names begin with an underscore.
+      # Vite does not emit any today, but a future dependency might.
+      - run: touch dist/.nojekyll
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      # Do not add `timeout:` here expecting it to help. The action hard-caps it
-      # at MAX_TIMEOUT = 600000 (`Math.min(timeoutInput, MAX_TIMEOUT)` in
-      # src/internal/deployment.js), so a larger value is clamped back to ten
-      # minutes and only earns a warning in the log. Ten minutes is the ceiling.
-      #
-      # That matters because the build takes ~30s and everything after it is
-      # GitHub holding at `deployment_queued`. When that queue runs long, the
-      # deploy fails on wait time with a perfectly good artifact, and there is
-      # no knob on our side for it. Re-running does not help either: the
-      # deployment record is keyed on the commit and a timed-out one is left
-      # cancelled, so a retry reattaches and fails in seconds. Push a new commit
-      # or dispatch the workflow to get a fresh deployment.
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # A throwaway repository inside dist, force-pushed as a single orphan
+      # commit. The branch therefore holds exactly one revision of the built
+      # site rather than accumulating one per deploy, which keeps clones of
+      # `main` unaffected and the branch itself at the size of a single build.
+      - name: Publish dist to gh-pages
+        working-directory: dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b gh-pages
+          git add -A
+          git commit -qm "Deploy ${GITHUB_SHA} from ${GITHUB_REF_NAME}"
+          git push -q --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages
