@@ -50,5 +50,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # The build takes ~30s; the rest is GitHub sitting on `deployment_queued`,
+      # which for this repository has run 9-10 minutes every time. That is right
+      # on the action's own 10-minute default, so deploys were failing on queue
+      # time rather than on anything in the artifact. Thirty minutes is slack,
+      # not an expectation — a healthy deploy still finishes in well under one.
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
