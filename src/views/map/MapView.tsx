@@ -391,27 +391,36 @@ export function MapView({ index }: { index: SaveIndex }) {
  * The affordance for a file that is always a second drop.
  *
  * `LocalData.sav` lives with the game client rather than the server save, so it
- * is never in the folder the world came from — and the drop zone is gone by
- * the time anyone is looking at the map. A picker rather than a drop target,
- * for the same reason the missing-inventory prompt in the Guild view is one:
+ * is never in the folder the world came from — and the drop zone is gone by the
+ * time anyone is looking at the map. A picker rather than a drop target, for
+ * the same reason the missing-inventory prompt in the Guild view is one:
  * somebody who got this far wants one specific file.
+ *
+ * Shaped as a legend row, dimmed like a layer that is switched off, with the
+ * explanation in the tooltip. It said all that in prose to begin with, which
+ * set the width of the whole panel — the legend is a narrow column of short
+ * labels and one paragraph is enough to stretch it. Nothing in here may be
+ * wider than "Built by players".
  */
 function LocalDataPrompt() {
   const acceptFiles = useSaveStore((s) => s.acceptFiles)
   const inputRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="px-1 py-0.5">
-      <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
-        Fog of war lives in <span className="num">LocalData.sav</span>, which
-        the game keeps with the client rather than the server.
-      </p>
+    <>
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="mt-2 w-full rounded-[4px] border border-[var(--color-line)] px-2 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
+        aria-label="Add LocalData.sav to show fog of war"
+        title="Fog of war comes from LocalData.sav, which the game keeps with the client rather than in the server save. Click to add it."
+        className="flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-xs opacity-35 transition-colors transition-opacity hover:bg-[var(--color-raised)] hover:opacity-100"
       >
-        Add LocalData.sav
+        <span className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-muted)]" />
+        <span className="flex-1">Fog of war</span>
+        {/* Sits in the same column as the layer counts, so the rows line up. */}
+        <span className="num text-[var(--color-muted)]" aria-hidden="true">
+          +
+        </span>
       </button>
       <input
         ref={inputRef}
@@ -423,6 +432,6 @@ function LocalDataPrompt() {
           if (files) void acceptFiles(Array.from(files))
         }}
       />
-    </div>
+    </>
   )
 }
