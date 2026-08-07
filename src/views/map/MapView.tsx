@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { SaveIndex } from '../../domain/types.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
+import { useSaveStore } from '../../store/saveStore.ts'
 import {
+  DEFAULT_FOG_OPACITY,
   LAYER_STYLES,
   MapController,
   type LayerId,
@@ -19,6 +21,7 @@ const LEGEND_ORDER: LayerId[] = [
   'players',
   'bases',
   'structuresBuilt',
+  'markers',
   'pals',
   'chests',
   'structuresWorld',
@@ -43,6 +46,8 @@ const DEFAULT_VISIBLE: Record<LayerId, boolean> = {
   structuresWorld: false,
   dungeons: false,
   landmarks: false,
+  // On: you placed these deliberately, and there are only ever a handful.
+  markers: true,
 }
 
 export function MapView({ index }: { index: SaveIndex }) {
@@ -59,6 +64,9 @@ export function MapView({ index }: { index: SaveIndex }) {
     useState<Record<LayerId, boolean>>(DEFAULT_VISIBLE)
   const [query, setQuery] = useState('')
   const [counts, setCounts] = useState<Record<LayerId, number>>()
+  const localData = useSaveStore((s) => s.localData)
+  const [fogOn, setFogOn] = useState(true)
+  const [fogOpacity, setFogOpacity] = useState(DEFAULT_FOG_OPACITY)
   /**
    * Bumped each time a controller finishes mounting.
    *
@@ -115,6 +123,39 @@ export function MapView({ index }: { index: SaveIndex }) {
       controller.setLayerVisible(id as LayerId, on)
     }
   }, [visible, mounted])
+
+  /**
+   * Push the client's own save into Pixi.
+   *
+   * Same shape as the visibility effect above, and for the same reason — but
+   * here it also spares a rebuild. `LocalData.sav` almost always arrives as a
+   * second drop, long after the map is up, and folding it into the controller's
+   * dependency list would tear down and re-create several thousand sprites to
+   * add a fog texture and one pin.
+   */
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller) return
+    controller.setLocalData(localData)
+    setCounts(controller.counts)
+  }, [localData, mounted])
+
+  // Separate from the rebuild above so dragging the opacity slider sets one
+  // number per frame instead of re-rasterising a megapixel of mask. Depends on
+  // `localData` all the same: a rebuild makes a fresh sprite that has not been
+  // told whether the toggle is off.
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller) return
+    controller.setFogVisible(fogOn)
+    controller.setFogOpacity(fogOpacity)
+  }, [fogOn, fogOpacity, localData, mounted])
+
+  const overworldFog = localData?.fog.find((f) => f.map === 'overworld')
+  const hasFog = overworldFog !== undefined
+  const explored = overworldFog
+    ? Math.round(overworldFog.exploredFraction * 100)
+    : undefined
 
   // Computed in the change handler rather than during render: the entity list
   // lives on the controller behind a ref, and reading a ref while rendering
@@ -230,6 +271,43 @@ export function MapView({ index }: { index: SaveIndex }) {
               )
             })}
           </ul>
+
+          {/* Fog of war. Not in the list above: it is a raster covering the
+              whole map, not a countable set of markers. */}
+          <div className="mt-2 border-t border-[var(--color-line)] pt-2">
+            {hasFog ? (
+              <>
+                <button
+                  type="button"
+                  aria-pressed={fogOn}
+                  title="Dim the ground this client has never explored, using the mask from LocalData.sav"
+                  onClick={() => setFogOn((on) => !on)}
+                  className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-xs transition-colors hover:bg-[var(--color-raised)] ${
+                    fogOn ? '' : 'opacity-35'
+                  }`}
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-muted)]" />
+                  <span className="flex-1">Fog of war</span>
+                  <span className="num text-[var(--color-muted)]">
+                    {explored === undefined ? '—' : `${explored}%`}
+                  </span>
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(fogOpacity * 100)}
+                  disabled={!fogOn}
+                  aria-label="Fog opacity"
+                  onChange={(e) => setFogOpacity(Number(e.target.value) / 100)}
+                  className="mt-1 w-full accent-[var(--color-signal)] disabled:opacity-35"
+                />
+              </>
+            ) : (
+              <LocalDataPrompt />
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => controllerRef.current?.fit()}
@@ -305,6 +383,46 @@ export function MapView({ index }: { index: SaveIndex }) {
           </Panel>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The affordance for a file that is always a second drop.
+ *
+ * `LocalData.sav` lives with the game client rather than the server save, so it
+ * is never in the folder the world came from — and the drop zone is gone by
+ * the time anyone is looking at the map. A picker rather than a drop target,
+ * for the same reason the missing-inventory prompt in the Guild view is one:
+ * somebody who got this far wants one specific file.
+ */
+function LocalDataPrompt() {
+  const acceptFiles = useSaveStore((s) => s.acceptFiles)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div className="px-1 py-0.5">
+      <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
+        Fog of war lives in <span className="num">LocalData.sav</span>, which
+        the game keeps with the client rather than the server.
+      </p>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="mt-2 w-full rounded-[4px] border border-[var(--color-line)] px-2 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
+      >
+        Add LocalData.sav
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".sav,.json,application/json"
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files
+          if (files) void acceptFiles(Array.from(files))
+        }}
+      />
     </div>
   )
 }

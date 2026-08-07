@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 
 import { buildSaveIndex } from '../domain/index.ts'
-import type { Guid, SaveIndex } from '../domain/types.ts'
+import type { Guid, LocalDataPayload, SaveIndex } from '../domain/types.ts'
 import { explainParseError } from '../parse/explain.ts'
-import { partition, type Sniffed } from '../parse/sniff.ts'
+import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
 import type {
   FromWorker,
   Phase,
@@ -31,14 +31,27 @@ interface SaveState {
   index?: SaveIndex
   error?: string
 
+  /**
+   * The client's own save, if one has been dropped. Kept beside the index
+   * rather than inside it: one file describes one player's client, so it is
+   * neither derived from the world nor invalidated by merging player saves.
+   */
+  localData?: LocalDataPayload
+
   /** Ingestion ledger, keyed by file name. Drives the player-saves panel. */
   playerFiles: Record<string, PlayerFileState>
   /** Held until a Level.json arrives, then drained automatically. */
   pendingPlayerFiles: File[]
+  /** Same, for `LocalData` — reading it needs a world to attribute it to. */
+  pendingLocalFile?: File
 
   acceptFiles: (files: File[]) => Promise<void>
   reset: () => void
 }
+
+type Setter = (
+  partial: Partial<SaveState> | ((s: SaveState) => Partial<SaveState>),
+) => void
 
 /**
  * One worker for the session. It retains both the ~170 MB raw tree and the
@@ -173,12 +186,7 @@ async function parsePlayers(files: File[]) {
  * renaming it should still work. The level is simply the largest — a world is
  * orders of magnitude bigger than any player file.
  */
-async function acceptSavs(
-  savs: Sniffed[],
-  set: (
-    partial: Partial<SaveState> | ((s: SaveState) => Partial<SaveState>),
-  ) => void,
-) {
+async function acceptSavs(savs: Sniffed[], set: Setter) {
   // Player files are named after their UID; a level save is not. Size cannot
   // do this job — a compressed level save is under a megabyte, smaller than
   // any cap that would still admit a real player file.
@@ -224,12 +232,7 @@ async function acceptSavs(
 }
 
 /** Decompresses and merges raw player saves into the world already loaded. */
-async function parsePlayerSavs(
-  players: Sniffed[],
-  set: (
-    partial: Partial<SaveState> | ((s: SaveState) => Partial<SaveState>),
-  ) => void,
-) {
+async function parsePlayerSavs(players: Sniffed[], set: Setter) {
   set((s) => ({
     playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'parsing') },
   }))
@@ -266,6 +269,105 @@ async function parsePlayerSavs(
   }))
 }
 
+/**
+ * Whose client `LocalData.sav` belongs to.
+ *
+ * The file names nobody: its own `PlayerUId` fields are the zero GUID. But
+ * every pal in every party preset carries an instance id that resolves against
+ * the level save, and those pals have owners — 30 of 30 in the reference save,
+ * all agreeing. Unanimity is the whole test: a preset holding someone else's
+ * pal, or a stale id from before a trade, should leave this blank rather than
+ * put the wrong name on somebody's exploration.
+ */
+export function inferOwner(
+  local: LocalDataPayload,
+  index: SaveIndex | undefined,
+): Guid | undefined {
+  if (!index) return undefined
+  const owners = new Set<Guid>()
+  for (const preset of local.presets) {
+    for (const id of preset.palIds) {
+      const owner = index.palById.get(id)?.ownerPlayerUid
+      if (owner) owners.add(owner)
+    }
+  }
+  return owners.size === 1 ? [...owners][0] : undefined
+}
+
+/**
+ * Reads the client's own save onto the world already open.
+ *
+ * Purely additive, like a player save: it never touches `index`, so dropping it
+ * onto a loaded world costs nothing but the read. A file that turns out not to
+ * be a `LocalData` comes back as a rejected ledger row rather than an error,
+ * because tearing down a loaded world over a mis-drop is a bad trade.
+ */
+async function parseLocal(file: File, set: Setter) {
+  set((s) => ({
+    playerFiles: {
+      ...s.playerFiles,
+      [file.name]: {
+        fileName: file.name,
+        bytes: file.size,
+        status: 'parsing' as const,
+      },
+    },
+  }))
+
+  const buf = await file.arrayBuffer()
+  const msg = await request({ t: 'parseLocal', fileName: file.name, buf }, [
+    buf,
+  ])
+  if (msg.t !== 'localResult') return
+
+  set((s) => ({
+    // A rejected drop leaves any previously loaded client data alone.
+    localData: msg.payload
+      ? { ...msg.payload, ownerUid: inferOwner(msg.payload, s.index) }
+      : s.localData,
+    playerFiles: {
+      ...s.playerFiles,
+      [msg.report.fileName]: {
+        fileName: msg.report.fileName,
+        bytes: file.size,
+        status: msg.report.ok ? ('loaded' as const) : ('rejected' as const),
+        reason: msg.report.reason,
+      },
+    },
+  }))
+}
+
+/**
+ * Applies the `LocalData` from a drop, or holds it until a world arrives.
+ *
+ * Attribution needs `palById`, so this can never run before the level — and a
+ * fog mask with no map under it would be nothing to look at anyway.
+ */
+async function applyLocal(
+  local: Sniffed | undefined,
+  set: Setter,
+  get: () => SaveState,
+) {
+  // A `LocalData` held from an earlier gesture is drained here too, which is
+  // what makes "drop the client file, then the world" work as well as the
+  // other order.
+  const file = local?.file ?? get().pendingLocalFile
+  if (!file) return
+
+  if (!get().index) {
+    if (local) {
+      set((s) => ({
+        pendingLocalFile: local.file,
+        playerFiles: { ...s.playerFiles, ...ledgerFrom([local], 'queued') },
+      }))
+    }
+    return
+  }
+
+  set({ pendingLocalFile: undefined })
+  await parseLocal(file, set)
+}
+
 export const useSaveStore = create<SaveState>((set, get) => ({
   status: 'idle',
   playerFiles: {},
@@ -282,101 +384,129 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       fileName: undefined,
       fileBytes: undefined,
       timings: undefined,
+      localData: undefined,
       playerFiles: {},
       pendingPlayerFiles: [],
+      pendingLocalFile: undefined,
     })
   },
 
+  /**
+   * `LocalData` is routed apart from everything else in the drop. It must never
+   * reach the "largest unnamed `.sav` is the level" heuristic below, and it
+   * merges onto whichever world ends up open — including one loaded by this
+   * same call — so it is applied last, after the rest has settled.
+   */
   async acceptFiles(files) {
-    const { level, players, rejected, savs } = await partition(files)
-
-    // Raw saves are only used when no converted JSON came with them: a folder
-    // drop contains both, and the JSON is cheaper to read and is what the
-    // golden tests are written against.
-    if (!level && players.length === 0 && savs.length > 0) {
-      // Player `.sav` files dropped onto a world already open are an addition,
-      // not a replacement. Without this they fell through to "treat the
-      // largest as the level", which threw away the loaded save and reported
-      // the player file as a malformed level.
-      const named = savs.filter((s) => s.filenameUid !== undefined)
-      if (get().index && named.length === savs.length) {
-        await parsePlayerSavs(named, set)
-        return
-      }
-      await acceptSavs(savs, set)
-      return
-    }
-
-    if (!level && players.length === 0) {
-      set({
-        status: rejected.length ? 'error' : get().status,
-        error:
-          rejected[0]?.reason ??
-          'Nothing here looks like a Palworld save. Drop a converted Level.json.',
-      })
-      return
-    }
-
-    set((s) => ({
-      playerFiles: { ...s.playerFiles, ...ledgerFrom(rejected, 'rejected') },
-    }))
-
-    // Players dropped with no level loaded are held, not rejected — the user
-    // very reasonably may drop the folder first.
-    if (!level && !get().index) {
-      set((s) => ({
-        pendingPlayerFiles: [
-          ...s.pendingPlayerFiles,
-          ...players.map((p) => p.file),
-        ],
-        playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'queued') },
-      }))
-      return
-    }
-
-    if (level) {
-      set({
-        status: 'loading',
-        fileName: level.file.name,
-        fileBytes: level.file.size,
-        error: undefined,
-        index: undefined,
-        playerFiles: ledgerFrom(players, 'queued'),
-        pendingPlayerFiles: [],
-        phase: 'decode',
-        progressLabel: 'Reading file',
-      })
-
-      try {
-        const buf = await level.file.arrayBuffer()
-        const msg = await request({ t: 'parseJson', buf }, [buf])
-        if (msg.t !== 'result') return
-        set({
-          status: 'ready',
-          index: buildSaveIndex(msg.payload),
-          timings: msg.timings,
-          phase: 'done',
-          progressLabel: undefined,
-        })
-      } catch (err) {
-        // The worker's message is accurate but often unactionable; this turns
-        // it into something the user can do something about.
-        const { message } = explainParseError(err, level.file.name)
-        set({ status: 'error', error: message, progressLabel: undefined })
-        return
-      }
-    }
-
-    // Anything held from an earlier gesture goes in with this batch.
-    const queued = get().pendingPlayerFiles
-    const batch = [...queued, ...players.map((p) => p.file)]
-    if (batch.length > 0) {
-      set({ pendingPlayerFiles: [] })
-      try {
-        await parsePlayers(batch)
-      } catch (err) {
-        set({ error: err instanceof Error ? err.message : String(err) })
-      }
-    }
+    const parts = await partition(files)
+    await ingestWorld(parts, set, get)
+    await applyLocal(parts.local, set, get)
   },
 }))
+
+/**
+ * Everything in a drop except the client's own save.
+ *
+ * Lifted out of `acceptFiles` so `LocalData` can be applied after it, whatever
+ * path this takes and whichever of its many exits it leaves by.
+ */
+async function ingestWorld(
+  { level, players, rejected, savs, local }: Partitioned,
+  set: Setter,
+  get: () => SaveState,
+) {
+  // Raw saves are only used when no converted JSON came with them: a folder
+  // drop contains both, and the JSON is cheaper to read and is what the
+  // golden tests are written against.
+  if (!level && players.length === 0 && savs.length > 0) {
+    // Player `.sav` files dropped onto a world already open are an addition,
+    // not a replacement. Without this they fell through to "treat the
+    // largest as the level", which threw away the loaded save and reported
+    // the player file as a malformed level.
+    const named = savs.filter((s) => s.filenameUid !== undefined)
+    if (get().index && named.length === savs.length) {
+      await parsePlayerSavs(named, set)
+      return
+    }
+    await acceptSavs(savs, set)
+    return
+  }
+
+  if (!level && players.length === 0) {
+    // A `LocalData` on its own is a complete, sensible drop — the caller
+    // handles it next — so it must not be reported as nothing.
+    if (local) return
+    set({
+      status: rejected.length ? 'error' : get().status,
+      error:
+        rejected[0]?.reason ??
+        'Nothing here looks like a Palworld save. Drop a converted Level.json.',
+    })
+    return
+  }
+
+  set((s) => ({
+    playerFiles: { ...s.playerFiles, ...ledgerFrom(rejected, 'rejected') },
+  }))
+
+  // Players dropped with no level loaded are held, not rejected — the user
+  // very reasonably may drop the folder first.
+  if (!level && !get().index) {
+    set((s) => ({
+      pendingPlayerFiles: [
+        ...s.pendingPlayerFiles,
+        ...players.map((p) => p.file),
+      ],
+      playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'queued') },
+    }))
+    return
+  }
+
+  if (level) {
+    set({
+      status: 'loading',
+      fileName: level.file.name,
+      fileBytes: level.file.size,
+      error: undefined,
+      index: undefined,
+      // A different world means different exploration; the fog from the last
+      // one would be drawn over terrain it never described.
+      localData: undefined,
+      playerFiles: ledgerFrom(players, 'queued'),
+      pendingPlayerFiles: [],
+      phase: 'decode',
+      progressLabel: 'Reading file',
+    })
+
+    try {
+      const buf = await level.file.arrayBuffer()
+      const msg = await request({ t: 'parseJson', buf }, [buf])
+      if (msg.t !== 'result') return
+      set({
+        status: 'ready',
+        index: buildSaveIndex(msg.payload),
+        timings: msg.timings,
+        phase: 'done',
+        progressLabel: undefined,
+      })
+    } catch (err) {
+      // The worker's message is accurate but often unactionable; this turns
+      // it into something the user can do something about.
+      const { message } = explainParseError(err, level.file.name)
+      set({ status: 'error', error: message, progressLabel: undefined })
+      return
+    }
+  }
+
+  // Anything held from an earlier gesture goes in with this batch.
+  const queued = get().pendingPlayerFiles
+  const batch = [...queued, ...players.map((p) => p.file)]
+  if (batch.length > 0) {
+    set({ pendingPlayerFiles: [] })
+    try {
+      await parsePlayers(batch)
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+}

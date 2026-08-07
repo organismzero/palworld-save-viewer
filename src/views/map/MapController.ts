@@ -11,6 +11,7 @@
 import {
   Application,
   Assets,
+  CanvasSource,
   Container,
   Graphics,
   Sprite,
@@ -24,7 +25,12 @@ import {
 } from '../../domain/coords.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { elementColor } from '../../lib/color.ts'
-import type { SaveIndex, Vec3 } from '../../domain/types.ts'
+import type {
+  FogMask,
+  LocalDataPayload,
+  SaveIndex,
+  Vec3,
+} from '../../domain/types.ts'
 import type { Refdata, TileSet } from '../../refdata/refdata.ts'
 import { getTile } from '../../refdata/refdata.ts'
 
@@ -37,6 +43,7 @@ export type LayerId =
   | 'bases'
   | 'dungeons'
   | 'landmarks'
+  | 'markers'
 
 /**
  * The single source of truth for how a layer looks and reads.
@@ -108,6 +115,12 @@ export const LAYER_STYLES: Record<LayerId, LayerStyle> = {
     color: 0x67e8f9,
     css: 'oklch(0.82 0.12 205)',
   },
+  markers: {
+    label: 'Map pins',
+    hint: 'Pins you placed by hand, from LocalData.sav. The icon is stored as a number and the game ships no names for it.',
+    color: 0xf472b6,
+    css: 'oklch(0.74 0.18 350)',
+  },
 }
 
 /**
@@ -124,6 +137,7 @@ export const LAYER_DRAW_ORDER: LayerId[] = [
   'landmarks',
   'pals',
   'players',
+  'markers',
 ]
 
 type Marker = Sprite & { entity?: MapEntity; baseSize?: number }
@@ -142,6 +156,8 @@ interface Options {
   index: SaveIndex
   refdata?: Refdata
   tiles?: TileSet
+  /** The client's own save, if one has been dropped. Supplies fog and pins. */
+  local?: LocalDataPayload
   onHover: (e: MapEntity | undefined, screen: { x: number; y: number }) => void
   onSelect: (e: MapEntity | undefined) => void
   onView: (v: { zoom: number; mx: number; my: number }) => void
@@ -149,6 +165,19 @@ interface Options {
 
 const MIN_ZOOM = 0.35
 const MAX_ZOOM = 14
+
+/**
+ * How dark unexplored ground gets, by default.
+ *
+ * Not 1. The game draws fog opaque, but this is a map you read rather than a
+ * map you walk, and being able to see roughly where the unexplored parts *are*
+ * is worth more here than fidelity to the in-game view. The slider goes to 1
+ * for anyone who disagrees.
+ */
+export const DEFAULT_FOG_OPACITY = 0.8
+
+/** Matches the Pixi clear colour, so fog reads as absence rather than paint. */
+const FOG_TINT = 0x0a0d12
 
 export class MapController {
   private app = new Application()
@@ -158,8 +187,19 @@ export class MapController {
   private dot = Texture.WHITE
   private entities: MapEntity[] = []
   private ring = new Graphics()
+  /**
+   * Holds the fog sprite, and exists so the fog's z-order is decided once in
+   * `mount` rather than recomputed every time a new mask arrives.
+   */
+  private fogLayer = new Container()
+  private fogOpacity = DEFAULT_FOG_OPACITY
   private selectedMarker?: Marker
   private destroyed = false
+  /**
+   * `mount` is async, and `MapView` hands over the client save from an effect
+   * that can run first. Everything that touches the scene graph checks this.
+   */
+  private mounted = false
   private loadedTiles = new Set<string>()
   /** Baked map edge length in px; the procedural fallback uses the same space. */
   private mapSize = 4096
@@ -180,6 +220,10 @@ export class MapController {
 
     this.app.stage.addChild(this.world)
     this.world.addChild(this.tileLayer)
+    // Above the map art, below every marker: fog is there to dim terrain, not
+    // to hide the things you opened the map to find.
+    this.fogLayer.alpha = this.fogOpacity
+    this.world.addChild(this.fogLayer)
 
     if (!this.opts.tiles) this.drawProceduralBackdrop()
 
@@ -194,10 +238,91 @@ export class MapController {
       new Graphics().circle(16, 16, 16).fill(0xffffff),
     )
 
+    this.mounted = true
     this.build()
+    this.applyFog()
     this.fit()
     this.bindInput()
     void this.refreshTiles()
+  }
+
+  /* --- the client's own save ------------------------------------------- */
+
+  /**
+   * Swaps in a `LocalData` that arrived after the map was already up, which is
+   * the normal case: it is a separate file from a separate folder, so it is
+   * almost always a second drop.
+   */
+  setLocalData(local: LocalDataPayload | undefined) {
+    this.opts.local = local
+    // Before `mount` there is no scene graph to put any of this into, and
+    // nothing is lost: `mount` reads `opts.local` and applies it itself.
+    if (!this.mounted) return
+    this.buildMarkers()
+    this.applyFog()
+    this.rescaleMarkers()
+  }
+
+  setFogOpacity(alpha: number) {
+    this.fogOpacity = clamp(alpha, 0, 1)
+    this.fogLayer.alpha = this.fogOpacity
+  }
+
+  setFogVisible(visible: boolean) {
+    this.fogLayer.visible = visible
+  }
+
+  private overworldMask(): FogMask | undefined {
+    // The World Tree mask is read and counted but never drawn: there is no tree
+    // map view to draw it over, and `place()` below discards tree entities for
+    // the same reason.
+    return this.opts.local?.fog.find((f) => f.map === 'overworld')
+  }
+
+  /**
+   * Builds the fog sprite, or removes it.
+   *
+   * The mask is a 1024² alpha channel and the map is 4096² pixels, so this is a
+   * 4× magnification of a texture the game already stored with a soft edge —
+   * Pixi's default linear filtering is exactly right and the seam stays
+   * invisible. The sprite covers the identical rect as the tile layer, which is
+   * what makes the mapping a plain stretch with no offset: the mask is in map
+   * space, and so is `mapToPixel`.
+   */
+  private applyFog() {
+    const mask = this.overworldMask()
+
+    this.fogLayer
+      .removeChildren()
+      .forEach((c) => c.destroy({ texture: true, textureSource: true }))
+    if (!mask) return
+
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = mask.size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const image = ctx.createImageData(mask.size, mask.size)
+    for (let i = 0; i < mask.alpha.length; i++) {
+      // White, so `tint` has something to multiply — the file's own RGB is
+      // zero throughout, which would swallow any colour we asked for.
+      image.data[i * 4] = 255
+      image.data[i * 4 + 1] = 255
+      image.data[i * 4 + 2] = 255
+      image.data[i * 4 + 3] = mask.alpha[i]!
+    }
+    ctx.putImageData(image, 0, 0)
+
+    // Built directly rather than through `Texture.from`, which would put the
+    // canvas in Pixi's global texture cache — wrong for a texture this class
+    // creates and destroys every time a new client save is dropped.
+    const sprite = new Sprite(
+      new Texture({ source: new CanvasSource({ resource: canvas }) }),
+    )
+    sprite.position.set(0, 0)
+    sprite.width = sprite.height = this.mapSize
+    sprite.tint = FOG_TINT
+    this.fogLayer.addChild(sprite)
   }
 
   /**
@@ -224,24 +349,64 @@ export class MapController {
     return mapToPixel(mx, my, this.mapSize, this.mapSize)
   }
 
+  /**
+   * Adds one marker sprite and registers its entity for search and picking.
+   *
+   * Shared by `build` and `buildMarkers` rather than closed over inside
+   * `build`, because the pins layer has to be rebuildable on its own — the
+   * file it comes from usually arrives after everything else is on screen.
+   */
+  private addMarker(
+    e: MapEntity,
+    color: number,
+    size: number,
+    alpha = 1,
+  ): void {
+    const s = new Sprite(this.dot) as Marker
+    const { px, py } = this.toPixel(e.mx, e.my)
+    s.position.set(px, py)
+    s.anchor.set(0.5)
+    s.tint = color
+    s.alpha = alpha
+    s.eventMode = 'static'
+    s.cursor = 'pointer'
+    s.entity = e
+    // Markers are sized in *screen* pixels, so they stay legible at every
+    // zoom instead of ballooning. `rescaleMarkers` applies it.
+    s.baseSize = size
+    this.layers.get(e.kind)!.addChild(s)
+    this.entities.push(e)
+  }
+
+  /** The hand-placed pins, rebuilt from scratch. Cheap: there are a handful. */
+  private buildMarkers() {
+    const layer = this.layers.get('markers')
+    if (!layer) return
+    layer.removeChildren().forEach((c) => c.destroy())
+    this.entities = this.entities.filter((e) => e.kind !== 'markers')
+
+    for (const [i, m] of (this.opts.local?.markers ?? []).entries()) {
+      if (m.at.map !== 'overworld') continue
+      this.addMarker(
+        {
+          kind: 'markers',
+          id: `pin-${i}`,
+          label: `Pin ${m.iconType}`,
+          sub: 'placed by hand',
+          world: m.pos,
+          mx: m.at.mx,
+          my: m.at.my,
+        },
+        LAYER_STYLES.markers.color,
+        14,
+      )
+    }
+  }
+
   private build() {
     const { index, refdata } = this.opts
-    const add = (e: MapEntity, color: number, size: number, alpha = 1) => {
-      const s = new Sprite(this.dot) as Marker
-      const { px, py } = this.toPixel(e.mx, e.my)
-      s.position.set(px, py)
-      s.anchor.set(0.5)
-      s.tint = color
-      s.alpha = alpha
-      s.eventMode = 'static'
-      s.cursor = 'pointer'
-      s.entity = e
-      // Markers are sized in *screen* pixels, so they stay legible at every
-      // zoom instead of ballooning. `rescaleMarkers` applies it.
-      s.baseSize = size
-      this.layers.get(e.kind)!.addChild(s)
-      this.entities.push(e)
-    }
+    const add = (e: MapEntity, color: number, size: number, alpha = 1) =>
+      this.addMarker(e, color, size, alpha)
 
     const place = (pos: Vec3 | undefined) => {
       if (!pos) return undefined
@@ -409,6 +574,8 @@ export class MapController {
         0.8,
       )
     }
+
+    this.buildMarkers()
   }
 
   /** Used when the map art is unavailable — still genuinely readable. */

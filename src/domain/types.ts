@@ -13,11 +13,11 @@
  */
 
 import type { Guid } from '../parse/guid.ts'
-import type { MapPos, Vec3 } from './coords.ts'
+import type { MapKind, MapPos, Vec3 } from './coords.ts'
 import type { StatusKey } from './statusNames.ts'
 
 export type { Guid } from '../parse/guid.ts'
-export type { MapPos, Vec3 } from './coords.ts'
+export type { MapKind, MapPos, Vec3 } from './coords.ts'
 
 export type Gender = 'Male' | 'Female'
 
@@ -331,6 +331,12 @@ export interface SaveWarning {
     | 'unknown-platform'
     /** Two exact sources disagree; that is news, not noise. */
     | 'ownership-conflict'
+    /** A `LocalData` `SaveData` key we do not read yet. Same canary role. */
+    | 'unknown-local-field'
+    /** A fog mask keyed by a map this build has never heard of. */
+    | 'unknown-map-mask'
+    /** A fog mask whose byte count is not four times a square. */
+    | 'malformed-map-mask'
   detail: string
   count: number
 }
@@ -403,6 +409,94 @@ export interface SaveMeta {
   gameTimeTicks?: number
   /** Which path produced this tree; both yield an identical `SaveIndex`. */
   source: 'json' | 'sav'
+}
+
+/* -------------------------------------------------------------------------
+   `LocalData.sav` — the client's own file
+   ------------------------------------------------------------------------- */
+
+/**
+ * One map's fog of war, as the game stores it.
+ *
+ * The save holds an RGBA texture whose **alpha channel is the fog**: 255 is
+ * unexplored, 0 is explored, and the values between are the soft edge the game
+ * paints as you walk. RGB is zero throughout and carries nothing, so the reader
+ * keeps alpha alone — a quarter of the bytes for all of the information.
+ *
+ * `alpha` is row-major from the top-left and maps onto map space by exactly the
+ * transform every marker already uses: `mapToPixel(mx, my, size, size)`, no
+ * flip and no offset. `test/golden/localData.golden.test.ts` pins that against
+ * every player-built structure in the reference save.
+ */
+export interface FogMask {
+  map: MapKind
+  /** Edge length in pixels. 1024 for the overworld, 512 for the World Tree. */
+  size: number
+  alpha: Uint8Array
+  /** Fraction of the texture that is explored, 0–1. */
+  exploredFraction: number
+}
+
+/** A pin the player dropped on their map by hand. */
+export interface CustomMarker {
+  pos: Vec3
+  at: MapPos
+  /**
+   * The game's icon index. Left as a number: there is no name table for it in
+   * any reference data this project has, and inventing labels would be a guess.
+   */
+  iconType: number
+}
+
+/**
+ * A saved party preset.
+ *
+ * The file embeds a whole `PalSaveParameter` copy per slot, but it also carries
+ * the pal's instance GUID — and every one of them resolves against the level
+ * save. So this stores references and throws the copies away: no duplicate pal
+ * records to drift out of step with the real ones.
+ */
+export interface OtomoPreset {
+  name: string
+  palIds: Guid[]
+}
+
+/**
+ * Everything read out of `LocalData.sav`.
+ *
+ * Deliberately **not** part of {@link SlimPayload}. That payload is cloned into
+ * a `SaveIndex` on arrival, and a megabyte of fog mask has no business going
+ * through that; this travels beside it and its mask buffers are transferred,
+ * not copied.
+ *
+ * One file describes one client. On a shared world it is one player's
+ * exploration and one player's progress, never the server's.
+ */
+export interface LocalDataPayload {
+  fileName: string
+  fog: FogMask[]
+  markers: CustomMarker[]
+  presets: OtomoPreset[]
+  /**
+   * `Local_PlayTime`, raw. The unit is unconfirmed — seconds would put the
+   * reference save at 177 days, so it is not seconds — and formatting it on a
+   * guess would be worse than showing the number.
+   */
+  playTime?: number
+  trackingQuestId?: string
+  paldeckEncountered: number
+  techsUnlocked: number
+  buildsUnlocked: number
+  hiddenLocations: number
+  tutorialsSeen: number
+  /**
+   * Whose client this is, inferred on the main thread: the owner every pal in
+   * every party preset agrees on. Undefined when they disagree, when none
+   * resolve, or when there are no presets — the file itself names nobody.
+   */
+  ownerUid?: Guid
+  /** Surfaced in Diagnostics alongside the level save's own. */
+  warnings: SaveWarning[]
 }
 
 /** The main-thread view: flat arrays plus the derived lookup indexes. */

@@ -54,6 +54,13 @@ function committedTestFiles(): string[] {
  * The save corpus to check against. **Never reads `*_dps.json`** — the one in
  * the reference set is 244 MB and would blow the heap, and the failure would
  * look like something else entirely.
+ *
+ * `LocalData.sav` is deliberately absent, and adding it would buy nothing: the
+ * only identifiers it carries are the pal instance ids in its party presets,
+ * every one of which resolves against `Level.json` and is therefore already in
+ * this corpus. Including it would mean an async Oodle decode for zero extra
+ * coverage. If a future field in that file ever names something of its own,
+ * that changes and it belongs here.
  */
 function saveCorpus(): string {
   const parts: string[] = []

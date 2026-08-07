@@ -38,8 +38,8 @@ let carriedWarnings: SlimPayload['stats']['warnings'] = []
 /** Accumulated across batches, so a second drop adds rather than replaces. */
 const details = new Map<Guid, PlayerDetail>()
 
-function post(msg: FromWorker) {
-  self.postMessage(msg)
+function post(msg: FromWorker, transfer: Transferable[] = []) {
+  self.postMessage(msg, { transfer })
 }
 
 function progress(phase: Phase, label: string) {
@@ -250,6 +250,61 @@ async function handleParsePlayerSav(
   post({ t: 'playersResult', id, payload, reports })
 }
 
+/**
+ * The client's `LocalData`, in either format.
+ *
+ * Stateless, unlike every other handler here: nothing about this file feeds
+ * `buildIndexes` or ownership, so there is nothing to retain and re-merge. It
+ * is read once and handed over, masks and all, and the transfer list means the
+ * worker's copy of them is detached rather than duplicated.
+ *
+ * A file that turns out not to be a `LocalData` comes back as a rejected
+ * report rather than an `error`, so a mistaken drop lands in the ingestion
+ * ledger instead of tearing down an already-loaded world.
+ */
+async function handleParseLocal(
+  id: number,
+  fileName: string,
+  buf: ArrayBuffer,
+) {
+  const { readLocalData, maskBuffers } = await import('./readers/localData.ts')
+  const warn = new Warnings()
+
+  try {
+    progress('decode', 'Reading client data')
+    let tree: unknown
+    if (isJsonName(fileName)) {
+      tree = JSON.parse(new TextDecoder().decode(buf))
+    } else {
+      const { decodeSav } = await import('../sav/decode.ts')
+      const { readGvas } = await import('../sav/gvas.ts')
+      const result = await decodeSav(buf)
+      if (!result.ok) throw new Error(result.message)
+      tree = readGvas(result.gvas)
+    }
+
+    const local = readLocalData(tree, fileName, warn)
+    post(
+      { t: 'localResult', id, payload: local, report: { fileName, ok: true } },
+      maskBuffers(local),
+    )
+  } catch (err) {
+    post({
+      t: 'localResult',
+      id,
+      report: {
+        fileName,
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      },
+    })
+  }
+}
+
+function isJsonName(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.json')
+}
+
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data
   switch (msg.t) {
@@ -267,6 +322,10 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
 
     case 'parsePlayerSav':
       void handleParsePlayerSav(msg.id, msg.files)
+      break
+
+    case 'parseLocal':
+      void handleParseLocal(msg.id, msg.fileName, msg.buf)
       break
 
     case 'query': {

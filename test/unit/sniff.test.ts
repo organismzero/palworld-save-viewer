@@ -27,6 +27,8 @@ const LEVEL = '{"header":{},"properties":{"Version":1,"worldSaveData":{}}}'
 const PLAYER =
   '{"header":{},"properties":{"Version":1,"SaveData":{"struct_type":"PalWorldPlayerSaveData"}}}'
 const DPS = '{"header":{},"properties":{"SaveParameterArray":{}}}'
+const LOCAL =
+  '{"header":{},"properties":{"Version":100,"SaveData":{"struct_type":"PalLocalSaveData"}}}'
 
 describe('sniff', () => {
   it('classifies a level save', async () => {
@@ -113,6 +115,29 @@ describe('sniff', () => {
     expect((await sniff(file)).kind).toBe('unknown')
   })
 
+  it('classifies LocalData.sav by name, without a read', async () => {
+    // A `.sav` is compressed, so there is nothing to sniff without decoding
+    // it; the name is all there is at this stage. The worker checks the
+    // contents once it has them.
+    const { file } = fakeFile('LocalData.sav', '', 68_276)
+    const result = await sniff(file)
+    expect(result.kind).toBe('local')
+    expect(result.reason).toBeUndefined()
+    expect(file.slice).not.toHaveBeenCalled()
+  })
+
+  it('classifies a converted LocalData.json too', async () => {
+    const { file } = fakeFile('LocalData.json', LOCAL)
+    expect((await sniff(file)).kind).toBe('local')
+  })
+
+  it('recognises a LocalData.json that was renamed, by its content', async () => {
+    // The name is the cheap first stop, never the discriminator — same
+    // contract the DPS check has.
+    const { file } = fakeFile('client-backup.json', LOCAL)
+    expect((await sniff(file)).kind).toBe('local')
+  })
+
   it('reads a player uid from a .sav filename too', () => {
     // This is the only thing separating a player .sav from a level .sav before
     // decompressing one: size cannot, because a compressed level save is under
@@ -181,6 +206,35 @@ describe('partition', () => {
     expect(
       result.savs.find((s) => s.file.name === 'Level.sav')?.filenameUid,
     ).toBeUndefined()
+  })
+
+  it('keeps LocalData.sav out of the raw-save bucket', async () => {
+    // This is the bug the `local` bucket exists to prevent. `acceptSavs`
+    // treats the largest unnamed `.sav` as the level and hands the rest to the
+    // player-save reader — which does *not* reject a LocalData, because it has
+    // a `SaveData` of its own, and would produce a junk player record.
+    const files = [
+      fakeFile('Level.sav', '', 861_566).file,
+      fakeFile('LocalData.sav', '', 68_276).file,
+    ]
+    const result = await partition(files)
+
+    expect(result.savs.map((s) => s.file.name)).toEqual(['Level.sav'])
+    expect(result.local?.file.name).toBe('LocalData.sav')
+    expect(result.rejected).toEqual([])
+  })
+
+  it('keeps only one LocalData and rejects the rest', async () => {
+    // One file describes one client; a second is a mistake worth naming
+    // rather than silently letting the last one win.
+    const files = [
+      fakeFile('LocalData.sav', '', 68_276).file,
+      fakeFile('LocalData.json', LOCAL).file,
+    ]
+    const result = await partition(files)
+
+    expect(result.local?.file.name).toBe('LocalData.sav')
+    expect(result.rejected.map((r) => r.file.name)).toEqual(['LocalData.json'])
   })
 
   it('keeps raw saves apart from rejects so they can be explained', async () => {

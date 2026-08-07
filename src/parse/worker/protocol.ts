@@ -3,7 +3,7 @@
  * stay free of anything that cannot run in a worker.
  */
 
-import type { Guid, SlimPayload } from '../../domain/types.ts'
+import type { Guid, LocalDataPayload, SlimPayload } from '../../domain/types.ts'
 import type { Phase } from './buildIndexes.ts'
 
 export type { Phase } from './buildIndexes.ts'
@@ -27,6 +27,11 @@ export type ToWorker =
       id: number
       files: { fileName: string; buf: ArrayBuffer }[]
     }
+  /**
+   * The client's `LocalData`, in either format. One file, not a batch: it
+   * describes a single client, so there is never more than one to read.
+   */
+  | { t: 'parseLocal'; id: number; fileName: string; buf: ArrayBuffer }
   /** Lazily pull a raw subtree for the debug inspector, without re-parsing. */
   | { t: 'query'; id: number; path: string[] }
   /** Release the retained raw tree under memory pressure. */
@@ -58,6 +63,19 @@ export type FromWorker =
       id: number
       payload: SlimPayload
       reports: PlayerFileReport[]
+    }
+  /**
+   * Stands alone rather than folding into `SlimPayload`, because the fog masks
+   * are a megabyte of texture that would otherwise be cloned into the index on
+   * every player merge. Their buffers ride the transfer list, so the worker's
+   * copy is detached once this is sent — the worker keeps no `LocalData` state.
+   */
+  | {
+      t: 'localResult'
+      id: number
+      /** Absent when the file was rejected; `report` says why. */
+      payload?: LocalDataPayload
+      report: PlayerFileReport
     }
   | { t: 'error'; id: number; phase: Phase; message: string; stack?: string }
   | { t: 'queryResult'; id: number; json: string | null }

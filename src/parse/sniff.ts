@@ -21,7 +21,7 @@ import { normGuid, type Guid } from './guid.ts'
  * file and the app can read its container header, so it gets its own kind and
  * a purpose-built explanation rather than being lumped in with `unknown`.
  */
-export type SaveKind = 'level' | 'player' | 'dps' | 'sav' | 'unknown'
+export type SaveKind = 'level' | 'player' | 'dps' | 'sav' | 'local' | 'unknown'
 
 export interface Sniffed {
   file: File
@@ -51,6 +51,7 @@ const PREFIX_BYTES = 64 * 1024
  */
 const MARKERS: readonly [string, SaveKind][] = [
   ['SaveParameterArray', 'dps'],
+  ['PalLocalSaveData', 'local'],
   ['PalWorldPlayerSaveData', 'player'],
   ['worldSaveData', 'level'],
 ]
@@ -75,9 +76,24 @@ const RAW_SAVE_MARKERS = ['PlM', 'PlZ', 'CNK', 'GVAS']
  */
 const UID_FILENAME = /^([0-9A-Fa-f]{32})(?:_dps)?\.(json|sav)$/i
 
+/**
+ * The client's own save, which the game always names exactly this.
+ *
+ * Matching on the name is the same concession `UID_FILENAME` already makes:
+ * a `.sav` is compressed, so there is no content to sniff without decoding it,
+ * and this function's invariant is that it never decodes. The authority is
+ * still inside the file — the worker checks `SaveData` is a `PalLocalSaveData`
+ * and rejects it by name if not.
+ */
+const LOCALDATA_FILENAME = /^LocalData\.(json|sav)$/i
+
 export function filenameUidOf(name: string): Guid | undefined {
   const m = UID_FILENAME.exec(name)
   return m ? normGuid(m[1]!) : undefined
+}
+
+export function looksLikeLocalDataName(name: string): boolean {
+  return LOCALDATA_FILENAME.test(name)
 }
 
 export function looksLikeDpsName(name: string): boolean {
@@ -91,6 +107,14 @@ export async function sniff(
   const name = file.name
   const filenameUid = filenameUidOf(name)
   const lower = name.toLowerCase()
+
+  // `LocalData.sav` has to be caught before the generic `.sav` branch, or the
+  // caller's "largest unnamed .sav is the level" heuristic would hand it to the
+  // player-save reader — which does not reject it, because it has a `SaveData`
+  // of its own, and so would quietly produce a junk player record.
+  if (looksLikeLocalDataName(name)) {
+    return { file, kind: 'local', filenameUid }
+  }
 
   // Classified, not rejected: the container header says which compression it
   // uses, and that determines whether there is anything useful to say beyond
@@ -159,6 +183,12 @@ export interface Partitioned {
   rejected: Sniffed[]
   /** Raw saves, kept apart so the caller can read their headers and explain. */
   savs: Sniffed[]
+  /**
+   * The client's `LocalData`, in either format. Its own bucket rather than a
+   * member of `savs` because the caller's level-picking heuristic must never
+   * see it; only one is kept, since it describes a single client.
+   */
+  local?: Sniffed
 }
 
 /**
@@ -169,13 +199,19 @@ export async function partition(files: File[]): Promise<Partitioned> {
   const sniffed = await Promise.all(files.map((f) => sniff(f)))
   const levels = sniffed.filter((s) => s.kind === 'level')
   levels.sort((a, b) => b.file.size - a.file.size)
+  const locals = sniffed.filter((s) => s.kind === 'local')
 
   return {
     level: levels[0],
     players: sniffed.filter((s) => s.kind === 'player'),
     savs: sniffed.filter((s) => s.kind === 'sav'),
+    local: locals[0],
     rejected: sniffed.filter(
-      (s) => s.kind === 'dps' || s.kind === 'unknown' || levels.indexOf(s) > 0,
+      (s) =>
+        s.kind === 'dps' ||
+        s.kind === 'unknown' ||
+        levels.indexOf(s) > 0 ||
+        locals.indexOf(s) > 0,
     ),
   }
 }

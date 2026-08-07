@@ -30,9 +30,13 @@ import {
  * allocation, parse timings and warnings.
  */
 export function SaveSummary({ index }: { index: SaveIndex }) {
-  const { fileName, fileBytes, timings, playerFiles, reset } = useSaveStore()
+  const { fileName, fileBytes, timings, playerFiles, localData, reset } =
+    useSaveStore()
   const guilds = playerGuilds(index)
   const s = index.stats
+  const ownerName = localData?.ownerUid
+    ? index.playerByUid.get(localData.ownerUid)?.name
+    : undefined
 
   const detailByUid = new Map<string, PlayerDetail>(
     index.playerDetails.map((d) => [d.playerUid, d]),
@@ -115,6 +119,92 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <StatTile label="guilds" value={s.guilds} />
         </div>
       </section>
+
+      {localData && (
+        <section className="mb-10">
+          <SectionHeading
+            title={
+              ownerName
+                ? `Client data — ${ownerName}`
+                : `Client data — ${localData.fileName}`
+            }
+            hint="from LocalData.sav — one client, not the server"
+            action={
+              ownerName ? undefined : (
+                <Pill
+                  tone="neutral"
+                  title="Whose client this is is inferred from the owners of the pals in its party presets. They did not agree, or none of them resolved."
+                >
+                  owner unknown
+                </Pill>
+              )
+            }
+          />
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)]/60 bg-[var(--color-line)]/60 sm:grid-cols-3 lg:grid-cols-6">
+            {localData.fog.map((f) => (
+              <StatTile
+                key={f.map}
+                label={f.map === 'overworld' ? 'explored' : 'tree explored'}
+                value={`${(f.exploredFraction * 100).toFixed(1)}%`}
+                accent={f.map === 'overworld'}
+                hint={`${f.size}×${f.size} mask`}
+              />
+            ))}
+            <StatTile
+              label="paldeck seen"
+              value={localData.paldeckEncountered}
+            />
+            <StatTile label="techs" value={localData.techsUnlocked} />
+            <StatTile label="builds" value={localData.buildsUnlocked} />
+            <StatTile
+              label="hidden locations"
+              value={localData.hiddenLocations}
+            />
+            <StatTile label="map pins" value={localData.markers.length} />
+            <StatTile label="tutorials" value={localData.tutorialsSeen} />
+            {localData.playTime !== undefined && (
+              <StatTile
+                label="play time"
+                value={count(localData.playTime)}
+                // Left raw on purpose. Seconds would make this 177 days in the
+                // reference save, so it is not seconds — and until the unit is
+                // confirmed against the in-game counter, a formatted duration
+                // would just be a confident guess.
+                hint="raw counter, unit unconfirmed"
+              />
+            )}
+          </div>
+
+          {localData.trackingQuestId && (
+            <p className="label mt-3">
+              tracking <RawId>{localData.trackingQuestId}</RawId>
+            </p>
+          )}
+
+          {localData.presets.length > 0 && (
+            <div className="mt-6">
+              <SectionHeading
+                title="Party presets"
+                hint="saved loadouts, resolved against the level save"
+              />
+              <Table
+                head={['preset', 'pals']}
+                rows={localData.presets.map((preset, i) => [
+                  preset.name || `Preset ${i + 1}`,
+                  preset.palIds
+                    .map((id) => {
+                      const pal = index.palById.get(id)
+                      if (!pal) return '—'
+                      return `${pal.nickname ?? pal.characterId} (Lv ${pal.level})`
+                    })
+                    .join(', ') || '—',
+                ])}
+                align={() => false}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {guilds.map((guild) => (
         <section key={guild.groupId} className="mb-10">

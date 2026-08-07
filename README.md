@@ -101,9 +101,14 @@ Things that are true today and worth knowing before filing a bug. Counts come
 from the reference save this project is developed against — a 10-player
 dedicated-server world.
 
-- **Fog of war is not supported.** The explored-area mask lives in
-  `LocalData.sav`, a per-machine client file, not in the world save or the
-  player saves. There is no server-side record of who explored what.
+- **Fog of war is one client's, not the server's.** The explored-area mask
+  lives in `LocalData.sav`, which the game keeps beside the client rather than
+  in the world save. Drop yours and the map shows your exploration; there is no
+  server-side record of who explored what, so a shared world cannot show
+  everybody's at once.
+- **The World Tree's fog is read but not drawn.** `LocalData.sav` carries a
+  second 512×512 mask for the tree interior, and its explored percentage is
+  reported in the summary. There is no tree map view to draw it over.
 - **Item authorship is not recorded by the game.** Nothing in the save links an
   item to whoever crafted it, so the app does not guess. Structures _are_
   attributed — the Bases view shows who built each one.
@@ -214,7 +219,14 @@ real data, put a save there:
 data/Level.sav     # the raw save — read directly
 data/Level.json    # the same world converted, so the two paths can be compared
 data/Players/      # per-player saves, either extension
+data/LocalData.sav # your client's own file: fog of war, map pins, progress
 ```
+
+`LocalData.sav` is the odd one out: the game keeps it beside the _client_, not
+the server, so it will not be in a server save folder. On Windows look under
+`%LOCALAPPDATA%\Pal\Saved\SaveGames\<steam-id>\<world-id>\`. It is matched by
+name, and one world's copy makes no sense against another's, so it is dropped
+separately and merges onto whatever world is already open.
 
 Only `Level.sav` is needed to use the app. The converted `.json` is what lets
 the cross-check in `savPipeline.golden.test.ts` work, so keep both if you

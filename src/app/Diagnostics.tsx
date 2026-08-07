@@ -19,7 +19,8 @@ import { cn } from '../lib/utils.ts'
 export function Diagnostics({ index }: { index: SaveIndex }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { fileName, fileBytes, timings, playerFiles } = useSaveStore()
+  const { fileName, fileBytes, timings, playerFiles, localData } =
+    useSaveStore()
   const s = index.stats
 
   // A popover that only closes via its own button is a trap on touch.
@@ -39,7 +40,10 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
     }
   }, [open])
 
-  const warnings = s.warnings
+  // The client save is parsed on its own path, so its warnings never reach
+  // `stats.warnings`. They are the same kind of canary and belong in the same
+  // list, or a format change in `LocalData` would land silently.
+  const warnings = [...s.warnings, ...(localData?.warnings ?? [])]
   const total = warnings.reduce((n, w) => n + w.count, 0)
   const partial = s.playerDetails < s.playersInLevel
   const attention = warnings.length > 0 || partial
