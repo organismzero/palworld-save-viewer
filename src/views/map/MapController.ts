@@ -170,12 +170,16 @@ const MAX_ZOOM = 14
 /**
  * How dark unexplored ground gets, by default.
  *
- * Not 1. The game draws fog opaque, but this is a map you read rather than a
- * map you walk, and being able to see roughly where the unexplored parts *are*
- * is worth more here than fidelity to the in-game view. The slider goes to 1
- * for anyone who disagrees.
+ * Near-opaque, because the reason to load a fog mask at all is usually to
+ * *avoid* seeing where you have not been. A default that leaks terrain spoils
+ * the one thing the feature is for, and someone who wanted the whole map
+ * visible would simply not have loaded the file.
+ *
+ * Not quite 1: the last couple of percent leave the coastline faintly legible,
+ * which is enough to orient by without showing what is there. The slider covers
+ * everything from that to fully transparent.
  */
-export const DEFAULT_FOG_OPACITY = 0.8
+export const DEFAULT_FOG_OPACITY = 0.98
 
 /** Matches the Pixi clear colour, so fog reads as absence rather than paint. */
 const FOG_TINT = 0x0a0d12
