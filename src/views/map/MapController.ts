@@ -19,9 +19,10 @@ import {
 } from 'pixi.js'
 
 import {
-  OVERWORLD_RANGE,
   mapToPixel,
+  pixelToMap,
   savToMapAuto,
+  worldPerPixel,
 } from '../../domain/coords.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { elementColor } from '../../lib/color.ts'
@@ -421,7 +422,9 @@ export class MapController {
       if (!at) continue
       // A base's build radius, drawn to scale.
       const { px, py } = this.toPixel(at.mx, at.my)
-      const r = (base.areaRange / 725) * (this.mapSize / (OVERWORLD_RANGE * 2))
+      // `areaRange` is a real world-space radius, so it converts through the
+      // image's world scale — not through map coordinates.
+      const r = base.areaRange / worldPerPixel(this.mapSize)
       this.layers.get('bases')!.addChild(
         new Graphics()
           .circle(px, py, r)
@@ -721,11 +724,9 @@ export class MapController {
       x: this.app.screen.width / 2,
       y: this.app.screen.height / 2,
     })
-    const span = this.mapSize / (OVERWORLD_RANGE * 2)
     this.opts.onView({
       zoom: this.world.scale.x,
-      mx: c.x / span - OVERWORLD_RANGE,
-      my: OVERWORLD_RANGE - c.y / span,
+      ...pixelToMap(c.x, c.y, this.mapSize, this.mapSize),
     })
   }
 
@@ -733,11 +734,7 @@ export class MapController {
   screenToMap(x: number, y: number) {
     const rect = this.app.canvas.getBoundingClientRect()
     const p = this.world.toLocal({ x: x - rect.left, y: y - rect.top })
-    const span = this.mapSize / (OVERWORLD_RANGE * 2)
-    return {
-      mx: p.x / span - OVERWORLD_RANGE,
-      my: OVERWORLD_RANGE - p.y / span,
-    }
+    return pixelToMap(p.x, p.y, this.mapSize, this.mapSize)
   }
 
   private select(sprite: Sprite | undefined) {

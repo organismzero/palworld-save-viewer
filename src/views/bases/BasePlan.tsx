@@ -11,11 +11,8 @@
  * rotated 90° and mirrored.
  */
 
-import { posToMap } from '../../domain/coords.ts'
+import { posToMap, worldToMap } from '../../domain/coords.ts'
 import type { Base, Guid, Structure } from '../../domain/types.ts'
-
-/** World units per map unit — the overworld scale constant. */
-const WORLD_PER_MAP = 725
 
 const SIZE = 260
 
@@ -36,7 +33,7 @@ export function BasePlan({
   const origin = posToMap(base.pos)
   if (!origin) return null
 
-  const radius = base.areaRange / WORLD_PER_MAP
+  const radius = worldToMap(base.areaRange)
 
   const points = structures.flatMap((s) => {
     const at = posToMap(s.pos)

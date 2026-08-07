@@ -219,8 +219,8 @@ describe('readLocalData', () => {
 
     expect(pin.iconType).toBe(3)
     expect(pin.at.map).toBe('overworld')
-    expect(pin.at.mx).toBeCloseTo(-0.17, 2)
-    expect(pin.at.my).toBeCloseTo(219.1, 1)
+    expect(pin.at.mx).toBeCloseTo(-344.53, 2)
+    expect(pin.at.my).toBeCloseTo(-201.54, 2)
   })
 
   it('keeps preset pals as references, not copies', () => {

@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
 import { buildSaveIndex } from '@/domain/index.ts'
-import { posToMap } from '@/domain/coords.ts'
+import { posToMap, worldToMap } from '@/domain/coords.ts'
 import {
   containerLocation,
   searchItems,
@@ -253,10 +253,10 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
       })
       expect(offsets).toHaveLength(structures.length)
 
-      // Map units are world units / 725, so a 3,500-unit build radius is ~4.8
-      // map units. Anything an order of magnitude past that would mean the
-      // plan and the map disagree about where the base is.
-      const radius = base.areaRange / 725
+      // Taken from the transform rather than written down again here. A
+      // hard-coded 725 in this spot went unnoticed for as long as the wrong
+      // scale did. A 3,500-unit radius comes out at ~7.6 map units.
+      const radius = worldToMap(base.areaRange)
       const median = offsets.sort((a, b) => a - b)[
         Math.floor(offsets.length / 2)
       ]!
