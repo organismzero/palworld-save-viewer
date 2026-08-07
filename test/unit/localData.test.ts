@@ -243,10 +243,18 @@ describe('readLocalData', () => {
     expect(payload.buildsUnlocked).toBe(2)
   })
 
-  it('carries the play counter through unformatted', () => {
+  it('reads the tracked quest', () => {
     const { payload } = read()
-    expect(payload.playTime).toBe(15297485)
     expect(payload.trackingQuestId).toBe('Main_DefeatVolcanoBoss')
+  })
+
+  it('stays quiet about Local_PlayTime, which it deliberately skips', () => {
+    // Known but unread: the unit is unconfirmed, so there is no honest way to
+    // show it. It still has to be on the known-keys list or it would raise a
+    // format-change warning on every real save.
+    const { payload, warn } = read()
+    expect(warn.list()).toEqual([])
+    expect(payload).not.toHaveProperty('playTime')
   })
 
   it('warns about a SaveData key it does not read yet', () => {

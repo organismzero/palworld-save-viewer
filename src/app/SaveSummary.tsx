@@ -162,17 +162,6 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             />
             <StatTile label="map pins" value={localData.markers.length} />
             <StatTile label="tutorials" value={localData.tutorialsSeen} />
-            {localData.playTime !== undefined && (
-              <StatTile
-                label="play time"
-                value={count(localData.playTime)}
-                // Left raw on purpose. Seconds would make this 177 days in the
-                // reference save, so it is not seconds — and until the unit is
-                // confirmed against the in-game counter, a formatted duration
-                // would just be a confident guess.
-                hint="raw counter, unit unconfirmed"
-              />
-            )}
           </div>
 
           {localData.trackingQuestId && (

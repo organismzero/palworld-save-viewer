@@ -57,8 +57,22 @@ const KNOWN_SAVE_DATA_FIELDS = new Set([
   'Local_NewUnlockedBuilds',
   'Local_HiddenLocationFlagMap',
   'Local_TutorialTriggerSaveData',
-  'Local_PlayTime',
   'TrackingQuestId',
+  /**
+   * Present and deliberately unread: a play counter in an unknown unit.
+   *
+   * The reference save holds 15,297,485. Seconds would be 177 days and
+   * milliseconds 4 hours, so it is neither; 60 Hz ticks give 71 h, centiseconds
+   * 42 h and 120 Hz 35 h, and the owner's ~40 h Steam total — some of it on a
+   * different world — does not separate the last three. Nothing else in any
+   * save file cross-references it: the pal `*Sec` timers cap at 298, so they
+   * are friendship accumulators that reset rather than lifetime totals.
+   *
+   * Settling it needs one measurement: play for a known interval and diff this
+   * value. Until then it is not worth showing, because every way of formatting
+   * it is a guess presented as a fact.
+   */
+  'Local_PlayTime',
   // Present and deliberately unread: UI state and cosmetic settings with no
   // consumer. Listed so they do not generate noise.
   'Local_ActivateOtomoCount',
@@ -194,7 +208,6 @@ export function readLocalData(
     fog: readMasks(body.WorldMapUISaveDataMap, warn),
     markers: readMarkers(body.Local_CustomMarkerSaveData),
     presets: readPresets(body.Local_OtomoLoadoutSaveData),
-    playTime: int(body.Local_PlayTime),
     trackingQuestId: str(body.TrackingQuestId) || undefined,
     paldeckEncountered: countTrue(body.Local_PalEncountFlag),
     techsUnlocked: countTrue(body.Local_NewUnlockedTechs),

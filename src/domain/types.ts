@@ -477,12 +477,6 @@ export interface LocalDataPayload {
   fog: FogMask[]
   markers: CustomMarker[]
   presets: OtomoPreset[]
-  /**
-   * `Local_PlayTime`, raw. The unit is unconfirmed — seconds would put the
-   * reference save at 177 days, so it is not seconds — and formatting it on a
-   * guess would be worse than showing the number.
-   */
-  playTime?: number
   trackingQuestId?: string
   paldeckEncountered: number
   techsUnlocked: number
