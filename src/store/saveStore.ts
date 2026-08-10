@@ -21,15 +21,26 @@ export interface PlayerFileState {
   reason?: string
 }
 
-interface SaveState {
+export interface SaveState {
   status: LoadStatus
   fileName?: string
   fileBytes?: number
   phase?: Phase
   progressLabel?: string
+  /**
+   * Absent on a restored session — nothing was parsed, so there is nothing to
+   * time. Both readers (`Diagnostics`, `SaveSummary`) must say so rather than
+   * quietly dropping the row, hence {@link SaveState.restoredFrom}.
+   */
   timings?: Record<string, number>
   index?: SaveIndex
   error?: string
+
+  /**
+   * When this world came back from browser storage rather than a file, the
+   * time the snapshot was written. Undefined for a freshly parsed save.
+   */
+  restoredFrom?: number
 
   /**
    * The client's own save, if one has been dropped. Kept beside the index
@@ -204,6 +215,11 @@ async function acceptSavs(savs: Sniffed[], set: Setter) {
     fileBytes: level.file.size,
     error: undefined,
     index: undefined,
+    // Same reasoning as the JSON path in `ingestWorld`, and missing here until
+    // now: a different world means different exploration, so the previous
+    // world's fog would be drawn over terrain it never described.
+    localData: undefined,
+    restoredFrom: undefined,
     playerFiles: ledgerFrom(players, 'queued'),
     pendingPlayerFiles: [],
     phase: 'decode',
@@ -385,6 +401,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       fileBytes: undefined,
       timings: undefined,
       localData: undefined,
+      restoredFrom: undefined,
       playerFiles: {},
       pendingPlayerFiles: [],
       pendingLocalFile: undefined,
@@ -472,6 +489,8 @@ async function ingestWorld(
       // A different world means different exploration; the fog from the last
       // one would be drawn over terrain it never described.
       localData: undefined,
+      // This one is being parsed, whatever the last one was.
+      restoredFrom: undefined,
       playerFiles: ledgerFrom(players, 'queued'),
       pendingPlayerFiles: [],
       phase: 'decode',
