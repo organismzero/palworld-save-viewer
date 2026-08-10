@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 
 import type { SaveIndex } from '../domain/types.ts'
 import { SaveSummary } from './SaveSummary.tsx'
@@ -29,6 +29,7 @@ import {
   type RememberPref,
 } from '../store/session.ts'
 import { useUiStore, type ViewId } from '../store/uiStore.ts'
+import { parseHash } from './viewParams.ts'
 import { cn } from '../lib/utils.ts'
 import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
@@ -56,20 +57,81 @@ const VIEWS = [
 function useHashSync() {
   const view = useUiStore((s) => s.view)
   const setView = useUiStore((s) => s.setView)
+  const qs = useUiStore((s) => s.viewParams[s.view])
+
+  /**
+   * Seed from the address bar during the **first render**, not in an effect.
+   *
+   * Views are lazily loaded, so on a cold deep link the shell commits before
+   * any of them mounts. If the writer effect below runs first against an empty
+   * `viewParams`, it replaces `#/pals?q=…&sel=…` with a bare `#/pals` and the
+   * link is gone before anything could read it. Warm navigation hides this
+   * completely; every cold load fails.
+   */
+  useState(() => {
+    const { view: id, qs } = parseHash(window.location.hash)
+    if (!VIEWS.some((v) => v.id === id)) return null
+    const store = useUiStore.getState()
+    store.setView(id as ViewId)
+    if (qs) store.adoptHashParams(id as ViewId, qs)
+    return null
+  })
 
   useEffect(() => {
     const fromHash = () => {
-      const id = window.location.hash.replace(/^#\/?/, '')
-      if (VIEWS.some((v) => v.id === id)) setView(id as ViewId)
+      const { view: id, qs } = parseHash(window.location.hash)
+      if (!VIEWS.some((v) => v.id === id)) return
+      setView(id as ViewId)
+      // Always adopt, even when empty: navigating back to a bare `#/pals`
+      // means "clear the filters", and skipping it would strand them.
+      useUiStore.getState().adoptHashParams(id as ViewId, qs)
     }
-    fromHash()
     window.addEventListener('hashchange', fromHash)
     return () => window.removeEventListener('hashchange', fromHash)
   }, [setView])
 
+  /**
+   * The single writer.
+   *
+   * Two rules, both learned from what happens without them:
+   *
+   * - A **view change pushes** (`location.hash =`), a **params-only change
+   *   replaces** (`history.replaceState`). Otherwise every keystroke in a
+   *   filter box is a history entry and leaving the view takes forty presses of
+   *   Back. `replaceState` also does not fire `hashchange`, which conveniently
+   *   removes the read-back loop.
+   * - **Throttled, trailing.** Safari throws `SecurityError` past roughly 100
+   *   `replaceState` calls in 30 seconds, and typing a pal's name is easily ten.
+   */
+  const lastView = useRef<ViewId | undefined>(undefined)
+  const pending = useRef<number | undefined>(undefined)
+
   useEffect(() => {
-    if (window.location.hash !== `#/${view}`) window.location.hash = `/${view}`
-  }, [view])
+    const target = qs ? `#/${view}?${qs}` : `#/${view}`
+    if (window.location.hash === target) {
+      lastView.current = view
+      return
+    }
+
+    const viewChanged = lastView.current !== view
+    lastView.current = view
+
+    if (viewChanged) {
+      window.location.hash = target.slice(1)
+      return
+    }
+
+    if (pending.current !== undefined) clearTimeout(pending.current)
+    pending.current = window.setTimeout(() => {
+      pending.current = undefined
+      history.replaceState(null, '', target)
+    }, 400)
+
+    return () => {
+      if (pending.current !== undefined) clearTimeout(pending.current)
+      pending.current = undefined
+    }
+  }, [view, qs])
 
   return view
 }

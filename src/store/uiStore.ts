@@ -32,7 +32,28 @@ interface UiState {
   aboutOpen: boolean
   shortcutsOpen: boolean
 
+  /**
+   * Each view's state as a serialised query string, for `useHashSync` to fold
+   * into the hash. Strings rather than objects deliberately: it keeps this
+   * store free of every view's private types, and makes "did it change" a
+   * string compare instead of a deep one.
+   */
+  viewParams: Partial<Record<ViewId, string>>
+  /**
+   * Bumped **only** by a browser navigation — back, forward, or a pasted URL.
+   *
+   * This is what lets a view tell "I wrote this" from "the user pressed Back".
+   * Diffing the query string would look equivalent and is subtly wrong: any
+   * round-trip that is not byte-exact reads as a navigation and re-decodes over
+   * whatever the user just clicked.
+   */
+  paramsEpoch: number
+
   setView: (view: ViewId) => void
+  /** From a view, on every state change. Never triggers a re-decode. */
+  publishParams: (view: ViewId, qs: string) => void
+  /** From `hashchange`. Bumps the epoch so views re-read. */
+  adoptHashParams: (view: ViewId, qs: string) => void
   /** Switch view and hand it something to select. */
   jump: (view: ViewId, focus: Focus) => void
   /**
@@ -56,9 +77,34 @@ export const useUiStore = create<UiState>((set, get) => ({
   paletteOpen: false,
   aboutOpen: false,
   shortcutsOpen: false,
+  viewParams: {},
+  paramsEpoch: 0,
 
   setView: (view) => set({ view }),
-  jump: (view, focus) => set({ view, focus, paletteOpen: false }),
+
+  publishParams: (view, qs) => {
+    // Guarded: a view re-publishing an unchanged string must not notify the
+    // shell, or the hash writer runs on every render.
+    if (get().viewParams[view] === qs) return
+    set((s) => ({ viewParams: { ...s.viewParams, [view]: qs } }))
+  },
+
+  adoptHashParams: (view, qs) => {
+    set((s) => ({
+      viewParams: { ...s.viewParams, [view]: qs },
+      paramsEpoch: s.paramsEpoch + 1,
+    }))
+  },
+
+  jump: (view, focus) =>
+    // The destination's stored params are dropped: a jump is a fresh intent,
+    // and leaving them would have the view's seed and its hash state fighting.
+    set((s) => ({
+      view,
+      focus,
+      paletteOpen: false,
+      viewParams: { ...s.viewParams, [view]: undefined },
+    })),
   clearFocus: () => {
     // Guarded so a view mounting without a pending focus does not notify every
     // subscriber for a no-op.

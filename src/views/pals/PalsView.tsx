@@ -15,6 +15,13 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
+import { useViewParams } from '../../app/viewParams.ts'
+import {
+  PALS_DEFAULTS,
+  palsCodec,
+  type PalsParams,
+  type SortKey,
+} from './params.ts'
 import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
@@ -24,8 +31,6 @@ import {
   Pill,
 } from '../../components/primitives.tsx'
 import { cn } from '../../lib/utils.ts'
-
-type SortKey = 'iv' | 'level' | 'name' | 'caught' | 'rarity'
 
 const CARD_HEIGHT = 168
 const CARD_MIN_WIDTH = 210
@@ -47,20 +52,42 @@ export function PalsView({ index }: { index: SaveIndex }) {
   const clearFocus = useUiStore((s) => s.clearFocus)
   useEffect(clearFocus, [clearFocus])
 
-  const [initial] = useState(() =>
+  /**
+   * A ⌘K jump beats whatever the hash says.
+   *
+   * The hash is history; a jump is an intent expressed now. Once the view has
+   * taken it, its resulting state is published back — which is what makes the
+   * jump itself a shareable link.
+   */
+  const codec = useMemo(() => palsCodec(index), [index])
+  const [params, setParams] = useViewParams('pals', PALS_DEFAULTS, codec, () =>
     focus?.kind === 'pal'
-      ? { pal: index.palById.get(focus.id), query: focus.label }
+      ? { query: focus.label, selectedId: focus.id }
       : undefined,
   )
 
-  const [query, setQuery] = useState(initial?.query ?? '')
-  const [elements, setElements] = useState<Set<string>>(new Set())
-  const [minLevel, setMinLevel] = useState(1)
-  const [minIv, setMinIv] = useState(0)
-  const [owner, setOwner] = useState('')
-  const [flags, setFlags] = useState({ boss: false, rare: false, named: false })
-  const [sort, setSort] = useState<SortKey>('iv')
-  const [selected, setSelected] = useState<Pal | undefined>(initial?.pal)
+  const { query, elements, minLevel, minIv, owner, flags, sort } = params
+  const patch = (p: Partial<PalsParams>) =>
+    setParams((prev) => ({ ...prev, ...p }))
+
+  // Shims so the markup below reads exactly as it did with `useState`,
+  // including the updater form the two multi-value toggles rely on.
+  const setQuery = (query: string) => patch({ query })
+  const setMinLevel = (minLevel: number) => patch({ minLevel })
+  const setMinIv = (minIv: number) => patch({ minIv })
+  const setOwner = (owner: string) => patch({ owner })
+  const setSort = (sort: SortKey) => patch({ sort })
+  const setElements = (next: (prev: Set<string>) => Set<string>) =>
+    setParams((prev) => ({ ...prev, elements: next(prev.elements) }))
+  const setFlags = (next: (prev: PalsParams['flags']) => PalsParams['flags']) =>
+    setParams((prev) => ({ ...prev, flags: next(prev.flags) }))
+
+  const selected = params.selectedId
+    ? index.palById.get(params.selectedId)
+    : undefined
+  const setSelected = (pal: Pal | undefined) =>
+    patch({ selectedId: pal?.instanceId })
+
   const [columns, setColumns] = useState(4)
 
   const named = (p: Pal) =>
@@ -112,14 +139,14 @@ export function PalsView({ index }: { index: SaveIndex }) {
     overscan: 3,
   })
 
-  const clearAll = () => {
-    setQuery('')
-    setElements(new Set())
-    setMinLevel(1)
-    setMinIv(0)
-    setOwner('')
-    setFlags({ boss: false, rare: false, named: false })
-  }
+  const clearAll = () =>
+    setParams((prev) => ({
+      ...PALS_DEFAULTS,
+      // Sort and selection are not filters; "clear all filters" should not
+      // silently re-sort the grid or close the detail drawer.
+      sort: prev.sort,
+      selectedId: prev.selectedId,
+    }))
   const dirty =
     query ||
     elements.size ||
