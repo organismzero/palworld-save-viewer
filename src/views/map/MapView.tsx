@@ -12,6 +12,7 @@ import {
 } from './MapController.ts'
 import { Panel, Pill } from '../../components/primitives.tsx'
 import { count } from '../../lib/format.ts'
+import { downloadBlob, exportName } from '../../lib/export.ts'
 
 /**
  * Legend order — what a reader looks for, densest-signal first. Distinct from
@@ -150,6 +151,24 @@ export function MapView({ index }: { index: SaveIndex }) {
     controller.setFogVisible(fogOn)
     controller.setFogOpacity(fogOpacity)
   }, [fogOn, fogOpacity, localData, mounted])
+
+  /**
+   * PNG export. Held as the in-flight scope rather than a boolean so the
+   * button that was pressed is the one that shows it is working.
+   */
+  const [saving, setSaving] = useState<'viewport' | 'island'>()
+  const fileName = useSaveStore((s) => s.fileName)
+  const savePng = async (scope: 'viewport' | 'island') => {
+    const controller = controllerRef.current
+    if (!controller) return
+    setSaving(scope)
+    try {
+      const blob = await controller.exportImage(scope)
+      downloadBlob(exportName(fileName, `map-${scope}`, 1, 'png'), blob)
+    } finally {
+      setSaving(undefined)
+    }
+  }
 
   const overworldFog = localData?.fog.find((f) => f.map === 'overworld')
   const hasFog = overworldFog !== undefined
@@ -316,6 +335,27 @@ export function MapView({ index }: { index: SaveIndex }) {
           >
             Fit
           </button>
+
+          {/* Two scopes, one row, so nothing here widens the legend. */}
+          <div className="mt-2 flex items-center gap-1">
+            <span className="label flex-1">png</span>
+            {(['viewport', 'island'] as const).map((scope) => (
+              <button
+                key={scope}
+                type="button"
+                disabled={saving !== undefined}
+                onClick={() => void savePng(scope)}
+                title={
+                  scope === 'viewport'
+                    ? 'Save exactly what is on screen now, at this zoom'
+                    : 'Save the whole island at 4096px, whatever the current zoom'
+                }
+                className="rounded-[4px] border border-[var(--color-line)] px-1.5 py-0.5 text-[11px] transition-colors hover:border-[var(--color-signal)] disabled:opacity-35"
+              >
+                {saving === scope ? '…' : scope === 'viewport' ? 'view' : 'all'}
+              </button>
+            ))}
+          </div>
         </Panel>
       </div>
 

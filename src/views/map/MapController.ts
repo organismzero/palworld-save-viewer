@@ -14,8 +14,10 @@ import {
   CanvasSource,
   Container,
   Graphics,
+  Rectangle,
   Sprite,
   Texture,
+  type ICanvas,
 } from 'pixi.js'
 
 import {
@@ -183,6 +185,32 @@ export const DEFAULT_FOG_OPACITY = 0.98
 
 /** Matches the Pixi clear colour, so fog reads as absence rather than paint. */
 const FOG_TINT = 0x0a0d12
+
+/**
+ * Largest island export, in pixels.
+ *
+ * `docs/spike-m0.md` records why 4096 rather than the 8192 the test machine
+ * reported: older and mobile GPUs cap `MAX_TEXTURE_SIZE` there, and a
+ * full-resolution island is 67 MB of RGBA. Same number the tile bake targets.
+ */
+const MAX_EXPORT_PX = 4096
+
+/**
+ * Pixi's extracted canvas → a PNG Blob.
+ *
+ * `extract.canvas()` rather than `extract.image()`: the latter hands back an
+ * `ImageLike` wrapping a data URL, which would mean encoding the whole map to
+ * base64 and parsing it back out again just to reach a Blob.
+ */
+function canvasToBlob(canvas: ICanvas): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const el = canvas as unknown as HTMLCanvasElement
+    el.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('canvas is empty'))),
+      'image/png',
+    )
+  })
+}
 
 export class MapController {
   private app = new Application()
@@ -784,6 +812,51 @@ export class MapController {
     this.rescaleMarkers()
     this.emitView()
     void this.refreshTiles()
+  }
+
+  /**
+   * The map as a PNG — either what is on screen, or the whole island.
+   *
+   * Layer visibility comes for free: the legend toggles set `Container.visible`
+   * and `extract` walks the live scene graph, so the file is exactly what you
+   * were looking at, fog included — the fog layer lives inside `world`.
+   *
+   * `island` deliberately does **not** call `fit()`. That would also fire
+   * `emitView()` and an async `refreshTiles()`, pushing a spurious viewport
+   * change into React in the middle of an export. It sets the transform
+   * directly and restores it before returning, so nothing outside this method
+   * ever observes the change.
+   *
+   * Capped at {@link MAX_EXPORT_PX}: a full-resolution island is 67 MB of RGBA
+   * and older and mobile GPUs cap `MAX_TEXTURE_SIZE` at 4096, which is the same
+   * reasoning that fixed the tile bake at that size.
+   */
+  async exportImage(scope: 'viewport' | 'island'): Promise<Blob> {
+    if (scope === 'viewport') {
+      return canvasToBlob(this.app.renderer.extract.canvas(this.app.stage))
+    }
+
+    const { x, y } = this.world.position
+    const scale = this.world.scale.x
+    try {
+      const target = Math.min(1, MAX_EXPORT_PX / this.mapSize)
+      const side = this.mapSize * target
+      this.world.position.set(0, 0)
+      this.world.scale.set(target)
+      // Markers are sized in *screen* pixels, so they need rescaling against
+      // the export transform or they come out the wrong size on the page.
+      this.rescaleMarkers()
+      return canvasToBlob(
+        this.app.renderer.extract.canvas({
+          target: this.world,
+          frame: new Rectangle(0, 0, side, side),
+        }),
+      )
+    } finally {
+      this.world.position.set(x, y)
+      this.world.scale.set(scale)
+      this.rescaleMarkers()
+    }
   }
 
   search(query: string, limit = 8): MapEntity[] {
