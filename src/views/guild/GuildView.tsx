@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import {
   elementDistribution,
@@ -24,6 +24,8 @@ import { count, relativeTime } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
+import { useViewParams } from '../../app/viewParams.ts'
+import { GUILD_DEFAULTS, guildCodec, type GuildParams } from './params.ts'
 import {
   BarList,
   CountUp,
@@ -59,10 +61,6 @@ export function GuildView({ index }: { index: SaveIndex }) {
 
   const guilds = playerGuilds(index)
   const groups = systemGroups(index)
-  const [showGroups, setShowGroups] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | undefined>(
-    () => guilds[0]?.groupId,
-  )
   // A jump from the command palette opens that player's detail panel, read
   // during the first render so the panel is there on first paint and cleared
   // afterwards. See the note in BasesView.
@@ -70,9 +68,29 @@ export function GuildView({ index }: { index: SaveIndex }) {
   const clearFocus = useUiStore((s) => s.clearFocus)
   useEffect(clearFocus, [clearFocus])
 
-  const [openPlayer, setOpenPlayer] = useState<Player | undefined>(() =>
-    focus?.kind === 'player' ? index.playerByUid.get(focus.id) : undefined,
+  const codec = useMemo(() => guildCodec(index), [index])
+  const [params, setParams] = useViewParams(
+    'guild',
+    GUILD_DEFAULTS,
+    codec,
+    () => (focus?.kind === 'player' ? { openPlayerId: focus.id } : undefined),
   )
+
+  const { showGroups } = params
+  const patch = (p: Partial<GuildParams>) =>
+    setParams((prev) => ({ ...prev, ...p }))
+
+  const setShowGroups = (showGroups: boolean) => patch({ showGroups })
+  // Falls back to the first guild so the view is never blank, but that default
+  // stays out of the URL — only an explicit choice is worth linking.
+  const selectedId = params.selectedId ?? guilds[0]?.groupId
+  const setSelectedId = (id: string | undefined) => patch({ selectedId: id })
+
+  const openPlayer = params.openPlayerId
+    ? index.playerByUid.get(params.openPlayerId)
+    : undefined
+  const setOpenPlayer = (p: Player | undefined) =>
+    patch({ openPlayerId: p?.playerUid })
 
   const shown = showGroups ? [...guilds, ...groups] : guilds
   const guild = shown.find((g) => g.groupId === selectedId) ?? shown[0]

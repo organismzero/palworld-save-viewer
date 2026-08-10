@@ -28,6 +28,13 @@ import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
+import { useViewParams } from '../../app/viewParams.ts'
+import {
+  BASES_DEFAULTS,
+  basesCodec,
+  type BasesParams,
+  type Source,
+} from './params.ts'
 import { BasePlan } from './BasePlan.tsx'
 import { ContainerGrid } from './ContainerGrid.tsx'
 
@@ -41,9 +48,6 @@ import { ContainerGrid } from './ContainerGrid.tsx'
  * object claims the container outright; everything else is a guess, and gets
  * its own section rather than being quietly folded in with the certainties.
  */
-
-type Source =
-  { kind: 'base'; baseId: Guid } | { kind: 'world' } | { kind: 'unattributed' }
 
 const ROW_HEIGHT = 40
 
@@ -142,15 +146,36 @@ export function BasesView({ index }: { index: SaveIndex }) {
     }
   })
 
-  const [source, setSource] = useState<Source>(initial.source)
-  const [selectedContainer, setSelectedContainer] = useState<Guid | undefined>(
-    initial.container,
+  const codec = useMemo(() => basesCodec(index), [index])
+  const [params, setParams] = useViewParams(
+    'bases',
+    BASES_DEFAULTS,
+    codec,
+    // A jump beats the hash: it is intent expressed now.
+    () =>
+      focus
+        ? {
+            source: initial.source,
+            containerId: initial.container,
+            structureId: initial.structureId,
+          }
+        : undefined,
   )
-  const [selectedStructure, setSelectedStructure] = useState<Guid | undefined>(
-    initial.structureId,
-  )
-  const [storageOnly, setStorageOnly] = useState(true)
-  const [query, setQuery] = useState('')
+
+  const { source, query, storageOnly } = params
+  const selectedContainer = params.containerId
+  const patch = (p: Partial<BasesParams>) =>
+    setParams((prev) => ({ ...prev, ...p }))
+
+  const setSource = (source: Source) => patch({ source })
+  const setSelectedContainer = (containerId: Guid | undefined) =>
+    patch({ containerId })
+  const setQuery = (query: string) => patch({ query })
+  const setStorageOnly = (storageOnly: boolean) => patch({ storageOnly })
+
+  const selectedStructure = params.structureId
+  const setSelectedStructure = (structureId: Guid | undefined) =>
+    patch({ structureId })
 
   const container = selectedContainer
     ? index.containerById.get(selectedContainer)
