@@ -30,8 +30,15 @@ import {
  * allocation, parse timings and warnings.
  */
 export function SaveSummary({ index }: { index: SaveIndex }) {
-  const { fileName, fileBytes, timings, playerFiles, localData, reset } =
-    useSaveStore()
+  const {
+    fileName,
+    fileBytes,
+    timings,
+    playerFiles,
+    localData,
+    restoredFrom,
+    reset,
+  } = useSaveStore()
   const guilds = playerGuilds(index)
   const s = index.stats
   const ownerName = localData?.ownerUid
@@ -57,7 +64,11 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <p className="label mt-2">
             {[
               fileBytes ? bytes(fileBytes) : null,
-              totalMs ? `parsed in ${totalMs.toFixed(0)} ms` : null,
+              restoredFrom !== undefined
+                ? `restored · saved ${relativeTime(new Date(restoredFrom))}`
+                : totalMs
+                  ? `parsed in ${totalMs.toFixed(0)} ms`
+                  : null,
               index.meta.engineVersion,
               s.playerDetails > 0
                 ? `${s.playerDetails}/${s.playersInLevel} player saves`
@@ -438,12 +449,22 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             </div>
           )}
 
-          {timings && (
+          {/* A restored session has no per-phase breakdown because no phase
+              ever ran. Losing the line silently would look like a bug in the
+              section rather than an honest absence. */}
+          {restoredFrom !== undefined ? (
             <p className="label mt-4">
-              {Object.entries(timings)
-                .map(([k, v]) => `${k} ${v.toFixed(0)}ms`)
-                .join(' · ')}
+              restored from this browser · saved{' '}
+              {relativeTime(new Date(restoredFrom))} · no parse timings
             </p>
+          ) : (
+            timings && (
+              <p className="label mt-4">
+                {Object.entries(timings)
+                  .map(([k, v]) => `${k} ${v.toFixed(0)}ms`)
+                  .join(' · ')}
+              </p>
+            )
           )}
         </Panel>
       </section>

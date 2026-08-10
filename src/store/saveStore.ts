@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { buildSaveIndex } from '../domain/index.ts'
+import { buildSaveIndex, toSlim } from '../domain/index.ts'
 import type { Guid, LocalDataPayload, SaveIndex } from '../domain/types.ts'
 import { explainParseError } from '../parse/explain.ts'
 import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
@@ -144,8 +144,33 @@ function ledgerFrom(
   )
 }
 
+/**
+ * Hands the worker a world it never parsed, once.
+ *
+ * A restored session skipped the worker entirely, so its `payload` is null and
+ * a player-save merge would come back "load a level save before adding player
+ * saves". This is called immediately before any merge; it is a no-op unless
+ * the current world came from storage, and it only fires once because the
+ * worker keeps what it is given.
+ *
+ * Deliberately lazy rather than part of `restoreSession`: it costs a ~1.85 MB
+ * structured clone across `postMessage`, and most restored sessions never drop
+ * a player file at all.
+ */
+let adoptedFor: SaveIndex | undefined
+
+async function adoptIfRestored(): Promise<void> {
+  const s = useSaveStore.getState()
+  if (s.restoredFrom === undefined || !s.index) return
+  if (adoptedFor === s.index) return
+  const payload = toSlim(s.index)
+  await request({ t: 'adopt', payload }, [])
+  adoptedFor = s.index
+}
+
 async function parsePlayers(files: File[]) {
   if (files.length === 0) return
+  await adoptIfRestored()
 
   useSaveStore.setState((s) => ({
     playerFiles: {
@@ -249,6 +274,7 @@ async function acceptSavs(savs: Sniffed[], set: Setter) {
 
 /** Decompresses and merges raw player saves into the world already loaded. */
 async function parsePlayerSavs(players: Sniffed[], set: Setter) {
+  await adoptIfRestored()
   set((s) => ({
     playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'parsing') },
   }))

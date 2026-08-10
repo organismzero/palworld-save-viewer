@@ -1,7 +1,12 @@
 import { useRef, useState } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
-import { bytes } from '../lib/format.ts'
+import { bytes, relativeTime } from '../lib/format.ts'
+import {
+  rememberPref,
+  restoreSession,
+  sessionDescriptor,
+} from '../store/session.ts'
 import { filesFromDrop } from './dropEntries.ts'
 
 /**
@@ -66,7 +71,7 @@ export function DropZone() {
         </div>
       </button>
 
-      <div className="flex gap-2 text-sm">
+      <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -81,6 +86,7 @@ export function DropZone() {
         >
           Choose a folder
         </button>
+        <ReopenButton />
       </div>
 
       <input
@@ -136,5 +142,53 @@ export function DropZone() {
         </div>
       </details>
     </div>
+  )
+}
+
+/**
+ * "Reopen Level.sav — 4 minutes ago", when there is something to reopen.
+ *
+ * Reads the descriptor from `localStorage` synchronously so this renders on the
+ * first frame or not at all. Doing the IndexedDB read here instead would pop
+ * the button in a frame late, on the landing screen, which is the worst place
+ * in the app for a layout shift.
+ *
+ * The real read happens on click, and can legitimately come back empty — the
+ * browser may have evicted the snapshot since. That is reported in place
+ * rather than as a failure, because nothing has gone wrong.
+ */
+function ReopenButton() {
+  const [descriptor, setDescriptor] = useState(() =>
+    rememberPref() === 'on' ? sessionDescriptor() : undefined,
+  )
+  const [gone, setGone] = useState(false)
+
+  if (gone) {
+    return (
+      <span className="text-xs text-[var(--color-muted)]">
+        That saved session is no longer available.
+      </span>
+    )
+  }
+  if (!descriptor) return null
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void restoreSession().then((ok) => {
+          if (ok) return
+          setDescriptor(undefined)
+          setGone(true)
+        })
+      }}
+      title="Reopens the copy kept in this browser. Nothing is re-read from disk."
+      className="rounded-[6px] border border-[var(--color-signal)]/60 px-3 py-1.5 transition-colors hover:border-[var(--color-signal)]"
+    >
+      Reopen <span className="num">{descriptor.fileName}</span>
+      <span className="ml-2 text-xs text-[var(--color-muted)]">
+        {relativeTime(new Date(descriptor.savedAt))}
+      </span>
+    </button>
   )
 }

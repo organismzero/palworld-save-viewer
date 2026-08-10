@@ -71,7 +71,16 @@ while a text field has focus.
 
 Your save is never uploaded. There is no server, no account, no analytics and
 no telemetry — saves are decompressed and parsed entirely in a Web Worker on
-your own machine, and closing the tab discards everything.
+your own machine.
+
+By default, closing the tab discards everything. The one exception is opt-in
+and off until you say otherwise: after a save loads, the app offers to keep it
+in this browser so it comes back after a reload. Accept and the parsed world is
+stored in IndexedDB on your machine — still never uploaded — and only the most
+recent save is kept. Decline and nothing is ever written. Either answer is
+remembered, and "Saved sessions" in the About dialog has the toggle and a
+**Forget this save** button; turning the toggle off deletes what is stored
+rather than merely stopping future writes.
 
 The app does fetch Palworld's own names, icons and map art at runtime, because
 none of it is in this repository: from `cdn.jsdelivr.net`, falling back to

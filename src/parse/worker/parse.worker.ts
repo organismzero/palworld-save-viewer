@@ -328,6 +328,23 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       void handleParseLocal(msg.id, msg.fileName, msg.buf)
       break
 
+    /**
+     * Take on a world this worker never parsed.
+     *
+     * `raw` stays null — the ~170 MB tree cannot be reconstructed from a slim
+     * payload and nothing needs it to merge player saves. What the merge does
+     * need is `payload` to write into, the level's warnings so they are not
+     * dropped on the next re-post, and any player details already merged, so a
+     * second Players drop adds rather than replaces.
+     */
+    case 'adopt':
+      payload = msg.payload
+      carriedWarnings = msg.payload.stats.warnings
+      details.clear()
+      for (const d of msg.payload.playerDetails) details.set(d.playerUid, d)
+      post({ t: 'adopted', id: msg.id })
+      break
+
     case 'query': {
       let json: string | null = null
       try {

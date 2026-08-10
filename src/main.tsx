@@ -9,10 +9,16 @@ import '@fontsource-variable/instrument-sans'
 import '@fontsource-variable/martian-mono'
 
 import { App } from './App.tsx'
+import { installSessionPersistence } from './store/session.ts'
 import './index.css'
 
 const root = document.getElementById('root')
 if (!root) throw new Error('#root missing from index.html')
+
+// Outside React, and once: this subscribes to the save store and to page
+// lifecycle events, neither of which belongs to a component. It writes nothing
+// unless the user has opted in, and StrictMode would install it twice.
+installSessionPersistence()
 
 createRoot(root).render(
   <StrictMode>

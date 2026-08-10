@@ -12,7 +12,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { clearCache } from '../refdata/refdata.ts'
-import { bytes } from '../lib/format.ts'
+import { bytes, relativeTime } from '../lib/format.ts'
+import {
+  flushSessionWrite,
+  forgetSession,
+  rememberPref,
+  sessionDescriptor,
+  setRememberPref,
+} from '../store/session.ts'
 import { useUiStore } from '../store/uiStore.ts'
 
 function Modal({
@@ -86,8 +93,13 @@ export function AboutDialog() {
             Decompressed and parsed entirely in this browser, in a worker — raw{' '}
             <span className="num">.sav</span> files included. It is never
             uploaded, and there is no server, no account and no analytics in
-            this app. Closing the tab discards it.
+            this app.
           </p>
+        </section>
+
+        <section>
+          <h3 className="label mb-2">saved sessions</h3>
+          <SessionControls />
         </section>
 
         <section>
@@ -231,5 +243,73 @@ export function ShortcutsDialog() {
         field has focus.
       </p>
     </Modal>
+  )
+}
+
+/**
+ * The saved-session controls.
+ *
+ * Sits above the game-data section, and is worded so the two buttons cannot be
+ * confused: one deletes a copy of *your world*, the other deletes downloaded
+ * *Pocketpair art*. Both used to be one vague idea of "cached data".
+ *
+ * Turning the toggle off deletes the snapshot there and then rather than
+ * merely stopping future writes — "stop remembering my saves" that leaves
+ * three megabytes of parsed world on disk is the failure this whole feature is
+ * negotiating around.
+ */
+function SessionControls() {
+  const [pref, setPref] = useState(() => rememberPref())
+  const [descriptor, setDescriptor] = useState(() => sessionDescriptor())
+
+  const toggle = (on: boolean) => {
+    setPref(on ? 'on' : 'off')
+    void setRememberPref(on)
+      // Turning it on with a save already open should have a visible effect
+      // now, rather than at some later merge that may never happen.
+      .then(() => (on ? flushSessionWrite() : undefined))
+      .then(() => setDescriptor(sessionDescriptor()))
+  }
+
+  return (
+    <>
+      <label className="flex cursor-pointer items-start gap-2 text-[var(--color-muted)]">
+        <input
+          type="checkbox"
+          checked={pref === 'on'}
+          onChange={(e) => toggle(e.target.checked)}
+          className="mt-1 accent-[var(--color-signal)]"
+        />
+        <span>
+          Keep the save I have open in this browser, so it comes back after a
+          reload. It is stored on this machine only and still never uploaded.
+          Only the most recent save is kept.{' '}
+          <span className="text-[var(--color-text)]">
+            Turning this off deletes what is stored.
+          </span>
+        </span>
+      </label>
+
+      {descriptor && pref === 'on' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              void forgetSession().then(() =>
+                setDescriptor(sessionDescriptor()),
+              )
+            }}
+            className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-xs transition-colors hover:border-[var(--color-signal)]"
+          >
+            Forget this save
+          </button>
+          <span className="label">
+            <span className="num">{descriptor.fileName}</span> ·{' '}
+            {bytes(descriptor.fileBytes)} ·{' '}
+            {relativeTime(new Date(descriptor.savedAt))}
+          </span>
+        </div>
+      )}
+    </>
   )
 }

@@ -32,6 +32,16 @@ export type ToWorker =
    * describes a single client, so there is never more than one to read.
    */
   | { t: 'parseLocal'; id: number; fileName: string; buf: ArrayBuffer }
+  /**
+   * Seeds the worker from a payload the main thread already has.
+   *
+   * A restored session never started this worker, so it holds no `payload` and
+   * `parsePlayerSav` would reject with "load a level save first". This hands it
+   * enough state to merge player saves onto a world it did not parse. Sent
+   * lazily, on the first player-file drop after a restore, because it costs
+   * ~1.85 MB of `postMessage` for a capability most sessions never use.
+   */
+  | { t: 'adopt'; id: number; payload: SlimPayload }
   /** Lazily pull a raw subtree for the debug inspector, without re-parsing. */
   | { t: 'query'; id: number; path: string[] }
   /** Release the retained raw tree under memory pressure. */
@@ -77,5 +87,6 @@ export type FromWorker =
       payload?: LocalDataPayload
       report: PlayerFileReport
     }
+  | { t: 'adopted'; id: number }
   | { t: 'error'; id: number; phase: Phase; message: string; stack?: string }
   | { t: 'queryResult'; id: number; json: string | null }

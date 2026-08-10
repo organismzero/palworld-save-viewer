@@ -30,6 +30,35 @@ function byId<T>(items: T[], key: (item: T) => Guid): Map<Guid, T> {
   return out
 }
 
+/**
+ * The inverse of {@link buildSaveIndex}: an index back down to its payload.
+ *
+ * The twelve `SlimPayload` keys, picked by name rather than by stripping the
+ * derived ones. `SaveIndex extends SlimPayload` and adds nineteen `Map` fields;
+ * anything that structured-clones an index — persisting it, or posting it to a
+ * worker — would clone every one of them, tens of thousands of duplicated key
+ * strings, and would silently pick up whatever derived field gets added next.
+ *
+ * Lives here rather than with either caller because it is the exact mirror of
+ * the function below and the two have to stay in step.
+ */
+export function toSlim(index: SaveIndex): SlimPayload {
+  return {
+    pals: index.pals,
+    players: index.players,
+    guilds: index.guilds,
+    bases: index.bases,
+    structures: index.structures,
+    containers: index.containers,
+    charContainers: index.charContainers,
+    dynamicItems: index.dynamicItems,
+    dungeons: index.dungeons,
+    playerDetails: index.playerDetails,
+    stats: index.stats,
+    meta: index.meta,
+  }
+}
+
 export function buildSaveIndex(payload: SlimPayload): SaveIndex {
   const structureByContainer = new Map<Guid, Guid>()
   const containerByStructure = new Map<Guid, Guid>()

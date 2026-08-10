@@ -12,14 +12,14 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { SaveIndex } from '../domain/types.ts'
-import { bytes, count } from '../lib/format.ts'
+import { bytes, count, relativeTime } from '../lib/format.ts'
 import { useSaveStore } from '../store/saveStore.ts'
 import { cn } from '../lib/utils.ts'
 
 export function Diagnostics({ index }: { index: SaveIndex }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { fileName, fileBytes, timings, playerFiles, localData } =
+  const { fileName, fileBytes, timings, playerFiles, localData, restoredFrom } =
     useSaveStore()
   const s = index.stats
 
@@ -108,13 +108,22 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
                 s.attributedInferred,
               )} inferred · ${count(s.unattributedContainers)} unknown`}
             />
-            {timings && (
+            {/* A restored session was never parsed, so it has no timings.
+                Saying so beats dropping the row, which reads as a bug. */}
+            {restoredFrom !== undefined ? (
               <Row
-                label="parsed in"
-                value={`${Object.values(timings)
-                  .reduce((a, b) => a + b, 0)
-                  .toFixed(0)} ms`}
+                label="session"
+                value={`restored · saved ${relativeTime(new Date(restoredFrom))}`}
               />
+            ) : (
+              timings && (
+                <Row
+                  label="parsed in"
+                  value={`${Object.values(timings)
+                    .reduce((a, b) => a + b, 0)
+                    .toFixed(0)} ms`}
+                />
+              )
             )}
           </dl>
 
