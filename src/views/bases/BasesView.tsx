@@ -16,6 +16,13 @@ import type {
   Structure,
 } from '../../domain/types.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { ExportMenu } from '../../components/ExportMenu.tsx'
+import {
+  CONTAINER_COLUMNS,
+  ITEM_HIT_COLUMNS,
+  containerRows,
+  itemHitRows,
+} from '../../domain/exportRows.ts'
 import { Panel, Pill } from '../../components/primitives.tsx'
 import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
@@ -152,6 +159,21 @@ export function BasesView({ index }: { index: SaveIndex }) {
     ? index.structureById.get(selectedStructure)
     : undefined
 
+  /** What the centre column is showing, resolved to containers, for export. */
+  const visibleContainers = useMemo(() => {
+    if (source.kind === 'unattributed') return orphans
+    const structures =
+      source.kind === 'base'
+        ? (index.structuresByBase.get(source.baseId) ?? [])
+        : worldChests
+    return structures.flatMap((s) => {
+      const c = s.containerId
+        ? index.containerById.get(s.containerId)
+        : undefined
+      return c ? [c] : []
+    })
+  }, [index, source, orphans, worldChests])
+
   const openContainer = (containerId: Guid) => {
     const { source: next, structureId } = locate(index, containerId)
     setSelectedContainer(containerId)
@@ -228,7 +250,22 @@ export function BasesView({ index }: { index: SaveIndex }) {
         )}
       </div>
 
-      <aside className="w-80 shrink-0 border-l border-[var(--color-line)]/60">
+      <aside className="flex w-80 shrink-0 flex-col border-l border-[var(--color-line)]/60">
+        {/*
+          Exports whatever the centre column is currently listing, which is the
+          useful granularity here: "everything in this base" rather than the
+          one container that happens to be selected. One row per stack, because
+          a container is a sparse set of slots and not a rectangle.
+        */}
+        <div className="flex shrink-0 justify-end border-b border-[var(--color-line)]/60 px-3 py-1.5">
+          <ExportMenu
+            rows={containerRows(index, data, visibleContainers)}
+            columns={CONTAINER_COLUMNS}
+            kind="storage"
+            title={`Export the contents of ${visibleContainers.length} containers in this view`}
+          />
+        </div>
+
         {/* Structure first: it describes the selection whether or not it has
             storage. A container with no structure — the unattributed bucket —
             still falls back to the inventory-only pane. */}
@@ -1008,65 +1045,77 @@ function ItemSearch({
                 Nothing in this save matches “{query}”.
               </p>
             ) : (
-              hits.map((hit) => (
-                <div key={hit.staticId}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpanded((e) =>
-                        e === hit.staticId ? undefined : hit.staticId,
-                      )
-                    }
-                    className="flex w-full items-baseline gap-3 px-3 py-2 text-left hover:bg-[var(--color-raised)]/60"
-                  >
-                    <span className="truncate text-sm">{hit.name}</span>
-                    <span className="num ml-auto shrink-0 text-xs">
-                      {count(hit.total)}
-                    </span>
-                    <span className="label shrink-0">
-                      {hit.places.length} place
-                      {hit.places.length === 1 ? '' : 's'}
-                    </span>
-                  </button>
-
-                  {expanded === hit.staticId && (
-                    <ul className="border-t border-[var(--color-line)]/40 bg-[var(--color-abyss)]/40">
-                      {hit.places.map((place) => {
-                        const c = index.containerById.get(place.containerId)
-                        if (!c) return null
-                        const where = containerLocation(
-                          index,
-                          c,
-                          nameOfStructure,
-                          nameOfBase,
-                        )
-                        return (
-                          <li key={place.containerId}>
-                            <button
-                              type="button"
-                              onClick={() => onOpen(place.containerId)}
-                              className="flex w-full items-baseline gap-3 py-1.5 pr-3 pl-6 text-left hover:bg-[var(--color-raised)]/60"
-                            >
-                              <span className="truncate text-xs">
-                                {where.label}
-                              </span>
-                              {where.detail && (
-                                <span className="label truncate">
-                                  {where.detail}
-                                </span>
-                              )}
-                              {!where.exact && <Pill>inferred</Pill>}
-                              <span className="num ml-auto shrink-0 text-xs">
-                                {count(place.count)}
-                              </span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
+              <>
+                {/* One row per place, not per item — "where is my Paldium"
+                    is the question, so the answer has to keep the places. */}
+                <div className="flex justify-end px-3 py-1.5">
+                  <ExportMenu
+                    rows={itemHitRows(index, hits)}
+                    columns={ITEM_HIT_COLUMNS}
+                    kind="item-search"
+                    title={`Export every place these ${hits.length} items were found`}
+                  />
                 </div>
-              ))
+                {hits.map((hit) => (
+                  <div key={hit.staticId}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((e) =>
+                          e === hit.staticId ? undefined : hit.staticId,
+                        )
+                      }
+                      className="flex w-full items-baseline gap-3 px-3 py-2 text-left hover:bg-[var(--color-raised)]/60"
+                    >
+                      <span className="truncate text-sm">{hit.name}</span>
+                      <span className="num ml-auto shrink-0 text-xs">
+                        {count(hit.total)}
+                      </span>
+                      <span className="label shrink-0">
+                        {hit.places.length} place
+                        {hit.places.length === 1 ? '' : 's'}
+                      </span>
+                    </button>
+
+                    {expanded === hit.staticId && (
+                      <ul className="border-t border-[var(--color-line)]/40 bg-[var(--color-abyss)]/40">
+                        {hit.places.map((place) => {
+                          const c = index.containerById.get(place.containerId)
+                          if (!c) return null
+                          const where = containerLocation(
+                            index,
+                            c,
+                            nameOfStructure,
+                            nameOfBase,
+                          )
+                          return (
+                            <li key={place.containerId}>
+                              <button
+                                type="button"
+                                onClick={() => onOpen(place.containerId)}
+                                className="flex w-full items-baseline gap-3 py-1.5 pr-3 pl-6 text-left hover:bg-[var(--color-raised)]/60"
+                              >
+                                <span className="truncate text-xs">
+                                  {where.label}
+                                </span>
+                                {where.detail && (
+                                  <span className="label truncate">
+                                    {where.detail}
+                                  </span>
+                                )}
+                                {!where.exact && <Pill>inferred</Pill>}
+                                <span className="num ml-auto shrink-0 text-xs">
+                                  {count(place.count)}
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </>
             )}
           </Panel>
         </div>

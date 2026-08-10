@@ -14,6 +14,8 @@ import {
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { ExportMenu } from '../../components/ExportMenu.tsx'
+import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
   IVBar,
@@ -247,6 +249,25 @@ export function PalsView({ index }: { index: SaveIndex }) {
             Clear all filters
           </button>
         )}
+
+        {/*
+          Exports `filtered`, not `index.pals`. Sitting at the foot of the
+          filter rail is the argument: whatever the rail is showing is what
+          comes out. An export that ignored the filters would make the rail
+          pointless for the one job people want a spreadsheet for.
+        */}
+        <div className="mt-auto border-t border-[var(--color-line)]/60 pt-3">
+          <ExportMenu
+            rows={filtered}
+            columns={palColumns(index, data)}
+            kind="pals"
+            title={
+              dirty
+                ? `Export the ${filtered.length} pals matching these filters`
+                : 'Export all pals'
+            }
+          />
+        </div>
       </aside>
 
       {/* Grid */}
