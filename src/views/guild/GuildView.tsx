@@ -347,14 +347,23 @@ function Markers({ guild }: { guild: Guild }) {
           #{m.icon} · {formatMapPos(posToMap(m.pos))}
         </span>
       ))}
+      {/*
+        `setView`, not `location.hash = …`. The hash is a mirror of the store
+        (see `useHashSync`), and a second writer racing it breaks the moment
+        the hash carries more than a view id.
+
+        Labelled "Open map" rather than "View on map" because that is all it
+        can do: it sits outside the `markers.map()` above, so it is one button
+        for N markers and has no marker to centre on. Centring wants a
+        positional member on the `Focus` union — worth doing, but alongside map
+        deep links rather than here.
+      */}
       <button
         type="button"
-        onClick={() => {
-          window.location.hash = '/map'
-        }}
+        onClick={() => useUiStore.getState().setView('map')}
         className="rounded-[6px] border border-[var(--color-line)] px-2.5 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
       >
-        View on map
+        Open map
       </button>
     </div>
   )
