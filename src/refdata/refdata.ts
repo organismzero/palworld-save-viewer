@@ -15,7 +15,14 @@
  *    designed state — raw asset ids and a procedural map, not a broken screen.
  */
 
-import { deleteDB, openDB, type IDBPDatabase } from 'idb'
+import { deleteDB, type IDBPDatabase } from 'idb'
+
+import {
+  ASSETS_STORE,
+  LEGACY_DB_NAME,
+  REFDATA_STORE,
+  database,
+} from '../lib/db.ts'
 
 /**
  * Pinned to a tag would be better; the repo publishes none, so `main` it is.
@@ -30,27 +37,6 @@ const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${P
 const MIRROR = `https://raw.githubusercontent.com/deafdudecomputers/PalworldSaveTools/${PST_REF}/resources`
 
 export const MAP_IMAGE_PATH = 'assets/maps/T_WorldMap.webp'
-
-let db: Promise<IDBPDatabase> | undefined
-
-/**
- * Renamed from `pjv` when the project was. An old database is simply
- * abandoned rather than migrated: everything in it is a cache of public files
- * that re-fetch in seconds, so a migration would be more code than the data is
- * worth. The cost is one cold start for anyone who used the old name.
- */
-const DB_NAME = 'psv'
-const LEGACY_DB_NAME = 'pjv'
-
-function database() {
-  db ??= openDB(DB_NAME, 1, {
-    upgrade(d) {
-      d.createObjectStore('refdata')
-      d.createObjectStore('assets')
-    },
-  })
-  return db
-}
 
 async function fetchFirst(path: string): Promise<Response> {
   for (const base of [CDN, MIRROR]) {
@@ -317,7 +303,7 @@ export async function loadRefdata(): Promise<{
 }> {
   const d = await database()
 
-  const cached = (await d.get('refdata', KEY)) as Refdata | undefined
+  const cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
   if (cached) {
     // Returning users see the full UI immediately; freshness can wait.
     void revalidate(d)
@@ -325,7 +311,7 @@ export async function loadRefdata(): Promise<{
   }
 
   const data = await fetchAndSlim()
-  await d.put('refdata', data, KEY)
+  await d.put(REFDATA_STORE, data, KEY)
   void navigator.storage?.persist?.()
   return { data, fromCache: false }
 }
@@ -355,7 +341,7 @@ async function fetchAndSlim(): Promise<Refdata> {
 async function revalidate(d: IDBPDatabase) {
   try {
     const data = await fetchAndSlim()
-    await d.put('refdata', data, KEY)
+    await d.put(REFDATA_STORE, data, KEY)
   } catch {
     // Offline is fine — the cached copy stands.
   }
@@ -376,12 +362,12 @@ const TILESET_KEY = `tiles@${PST_REF}@${SLIM_VERSION}`
 
 export async function getTileSet(): Promise<TileSet | undefined> {
   const d = await database()
-  return (await d.get('assets', TILESET_KEY)) as TileSet | undefined
+  return (await d.get(ASSETS_STORE, TILESET_KEY)) as TileSet | undefined
 }
 
 export async function putTileSet(set: TileSet) {
   const d = await database()
-  await d.put('assets', set, TILESET_KEY)
+  await d.put(ASSETS_STORE, set, TILESET_KEY)
 }
 
 export function tileKey(level: number, x: number, y: number) {
@@ -394,12 +380,12 @@ export async function getTile(
   y: number,
 ): Promise<Blob | undefined> {
   const d = await database()
-  return (await d.get('assets', tileKey(level, x, y))) as Blob | undefined
+  return (await d.get(ASSETS_STORE, tileKey(level, x, y))) as Blob | undefined
 }
 
 export async function putTiles(entries: [string, Blob][]) {
   const d = await database()
-  const tx = d.transaction('assets', 'readwrite')
+  const tx = d.transaction(ASSETS_STORE, 'readwrite')
   await Promise.all(entries.map(([k, v]) => tx.store.put(v, k)))
   await tx.done
 }
@@ -412,8 +398,8 @@ export async function fetchMapImage(): Promise<Blob> {
 export async function clearCache(): Promise<number> {
   const d = await database()
   const before = (await navigator.storage?.estimate?.())?.usage ?? 0
-  await d.clear('refdata')
-  await d.clear('assets')
+  await d.clear(REFDATA_STORE)
+  await d.clear(ASSETS_STORE)
   // Also drop the pre-rename database, which this button would otherwise
   // report as freed space while leaving it on disk.
   await deleteDB(LEGACY_DB_NAME).catch(() => {})
