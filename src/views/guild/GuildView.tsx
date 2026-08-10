@@ -26,6 +26,7 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { GUILD_DEFAULTS, guildCodec, type GuildParams } from './params.ts'
+import { buildPaldex } from './paldex.ts'
 import {
   BarList,
   CountUp,
@@ -645,6 +646,8 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
     <section className="mb-10">
       <SectionHeading title="Roster" hint={`${count(pals.length)} pals`} />
 
+      <PaldexRollup index={index} guild={guild} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel className="p-5">
           <div className="label mb-3">level distribution</div>
@@ -699,5 +702,52 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
         </Panel>
       </div>
     </section>
+  )
+}
+
+/**
+ * Paldex completion across the guild, one bar per member.
+ *
+ * Deliberately not a single guild-wide figure. Paldex progress is per player —
+ * two members who have each caught the same 80 species have not collectively
+ * caught 160 — so summing or averaging them would produce a number that means
+ * nothing. What is worth showing is who is where.
+ *
+ * Members whose player save is missing are measured on owned-now instead, and
+ * the row says so rather than quietly sitting lower than the others.
+ */
+function PaldexRollup({ index, guild }: { index: SaveIndex; guild: Guild }) {
+  const { data } = useRefdataStore()
+
+  const rows = useMemo(
+    () =>
+      (index.playersByGuild.get(guild.groupId) ?? []).map((p) => {
+        const detail = index.playerDetails.find(
+          (d) => d.playerUid === p.playerUid,
+        )
+        const view = buildPaldex(index, data, detail?.record, p.playerUid)
+        return {
+          key: p.playerUid,
+          label:
+            view.basis === 'ever-caught' ? p.name : `${p.name} (owned now)`,
+          value: view.caught,
+          hint: `${view.caught} of ${view.total}`,
+        }
+      }),
+    [index, guild, data],
+  )
+
+  if (rows.length === 0) return null
+
+  return (
+    <Panel className="mb-4 p-5">
+      <div className="label mb-1">paldex by member</div>
+      <p className="mb-3 text-xs text-[var(--color-muted)]">
+        Species caught, per player. Rows marked “owned now” are counted from the
+        level save because that player’s save is not loaded — those are what
+        they hold, not what they have caught.
+      </p>
+      <BarList rows={rows} />
+    </Panel>
   )
 }

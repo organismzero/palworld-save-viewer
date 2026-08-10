@@ -9,7 +9,7 @@
  * as an affordance — a drop target for exactly that file.
  */
 
-import { useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
@@ -18,11 +18,14 @@ import { palName, palTooltip } from '../../domain/palText.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
+import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useSaveStore } from '../../store/saveStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { IVBar, Panel, Pill } from '../../components/primitives.tsx'
 import { CapacityNote, ContainerGrid } from '../bases/ContainerGrid.tsx'
+import { PaldexGrid } from './Paldex.tsx'
+import { buildPaldex } from './paldex.ts'
 
 export function PlayerDetailPanel({
   index,
@@ -59,6 +62,15 @@ export function PlayerDetailPanel({
     .sort((a, b) => ivTotal(b) - ivTotal(a))
     .slice(0, 12)
 
+  // The panel's first piece of state. Everything above is derived, which is
+  // why this stays local rather than joining the view's hash params: which tab
+  // is open is not something worth sending anybody.
+  const [tab, setTab] = useState<'overview' | 'paldex'>('overview')
+  const paldex = useMemo(
+    () => buildPaldex(index, data, detail?.record, player.playerUid),
+    [index, data, detail, player.playerUid],
+  )
+
   return (
     <aside className="w-96 shrink-0 overflow-y-auto border-l border-[var(--color-line)]/60">
       <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)]/60 px-4 py-3">
@@ -81,7 +93,32 @@ export function PlayerDetailPanel({
         </button>
       </div>
 
-      <div className="space-y-6 p-4">
+      <div className="flex gap-1 border-b border-[var(--color-line)]/60 px-4 pt-2">
+        {(['overview', 'paldex'] as const).map((id) => (
+          <button
+            key={id}
+            type="button"
+            aria-current={tab === id ? 'true' : undefined}
+            onClick={() => setTab(id)}
+            className={cn(
+              'rounded-t-[4px] px-2.5 py-1 text-xs transition-colors',
+              tab === id
+                ? 'bg-[var(--color-raised)] text-[var(--color-text)]'
+                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]',
+            )}
+          >
+            {id}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'paldex' && (
+        <div className="p-4">
+          <PaldexGrid view={paldex} />
+        </div>
+      )}
+
+      <div className={cn('space-y-6 p-4', tab !== 'overview' && 'hidden')}>
         <section>
           <Field label="pals owned" value={count(summary.pals.length)} />
           <Field label="structures built" value={count(summary.built)} />
