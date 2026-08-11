@@ -105,8 +105,9 @@ export function AboutDialog() {
         <section>
           <h3 className="label mb-2">game data and art</h3>
           <p className="text-[var(--color-muted)]">
-            Pal names, icons, item tables, the world map and the levelling curve
-            are Pocketpair&rsquo;s, and none of them are in this repository.
+            Pal names, icons, item tables, breeding combinations, the world map
+            and the levelling curve are Pocketpair&rsquo;s, and none of them are
+            in this repository.
             They are fetched on demand from the{' '}
             <Link href="https://github.com/deafdudecomputers/PalworldSaveTools">
               PalworldSaveTools
@@ -204,6 +205,7 @@ const SHORTCUTS: { keys: string[]; what: string }[] = [
   { keys: ['3'], what: 'Bases' },
   { keys: ['4'], what: 'Guild' },
   { keys: ['5'], what: 'Summary' },
+  { keys: ['6'], what: 'Breed' },
   { keys: ['?'], what: 'This list' },
   { keys: ['Esc'], what: 'Close whatever is open' },
 ]

@@ -14,7 +14,7 @@ everything is parsed in your browser. Your save never leaves your machine.
 
 ## What it does
 
-Five views, switchable with the tabs or the number keys:
+Six views, switchable with the tabs or the number keys:
 
 - **Map** — the whole island, rendered with Pixi. Players, bases, player-built
   structures, world objects, loot chests, pals and fast-travel points as
@@ -35,6 +35,12 @@ Five views, switchable with the tabs or the number keys:
   pals, what they build, and their inventory.
 - **Summary** — the full read-out of what the save contains, plus parse
   diagnostics.
+- **Breed** — pick a player and a species, get the shortest breeding path using
+  only the pals that player owns. Guildmates' pals are never counted, because a
+  route through someone else's pal is not one you can walk. Gender is checked
+  against the pals actually held, alternate routes of the same length are
+  offered, and when there is no path it says which specific parent is out of
+  reach rather than only "no route".
 
 Press <kbd>⌘K</kbd> to search pals, items, players and bases from anywhere.
 
@@ -196,7 +202,7 @@ src/
     worker/    the parse worker and the readers that build the domain model
   refdata/     runtime game data and art, slimmed and cached in IndexedDB
   store/       zustand stores: save, refdata, UI
-  views/       map, pals, bases, guild
+  views/       map, pals, bases, guild, breed
 ```
 
 A save is parsed in a worker that retains the ~170 MB raw tree; what crosses to

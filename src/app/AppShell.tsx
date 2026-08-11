@@ -21,6 +21,11 @@ const GuildView = lazy(() =>
     default: m.GuildView,
   })),
 )
+const BreedView = lazy(() =>
+  import('../views/breed/BreedView.tsx').then((m) => ({
+    default: m.BreedView,
+  })),
+)
 import { useSaveStore } from '../store/saveStore.ts'
 import {
   flushSessionWrite,
@@ -42,6 +47,11 @@ const VIEWS = [
   { id: 'bases', label: 'Bases' },
   { id: 'guild', label: 'Guild' },
   { id: 'summary', label: 'Summary' },
+  // Appended rather than slotted in next to Guild where it arguably belongs:
+  // `useShortcuts` maps number keys positionally, so inserting it would move
+  // Summary from 5 to 6 and break the one habit every existing user has. Last
+  // place costs nothing and renumbers nothing.
+  { id: 'breed', label: 'Breed' },
 ] as const satisfies readonly { id: ViewId; label: string }[]
 
 /**
@@ -272,6 +282,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
             {view === 'bases' && <BasesView index={index} />}
             {view === 'guild' && <GuildView index={index} />}
             {view === 'summary' && <SaveSummary index={index} />}
+            {view === 'breed' && <BreedView index={index} />}
           </Suspense>
         </ErrorBoundary>
       </main>

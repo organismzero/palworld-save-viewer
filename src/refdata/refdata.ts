@@ -30,7 +30,7 @@ import {
  */
 const PST_REF = 'main'
 /** Bumped when a projection changes; invalidates every cached entry. */
-const SLIM_VERSION = 4
+const SLIM_VERSION = 5
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -130,6 +130,33 @@ export interface ExpLevel {
   palTotal: number
 }
 
+export interface BreedingSpecies {
+  /**
+   * The game's breeding-order number. Two parents' ranks average to a target
+   * and the nearest rank wins; the value is meaningless on its own.
+   */
+  combiRank: number
+  /**
+   * Excluded from being a formula *child* — it can still be a parent. Set for
+   * the 44 species that only ever come from a specific pair or not at all.
+   */
+  ignoreCombi: boolean
+}
+
+/**
+ * What is needed to compute breeding results, and nothing more.
+ *
+ * `breedingdata.json` is 7.1 MB, four fifths of which is a precomputed
+ * child→parents index. The formula in `domain/breeding.ts` reproduces every one
+ * of its 46,355 entries from these two sections alone, at ~67 KB.
+ */
+export interface BreedingData {
+  /** Keyed by lowercased asset id, like every other refdata map. */
+  pals: Record<string, BreedingSpecies>
+  /** Parents and child all lowercased. Parent order is not significant. */
+  uniqueCombos: { a: string; b: string; child: string }[]
+}
+
 export interface Refdata {
   /** Keyed by lowercased asset id, as PalworldSaveTools does throughout. */
   species: Record<string, SpeciesInfo>
@@ -140,6 +167,7 @@ export interface Refdata {
   structures: Record<string, StructureInfo>
   /** Ascending by level, so a binary search or a direct index both work. */
   expTable: ExpLevel[]
+  breeding: BreedingData
 }
 
 function slimCharacters(raw: any): Record<string, SpeciesInfo> {
@@ -155,7 +183,12 @@ function slimCharacters(raw: any): Record<string, SpeciesInfo> {
       element1: p.stats?.element_type1,
       element2: p.stats?.element_type2,
       rarity: p.stats?.rarity,
-      zukan: p.stats?.zukan_index,
+      // `-1` is how the data says "no paldex slot" — crossover and unreleased
+      // species. Normalised to `undefined` here rather than at each call site,
+      // because a raw `-1` sorts *ahead* of Lamball's `1` in any
+      // `zukan ?? MAX_SAFE_INTEGER` ordering, which silently puts Blue Slime
+      // and Boltmane at the top of every paldex-ordered list.
+      zukan: p.stats?.zukan_index > 0 ? p.stats.zukan_index : undefined,
       icon: p.icon,
       work,
       partnerSkill: p.partner_skill,
@@ -270,6 +303,46 @@ function slimExpTable(raw: any): ExpLevel[] {
   return out.sort((a, b) => a.level - b.level)
 }
 
+/**
+ * Combi ranks and the unique-pair overrides — two of the file's six sections.
+ *
+ * Names are deliberately not taken from here. `breedingdata.json` carries
+ * `"Unidentified Pal"` for three species that `characters.json` names properly,
+ * and every display string in the app already comes from `species`.
+ *
+ * Every id is lowercased on the way in. The two files disagree on casing for
+ * ten species — `BadCatgirl` here against `BadCatGirl` there — so a key-to-key
+ * join would drop them silently. Lowercasing makes all 304 of these resolve.
+ */
+function slimBreeding(raw: any): BreedingData {
+  const pals: Record<string, BreedingSpecies> = {}
+  for (const [id, v] of Object.entries<any>(raw?.pal_info ?? {})) {
+    if (typeof v?.combi_rank !== 'number') continue
+    pals[id.toLowerCase()] = {
+      combiRank: v.combi_rank,
+      ignoreCombi: v.ignore_combi === true,
+    }
+  }
+
+  const uniqueCombos: BreedingData['uniqueCombos'] = []
+  for (const c of raw?.unique_combos ?? []) {
+    if (
+      typeof c?.parent_a !== 'string' ||
+      typeof c?.parent_b !== 'string' ||
+      typeof c?.child !== 'string'
+    ) {
+      continue
+    }
+    uniqueCombos.push({
+      a: c.parent_a.toLowerCase(),
+      b: c.parent_b.toLowerCase(),
+      child: c.child.toLowerCase(),
+    })
+  }
+
+  return { pals, uniqueCombos }
+}
+
 /** Absolute URL for an icon path as it appears in the reference data. */
 export function iconUrl(path: string | undefined): string | undefined {
   if (!path) return undefined
@@ -317,7 +390,7 @@ export async function loadRefdata(): Promise<{
 }
 
 async function fetchAndSlim(): Promise<Refdata> {
-  const [characters, travel, skills, work, items, world, exp] =
+  const [characters, travel, skills, work, items, world, exp, breeding] =
     await Promise.all([
       fetchFirst('game_data/characters.json').then((r) => r.json()),
       fetchFirst('game_data/fast_travel_points.json').then((r) => r.json()),
@@ -326,6 +399,13 @@ async function fetchAndSlim(): Promise<Refdata> {
       fetchFirst('game_data/items.json').then((r) => r.json()),
       fetchFirst('game_data/world.json').then((r) => r.json()),
       fetchFirst('game_data/pal_exp_table.json').then((r) => r.json()),
+      // The only optional one. Every other file feeds something on the first
+      // screen, so failing the lot is the right answer for them — but breeding
+      // powers one view, and losing every item name because this file moved
+      // upstream would be a bad trade. The Breed view says when it is missing.
+      fetchFirst('game_data/breedingdata.json')
+        .then((r) => r.json())
+        .catch(() => undefined),
     ])
   return {
     species: slimCharacters(characters),
@@ -335,12 +415,21 @@ async function fetchAndSlim(): Promise<Refdata> {
     items: slimItems(items),
     structures: slimStructures(world),
     expTable: slimExpTable(exp),
+    breeding: slimBreeding(breeding),
   }
 }
 
 async function revalidate(d: IDBPDatabase) {
   try {
     const data = await fetchAndSlim()
+    // Breeding is the one fetch allowed to fail on its own (see `fetchAndSlim`),
+    // which makes it the one that can come back empty from an otherwise healthy
+    // revalidation. Carrying the cached copy forward stops a single flaky
+    // request from emptying a working table behind the user's back.
+    if (Object.keys(data.breeding.pals).length === 0) {
+      const cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
+      if (cached?.breeding) data.breeding = cached.breeding
+    }
     await d.put(REFDATA_STORE, data, KEY)
   } catch {
     // Offline is fine — the cached copy stands.

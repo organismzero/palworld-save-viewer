@@ -45,7 +45,7 @@ images, no icons, no extracted game tables.
 At runtime the app fetches reference data and art from
 [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools)
 (MIT) via the jsDelivr CDN, falling back to `raw.githubusercontent.com`, and
-caches it in your browser's IndexedDB. Exactly seven data files are fetched,
+caches it in your browser's IndexedDB. Exactly eight data files are fetched,
 projected down to the fields the app uses before caching:
 
 | File                      | Used for                                   |
@@ -57,6 +57,23 @@ projected down to the fields the app uses before caching:
 | `items.json`              | item names, icons, rarity, weight, stacks  |
 | `world.json`              | structure names and icons                  |
 | `pal_exp_table.json`      | the levelling curve behind player XP bars  |
+| `breedingdata.json`       | combi ranks and the unique breeding combos |
+
+`breedingdata.json` is the one projected most aggressively: 7.1 MB on disk down
+to ~67 KB cached. Only two of its six sections are read — the per-species combi
+rank and the 253 hand-authored combos. The other four are precomputed
+pair→child tables, and the formula in `src/domain/breeding.ts` reproduces all
+46,355 of their entries from those two sections, so caching them as well would
+be redundant. `pnpm verify:breeding` re-checks that claim against the upstream
+file.
+
+It is also the most expensive fetch: 343 KB of the 666 KB total, so it roughly
+doubles the one-time reference-data transfer for a feature only the Breed view
+uses. It is fetched eagerly with the rest anyway, to keep one cache entry and
+one code path — and unlike the other seven it is allowed to fail on its own, so
+a bad or moved file costs breeding paths rather than every name and icon in the
+app. If cold start ever needs defending, this is the file to move behind a
+lazy `loadBreeding()` under its own IndexedDB key.
 
 Plus `game_data/icons/**` on demand — one request per icon actually shown —
 and `assets/maps/T_WorldMap.webp`, which is baked into 341 tiles across five

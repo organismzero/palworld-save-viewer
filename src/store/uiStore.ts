@@ -22,7 +22,7 @@ export type Focus =
   | { kind: 'base'; id: Guid }
   | { kind: 'item'; staticId: string; label: string }
 
-export type ViewId = 'map' | 'pals' | 'bases' | 'guild' | 'summary'
+export type ViewId = 'map' | 'pals' | 'bases' | 'guild' | 'breed' | 'summary'
 
 interface UiState {
   view: ViewId
