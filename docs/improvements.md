@@ -15,15 +15,15 @@ The problems being solved:
    the tab throws away a parsed world, every filter and every selection — and
    there is no way to link a colleague to "this pal" or "that base".
 2. **Data goes in and nothing comes out.** There is no export anywhere, no way
-   to save a map image, `WorldOption.sav` is not recognised at all (so server
-   rates and difficulty never contextualise the numbers shown), and paldex
-   data is parsed but only partly surfaced.
-3. **No sense of change over time.** Every view reports what a save *contains*.
-   Server admins and long-running solo worlds want to know what *changed* —
+   to save a map image, server settings are not read at all (so rates and
+   difficulty never contextualise the numbers shown), and paldex data is parsed
+   but only partly surfaced.
+3. **No sense of change over time.** Every view reports what a save _contains_.
+   Server admins and long-running solo worlds want to know what _changed_ —
    which no Palworld tool currently answers.
 
 Intended outcome: the app remembers your world across a reload, hands its data
-back to you in the formats you actually use, reads the one save file it was
+back to you in the formats you actually use, reads the two small inputs it was
 ignoring, and can tell you what changed between two saves.
 
 Three constraints run through everything below:
@@ -53,8 +53,8 @@ rebuild it. No new serialisation code is needed on either side.
 **Storage.** A new `session` object store in the existing `psv` database,
 bumping `openDB(DB_NAME, 1, …)` to version 2 in `src/refdata/refdata.ts` with
 an `upgrade` handler that creates it. Note that `clearCache()`
-(`src/refdata/refdata.ts:412`) clears the `refdata` and `assets` stores *by
-name* rather than deleting the database, so a `session` store survives it —
+(`src/refdata/refdata.ts:412`) clears the `refdata` and `assets` stores _by
+name_ rather than deleting the database, so a `session` store survives it —
 which is the correct behaviour. "Clear cached game data" is about Pocketpair's
 public art and names; the user's own world needs its own control with its own
 words.
@@ -121,7 +121,7 @@ action, `reset()` leaves the snapshot alone), `src/app/DropZone.tsx`,
 
 ### 1b. Deep links
 
-**Architecture is preserved:** the hash stays a *mirror* of the store, never
+**Architecture is preserved:** the hash stays a _mirror_ of the store, never
 the source of truth. The long comment in `useHashSync` explains why, and the
 command palette's need to set view and focus in one commit is unchanged.
 
@@ -214,30 +214,118 @@ that made the tile bake target 4096.
 
 Button in the map's control panel; the Blob goes through `download()` from 2a.
 
-### 2c. Read `WorldOption.sav`
+### 2c. Read `LevelMeta.sav` and `PalWorldSettings.ini`
 
-`src/parse/sniff.ts` does not recognise this file today. It carries server
-difficulty, XP / capture / spawn / hatch rates, day length, death penalty and
-PvP flags — the context that makes every other number in the app legible.
+Two small inputs the app ignores today, both of which contextualise numbers it
+already shows. They are grouped because they are the same size of job, and
+separated below because **one is part of the save and the other is not** — a
+distinction that decides how each may be worded on screen.
 
-- **Sniffer:** add a `worldoption` kind with its content marker (`OptionWorldData`)
-  to the `MARKERS` table, and a field on `Partitioned`. Classification stays by
-  content, not filename, consistent with the rest of the module.
-- **Reader:** `src/parse/worker/readers/worldOption.ts`, mirroring the shape of
-  `src/parse/worker/readers/localData.ts`.
-- **Protocol:** `parseWorldOption` / `worldOptionResult` in
-  `src/parse/worker/protocol.ts`.
-- **Placement — beside the index, not inside `SlimPayload`.** This is one file
-  describing server configuration; it is not derived from the world and is not
-  invalidated by merging player saves. Folding it into the payload would force
-  a full payload re-post on every merge. This is exactly the reasoning the
-  existing code gives for keeping `localData` separate, and it should be
-  followed rather than diverged from.
-- **Type:** `WorldOptionPayload` in `src/domain/types.ts`.
-- **Surface:** a "World settings" panel in `src/app/SaveSummary.tsx` built from
-  the existing `SectionHeading` and `StatTile`, and a line in the Guild hero
-  when rates are non-default (a 3× capture rate world is not comparable to a
-  vanilla one, and the app should say so). Drop-zone copy updated to mention it.
+Do `LevelMeta.sav` first: it is cheaper, it sits in the save folder so it needs no
+new ingestion story, and it unblocks the ordering problem in Feature 3.
+
+#### `LevelMeta.sav` — when the save was written
+
+Sits beside `Level.sav` in every world folder and in every autosave backup. 1,931
+bytes compressed, 2,122 decompressed, and it holds exactly three properties —
+measured, not assumed:
+
+```
+Version    100                       IntProperty
+Timestamp  639220591013490000        StructProperty / DateTime
+SaveData   PalWorldBaseInfoSaveData
+             WorldName  "Autosave_W" StrProperty
+             InGameDay  398          IntProperty
+```
+
+`Timestamp` is **absolute .NET ticks and a genuine wall clock** — the existing
+`ticksToDate` in `src/lib/format.ts` decodes it with no adjustment, and across a
+30-snapshot autosave set it matches each folder's own name to the second.
+`InGameDay` climbs monotonically, roughly two in-game days per real hour.
+
+Note it does **not** resolve the guild `last_online_real_time` epoch the README's
+Limitations section flags as unknown. Those values are ~4.7 × 10¹², which as .NET
+ticks land in year 0001 — an elapsed duration of a few days, consistent with the
+README's reading of them as server uptime. Anchoring them would need
+uptime-at-save-time, which nothing records, so the honest position stays as it is.
+
+- **Sniffer:** a `levelmeta` kind keyed on content marker
+  `PalWorldBaseInfoSaveData`, plus a field on `Partitioned`. It decodes through
+  the existing container and GVAS path with no new reader.
+- **Placement:** beside the index, like `localData` — it is not world data and is
+  not invalidated by a player-save merge.
+- **Why it earns its keep, in order of value:**
+  1. **Feature 3 gets a free, exact ordering key.** Comparison has to know which
+     of two saves is older; today it would guess or ask. `InGameDay` is a
+     sanity cross-check on the timestamp.
+  2. **Relative times can stop lying.** Every "2 hours ago" in the app is
+     currently relative to `Date.now()`. Load a week-old backup and all of them
+     are wrong by a week. Anchoring `relativeTime` to the save's own timestamp
+     makes them true, and is the sort of latent inaccuracy this codebase
+     otherwise goes out of its way to avoid.
+  3. Save-write time in the Summary, where the only handle today is file mtime —
+     which a copy or a move destroys.
+  4. `InGameDay` is a world-age stat the app has nowhere else.
+- **Not an identity key.** `WorldName` reads `"Autosave_W"` across every
+  backup — the autosave label, not the world's display name. Feature 3's
+  different-worlds guard must stay on the `groupId` set.
+
+#### `PalWorldSettings.ini` — how the server is configured
+
+Server difficulty, XP / capture / spawn / hatch rates, day length, death penalty
+and PvP flags — the context that makes every other number in the app legible. A
+3× capture-rate world is not comparable to a vanilla one, and today the app
+cannot tell the difference.
+
+**This part originally targeted `WorldOption.sav` and was wrong to.** That
+file is written for client-hosted co-op worlds; a dedicated server does not
+produce one, and its settings live in
+`Pal/Saved/Config/<Platform>/PalWorldSettings.ini` instead. Neither world this
+project is developed against has a `WorldOption.sav` — both are dedicated-server
+saves, which is also what the README's Limitations section is written against. If
+someone with a co-op world asks, the binary equivalent can be added beside this
+with content marker `OptionWorldData`, mirroring
+`src/parse/worker/readers/localData.ts`; it is recorded here so the work is not
+re-derived.
+
+Retargeting makes this **cheaper than originally specced**, not dearer. The file
+is a few KB of plain INI, so:
+
+- **No GVAS reader, no Oodle, no worker, and no protocol messages.** Parse it on
+  the main thread. The `readers/worldOption.ts` and `parseWorldOption` /
+  `worldOptionResult` items in the original spec are simply not needed.
+- **Sniffer:** add a `settings` kind to `src/parse/sniff.ts` keyed on the text
+  marker `[/Script/Pal.PalGameWorldSettings]`, plus a field on `Partitioned`.
+  Classification stays by content rather than filename, consistent with the rest
+  of the module — the marker is just text rather than binary.
+- **Parser:** `src/parse/settings.ts`. The payload is one long
+  `OptionSettings=(Key=Value,…)` line; split on commas outside quotes, coerce
+  `True`/`False` and numerics, and keep unknown keys as raw strings rather than
+  dropping them, so a game update that adds a setting shows up instead of
+  vanishing.
+- **Placement — beside the index, not inside `SlimPayload`.** Unchanged from the
+  original reasoning, and now stronger: this is not derived from the world at all,
+  and is not invalidated by merging player saves. Folding it into the payload
+  would force a full payload re-post on every merge, which is exactly why
+  `localData` is kept separate.
+- **Type:** `WorldSettings` in `src/domain/types.ts`.
+
+**The honesty problem this introduces, which the original spec did not have.**
+`WorldOption.sav` sits inside the save folder and describes the world. The `.ini`
+does not: it is **current server configuration**, read from a different directory,
+and nothing ties it to the moment the save was written. An admin who doubled XP
+last week has an `.ini` that does not describe most of the history in the save. So
+the app must attribute it — "from your server config", never "this world was
+played at 3× capture" — the same distinction the paldex panel draws between "ever
+caught" and "owned now".
+
+- **Surface:** a "Server settings" panel in `src/app/SaveSummary.tsx` from the
+  existing `SectionHeading` and `StatTile`, and a line in the Guild hero when
+  rates are non-default. Both labelled as config, per above.
+- **Ingestion UX:** fully optional, and the drop zone must say where to find it,
+  because it is the first input that does **not** live in the save folder. "Drop
+  the save folder and it works" is the app's core promise; this must not read as
+  a missing file when it is absent.
 
 ### 2d. Paldex completion
 
@@ -268,12 +356,20 @@ A `baseline?: { fileName, savedAt, payload: SlimPayload }` slot on
 `saveStore`. Entered through an explicit "Compare with another save" action —
 the next dropped level save becomes the baseline instead of replacing `index`.
 
-Making a second level drop *implicitly* a comparison would break the existing
+Making a second level drop _implicitly_ a comparison would break the existing
 and correct "drop a new world to replace the current one" behaviour in
 `ingestWorld`, so the compare-arm state is deliberate.
 
 Once Feature 1 lands, the persisted snapshot is the second and better entry
 point: **"compare with the save you had open before"**, at no parse cost.
+
+**Which save is older comes from `LevelMeta.sav` (2c), not from a guess.** Its
+`Timestamp` is an absolute wall clock and its `InGameDay` cross-checks it, so the
+diff can label its two sides correctly and refuse to present a newer save as the
+baseline by accident. Without it the only signals are file mtime, which copying
+destroys, and asking the user. Note `WorldName` is _not_ usable as world identity
+— it reads `"Autosave_W"` in every autosave — so the different-worlds guard stays
+on the `groupId` set as specced below.
 
 ### Worker
 
@@ -338,8 +434,10 @@ Sequenced so each step is independently shippable and the riskiest layer is
 touched while it is freshest:
 
 1. **2a export** — self-contained, and `download()` unblocks 2b.
-2. **2c `WorldOption.sav`** — the only parse-layer change; do it before the
-   surface-level work piles on top of it.
+2. **2c `LevelMeta.sav`, then `PalWorldSettings.ini`** — the only ingestion
+   changes, both small: the first reuses the existing GVAS path entirely, and the
+   second is text rather than binary. Do `LevelMeta` early regardless of the rest,
+   because Feature 3 wants its timestamp.
 3. **1a persistence** — the largest single win, and the prerequisite for the
    best version of Feature 3.
 4. **1b deep links** — builds on the `uiStore` work from 1a.
@@ -376,9 +474,14 @@ the real save has reached a committed test file. Run it.
 - `diff.ts` over two payloads derived from the committed fixture with
   programmatic mutations (bump a level, remove a pal, change an item count,
   add a structure), including the different-worlds guard.
-- A hand-authored synthetic `WorldOption` fixture for `sniff.test.ts` and the
-  new reader — hand-authored specifically so nothing from a real save is
-  involved.
+- A hand-authored `PalWorldSettings.ini` fixture for `sniff.test.ts` and
+  `settings.ts` — hand-authored specifically so no real server's configuration is
+  involved. Cover a default file, one with non-default rates, an unknown key, and
+  a truncated `OptionSettings=` line.
+- `LevelMeta.sav` needs no fixture of its own beyond a `sniff.test.ts` marker
+  case: the file carries no identifiers, and the golden suite already walks every
+  `.sav` in `data/`, so a real one is covered there. Assert the ticks→date
+  conversion against a known-good pair rather than against `Date.now()`.
 
 Keep the IndexedDB layer in `src/store/session.ts` thin enough that the tested
 surface is the pure functions (`migrate`, codecs) rather than the three-line
@@ -396,7 +499,12 @@ would not earn its place.
 - Export: filter the roster, export CSV, open it in a spreadsheet; confirm
   names resolve and the row count matches the filtered count.
 - Map PNG: export viewport and island with layers toggled both ways.
-- `WorldOption.sav`: drop it alone and alongside a world; confirm the Summary
-  panel and that a non-default rate shows in the Guild hero.
+- `LevelMeta.sav`: drop a world folder and confirm the save's write time appears
+  and matches the folder's own timestamp; then load an autosave from hours earlier
+  and confirm every relative time is anchored to _that_ save rather than to now.
+- `PalWorldSettings.ini`: drop it alone and alongside a world; confirm the
+  Summary panel, that a non-default rate shows in the Guild hero, that both are
+  attributed to server config rather than to the save, and that a world loaded
+  without one says nothing at all rather than reporting a gap.
 - Comparison: load a world, arm compare, drop an older backup — confirm the
   deltas, then try two unrelated worlds and confirm it declines.
