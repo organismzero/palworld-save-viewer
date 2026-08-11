@@ -23,8 +23,22 @@
  * a 50/50 roll and the player can hatch again. That is optimistic in exactly one
  * direction, so the view says so rather than leaving it implied.
  *
- * Pals whose gender the save does not record, and pals with no owner at all, are
- * gaps to report, never stock to quietly fold in.
+ * Pals whose gender the save does not record are a gap to report, never stock to
+ * quietly fold in — unless the caller asks for them, and the view says so.
+ *
+ * ## Whose pals count
+ *
+ * One player's palbox by default, because a route through someone else's pal is
+ * not one that player can walk alone. `includeGuild` widens the pool to every pal
+ * carrying the guild's `group_id` — guildmates' palboxes and the ownerless base
+ * workers in shared storage alike — because that is the one question the default
+ * cannot answer: you hold the male, a guildmate holds the female.
+ *
+ * The wider pool never replaces the narrower one, only adds to it, so turning it
+ * on can open routes and never close them. A borrowed pal is not free, though, and
+ * the cost model says so: eggs decide a route and *borrowed pals* break the tie,
+ * so of two three-egg routes the one you can walk without knocking on a door is
+ * the one you are shown.
  */
 
 import type { BreedingData } from '../refdata/refdata.ts'
@@ -197,6 +211,24 @@ export interface StockSpecies {
   female: Pal[]
   /** Gender absent from the save. Reported, not assumed either way. */
   unknown: Pal[]
+  /**
+   * How many of `male` / `female` the *selected player* owns, as against a
+   * guildmate or nobody at all.
+   *
+   * Precomputed rather than derived on demand because the route tie-break asks
+   * this question once per candidate pair, and scanning the arrays there would
+   * turn a loop over 304 species into a loop over 1,100 pals.
+   */
+  ownMale: number
+  ownFemale: number
+}
+
+/** A pal in a plan that the selected player does not own. */
+export interface BorrowedPal {
+  species: string
+  pal: Pal
+  /** Absent means the save records no owner. */
+  ownerUid?: Guid
 }
 
 export interface Stock {
@@ -204,11 +236,40 @@ export interface Stock {
   bySpecies: Map<string, StockSpecies>
   /** Pals that made it into `bySpecies`. */
   counted: number
-  /** Owned pals whose gender the save does not record. */
+  /** Of `counted`, the ones the selected player owns. */
+  countedOwn: number
+  /** Of `counted`, the ones another named player owns. */
+  countedBorrowed: number
+  /** Of `counted`, the ones with no recorded owner. */
+  countedUnowned: number
+  /**
+   * Counted pals per owning player, for the rail's "who is contributing" list.
+   *
+   * Real uids only — the ownerless ones are `countedUnowned`, because `''` as a
+   * map key is the kind of shortcut that later reads as a real player.
+   */
+  byOwner: Map<Guid, number>
+  /** Whether the guild's pals were pooled in at the caller's request. */
+  includedGuild: boolean
+  /**
+   * The guild whose pals *could* be pooled — present whether or not they were,
+   * so the toggle can name it and its absence can explain itself.
+   *
+   * Only `type === 'Guild'`. The bookkeeping `Organization` groups hold no
+   * members, so offering to pool one would offer nothing.
+   */
+  guild?: { groupId: Guid; name: string; palCount: number }
+  /** Pals in the pool whose gender the save does not record. */
   skippedNoGender: number
-  /** Owned pals of a species the breeding data has never heard of. */
+  /** Pals in the pool of a species the breeding data has never heard of. */
   skippedUnknownSpecies: number
-  /** Pals anywhere in this world with no owner — they count for nobody. */
+  /**
+   * Pals anywhere in this world with no recorded owner.
+   *
+   * World-wide, not pool-wide, and reported either way. With the guild pooled in,
+   * `countedUnowned` says how many of them made it into this stock; without it,
+   * none do, and they count for nobody.
+   */
   unownedInWorld: number
   /** Held in one gender only, so they cannot pair with themselves. */
   singleGender: string[]
@@ -217,25 +278,72 @@ export interface Stock {
 }
 
 /**
- * One player's breeding stock.
+ * One player's breeding stock, or their whole guild's if asked.
  *
- * `palsByOwner` is the whole point: it is keyed on `ownerPlayerUid`, so this is
- * "the pals this player owns" and never the guild's. A pal a guildmate caught
- * is not one this player can put in a breeding pen.
+ * The default reads `palsByOwner`, keyed on `ownerPlayerUid`, so it is "the pals
+ * this player owns" and nothing wider — the honest answer to "what can *I* pair
+ * tonight". `includeGuild` unions in `palsByGuild`, which is the guild's shared
+ * reality: every member's palbox plus the base workers no player owns. Both are
+ * true and they answer different questions, which is why the flag travels in the
+ * URL and is named on screen rather than being tuned quietly.
+ *
+ * Unioned, not swapped. `palsByGuild` is keyed on the pal's own `group_id`, so a
+ * pal the save records with an owner but no group would otherwise vanish from the
+ * *wider* pool — a toggle that loses stock is a bug nobody suspects.
  */
 export function buildStock(
   index: SaveIndex,
   table: BreedingTable | undefined,
   ownerUid: Guid | undefined,
-  opts: { assumeUnknownGender?: boolean } = {},
+  opts: { assumeUnknownGender?: boolean; includeGuild?: boolean } = {},
 ): Stock {
   const assumedUnknownGender = opts.assumeUnknownGender === true
   const bySpecies = new Map<string, StockSpecies>()
+  const byOwner = new Map<Guid, number>()
   let counted = 0
+  let countedOwn = 0
+  let countedBorrowed = 0
+  let countedUnowned = 0
   let skippedNoGender = 0
   let skippedUnknownSpecies = 0
 
-  for (const pal of ownerUid ? (index.palsByOwner.get(ownerUid) ?? []) : []) {
+  const own = ownerUid ? (index.palsByOwner.get(ownerUid) ?? []) : []
+  const player = ownerUid ? index.playerByUid.get(ownerUid) : undefined
+  const group = player?.groupId
+    ? index.guildById.get(player.groupId)
+    : undefined
+  // `guildById` holds the bookkeeping Organizations too — seven of them on a real
+  // save, all empty. Only a `Guild` is a guild, which is the same filter
+  // `playerGuilds` applies for the same reason.
+  const guild =
+    group?.type === 'Guild'
+      ? {
+          groupId: group.groupId,
+          name: group.name,
+          palCount: index.palsByGuild.get(group.groupId)?.length ?? 0,
+        }
+      : undefined
+  const includedGuild = opts.includeGuild === true && guild !== undefined
+
+  // THE POLICY, in one place and deliberately so: "the guild's pals" is a choice
+  // this app makes, not a fact the save states. Every pal carrying the guild's
+  // group_id counts, the ownerless ones included — those are base workers sitting
+  // in shared base storage that any member can walk up to, which makes them more
+  // available than a pal in a guildmate's palbox, not less. Narrowing this to
+  // "pals whose owner is a member" is a change to this expression and nothing else.
+  const pooled = includedGuild
+    ? (index.palsByGuild.get(guild.groupId) ?? [])
+    : []
+
+  const seen = new Set<Guid>()
+  const source: Pal[] = []
+  for (const pal of own) {
+    seen.add(pal.instanceId)
+    source.push(pal)
+  }
+  for (const pal of pooled) if (!seen.has(pal.instanceId)) source.push(pal)
+
+  for (const pal of source) {
     // Lowercased on the way in. Level-save ids are not, reference data is —
     // the casing trap that bites every lookup in this app.
     const id = pal.characterId.toLowerCase()
@@ -246,26 +354,57 @@ export function buildStock(
 
     let entry = bySpecies.get(id)
     if (!entry) {
-      entry = { id, male: [], female: [], unknown: [] }
+      entry = {
+        id,
+        male: [],
+        female: [],
+        unknown: [],
+        ownMale: 0,
+        ownFemale: 0,
+      }
       bySpecies.set(id, entry)
     }
 
-    if (pal.gender === 'Male') entry.male.push(pal)
-    else if (pal.gender === 'Female') entry.female.push(pal)
-    else {
+    const mine = ownerUid !== undefined && pal.ownerPlayerUid === ownerUid
+    if (pal.gender === 'Male') {
+      entry.male.push(pal)
+      if (mine) entry.ownMale++
+    } else if (pal.gender === 'Female') {
+      entry.female.push(pal)
+      if (mine) entry.ownFemale++
+    } else {
       entry.unknown.push(pal)
       skippedNoGender++
     }
+
     counted++
+    if (mine) countedOwn++
+    else if (!pal.ownerPlayerUid) countedUnowned++
+    else countedBorrowed++
+    if (pal.ownerPlayerUid) {
+      byOwner.set(
+        pal.ownerPlayerUid,
+        (byOwner.get(pal.ownerPlayerUid) ?? 0) + 1,
+      )
+    }
   }
 
   // Asked for explicitly, and still reported in `skippedNoGender` either way —
   // the count is what the footer needs to stay honest about the assumption.
+  //
+  // `ownMale`/`ownFemale` move in step with whichever array takes the pal, or the
+  // borrow score would disagree with the pal the step list actually shows.
   if (assumedUnknownGender) {
     for (const entry of bySpecies.values()) {
       for (const pal of entry.unknown) {
-        if (entry.male.length <= entry.female.length) entry.male.push(pal)
-        else entry.female.push(pal)
+        const mine = ownerUid !== undefined && pal.ownerPlayerUid === ownerUid
+        if (entry.male.length <= entry.female.length) {
+          entry.male.push(pal)
+          if (mine) entry.ownMale++
+        } else {
+          entry.female.push(pal)
+          if (mine) entry.ownFemale++
+        }
       }
     }
   }
@@ -282,6 +421,12 @@ export function buildStock(
     ownerUid: ownerUid ?? '',
     bySpecies,
     counted,
+    countedOwn,
+    countedBorrowed,
+    countedUnowned,
+    byOwner,
+    includedGuild,
+    guild,
     skippedNoGender,
     skippedUnknownSpecies,
     unownedInWorld,
@@ -314,9 +459,100 @@ export interface Reach {
    * Players hatch eggs, so eggs are the cost.
    */
   cost: Map<string, number>
+  /**
+   * Species → how many of someone else's pals the `best` route borrows.
+   *
+   * Only ever a tie-break on `cost`. Eggs are the price of a route; one that
+   * borrows nothing but costs four more eggs is not the cheaper answer, it is a
+   * different one. Always all-zero when the stock is one player's own pals, which
+   * is what makes turning the guild off reproduce the old routes exactly.
+   */
+  borrow: Map<string, number>
   /** Species → the pair achieving `cost`. */
   best: Map<string, BreedPair>
   rounds: number
+}
+
+/**
+ * Which way round to advise a root pair, and what borrowing it costs.
+ *
+ * One function returning both, because the two answers have to agree. A tie-break
+ * that scored the ♀×♂ orientation while the step list rendered ♂×♀ would advertise
+ * a route that borrows nothing and then show you two pals to go and ask for.
+ *
+ * `undefined` means neither orientation is legal, which `reachFrom` has already
+ * ruled out for every pair it recorded.
+ */
+function rootOrientation(
+  sa: StockSpecies | undefined,
+  sb: StockSpecies | undefined,
+  samePair: boolean,
+): { genders: [Gender, Gender]; borrow: number } | undefined {
+  if (!sa || !sb) return undefined
+
+  if (samePair) {
+    if (sa.male.length === 0 || sa.female.length === 0) return undefined
+    return {
+      genders: ['Male', 'Female'],
+      borrow: (sa.ownMale > 0 ? 0 : 1) + (sa.ownFemale > 0 ? 0 : 1),
+    }
+  }
+
+  const mf =
+    sa.male.length > 0 && sb.female.length > 0
+      ? (sa.ownMale > 0 ? 0 : 1) + (sb.ownFemale > 0 ? 0 : 1)
+      : Infinity
+  const fm =
+    sa.female.length > 0 && sb.male.length > 0
+      ? (sa.ownFemale > 0 ? 0 : 1) + (sb.ownMale > 0 ? 0 : 1)
+      : Infinity
+
+  // `<=` keeps ♂×♀ as the tie rule, which is what this did before there was
+  // anything to break the tie with — so with the guild left out, where every
+  // borrow score is 0, the orientation chosen is unchanged.
+  if (mf <= fm) {
+    return Number.isFinite(mf)
+      ? { genders: ['Male', 'Female'], borrow: mf }
+      : undefined
+  }
+  return { genders: ['Female', 'Male'], borrow: fm }
+}
+
+/**
+ * How many pals a pair asks the player to borrow.
+ *
+ * Charged where the egg is: a root parent is paid for by the pair that consumes
+ * it, and a bred parent hands up whatever its own subtree already had to borrow.
+ * Like `cost`, this over-counts a root shared between two branches — the same
+ * over-estimate for the same reason, and here it only ever decides a tie.
+ * `BreedingPlan.borrowed` dedupes by pal instance afterwards, so the number the
+ * user is shown is the real one.
+ */
+function pairBorrow(
+  stock: Stock,
+  depth: Map<string, number>,
+  borrow: Map<string, number>,
+  pair: BreedPair,
+): number {
+  const rootA = (depth.get(pair.a) ?? 0) === 0
+  const rootB = (depth.get(pair.b) ?? 0) === 0
+  const sa = stock.bySpecies.get(pair.a)
+  const sb = stock.bySpecies.get(pair.b)
+
+  if (rootA && rootB) {
+    return rootOrientation(sa, sb, pair.a === pair.b)?.borrow ?? 2
+  }
+
+  // A mixed pair leaves the bred side's gender free — it can be hatched again for
+  // the other roll — so the root side only has to exist in *some* gender.
+  const side = (species: string, isRoot: boolean, entry?: StockSpecies) =>
+    isRoot
+      ? entry && entry.ownMale + entry.ownFemale > 0
+        ? 0
+        : 1
+      : (borrow.get(species) ?? 0)
+
+  return side(pair.a, rootA, sa) + side(pair.b, rootB, sb)
 }
 
 /**
@@ -336,6 +572,11 @@ const MAX_ROUNDS = 24
  * Cost: at most 304 available species, so 304·305/2 ≈ 46,400 unordered pairs per
  * round, each a couple of map reads. Measured at 70–85 ms over a real save with
  * 60–70 species in stock, converging in 9–11 rounds.
+ *
+ * Pooling a whole guild in makes this *faster*, not slower — 46 ms for 102 species
+ * against 85 ms for 61 — because the work is bounded by species and by rounds, and
+ * a wider starting set reaches everything in seven rounds instead of eleven. The
+ * pal count only touches `buildStock`, which is a millisecond either way.
  *
  * That is why the view memoises this on the player rather than on the target:
  * once per player selection is unnoticeable, once per click in a 304-row species
@@ -397,7 +638,7 @@ export function reachFrom(stock: Stock, table: BreedingTable): Reach {
     }
   }
 
-  return { depth, parents, ...costs(depth, parents), rounds }
+  return { depth, parents, ...costs(stock, depth, parents), rounds }
 }
 
 /**
@@ -414,43 +655,59 @@ export function reachFrom(stock: Stock, table: BreedingTable): Reach {
  * the real one.
  */
 function costs(
+  stock: Stock,
   depth: Map<string, number>,
   parents: Map<string, BreedPair[]>,
-): { cost: Map<string, number>; best: Map<string, BreedPair> } {
+): {
+  cost: Map<string, number>
+  borrow: Map<string, number>
+  best: Map<string, BreedPair>
+} {
   const cost = new Map<string, number>()
+  const borrow = new Map<string, number>()
   const best = new Map<string, BreedPair>()
 
   const byDepth = [...depth.entries()].sort((x, y) => x[1] - y[1])
   for (const [species, d] of byDepth) {
     if (d === 0) {
       cost.set(species, 0)
+      // Roots are used, not bred: the pair that consumes one pays for it. Set
+      // explicitly so `borrow` is total over `depth` and the UI can rely on it.
+      borrow.set(species, 0)
       continue
     }
     let cheapest = Infinity
+    let fewest = Infinity
     let via: BreedPair | undefined
     for (const pair of parents.get(species) ?? []) {
       const ca = cost.get(pair.a)
       const cb = cost.get(pair.b)
       if (ca === undefined || cb === undefined) continue
-      // Ties broken by id so the chosen route is stable across reloads.
       const total = 1 + ca + cb
-      if (
+      const borrowed = pairBorrow(stock, depth, borrow, pair)
+      // Eggs, then borrowed pals, then the ids — three keys and a total order, so
+      // the chosen route is identical across reloads.
+      const better =
         total < cheapest ||
         (total === cheapest &&
-          via &&
-          (pair.a + pair.b).localeCompare(via.a + via.b) < 0)
-      ) {
+          (borrowed < fewest ||
+            (borrowed === fewest &&
+              via !== undefined &&
+              (pair.a + pair.b).localeCompare(via.a + via.b) < 0)))
+      if (better) {
         cheapest = total
+        fewest = borrowed
         via = pair
       }
     }
     if (via) {
       cost.set(species, cheapest)
+      borrow.set(species, fewest)
       best.set(species, via)
     }
   }
 
-  return { cost, best }
+  return { cost, borrow, best }
 }
 
 /* -------------------------------------------------------------------------
@@ -516,8 +773,14 @@ export interface BreedingPlan {
   tree?: BreedNode
   /** Tree height. `steps.length` is the number of eggs to hatch. */
   generations: number
-  /** Every minimal-generation first pair, so the UI can offer other routes. */
+  /** Every first pair tying on eggs, cheapest-to-borrow first. */
   options: BreedPair[]
+  /**
+   * Root parents this route needs that are not the selected player's, deduped by
+   * pal instance — the true count, where `Reach.borrow` is only the ordering
+   * heuristic. Empty unless the guild was pooled into the stock.
+   */
+  borrowed: BorrowedPal[]
   /** Why each candidate route fails, when nothing works. */
   blockers: Blocker[]
 }
@@ -550,6 +813,7 @@ export function planFor(
     steps: [],
     generations: 0,
     options: [],
+    borrowed: [],
     blockers: [],
   }
 
@@ -577,6 +841,7 @@ export function planFor(
       ...empty,
       status: 'unreachable',
       reason: diagnose(table, reach, stock, id),
+      borrowed: [],
       blockers: blockersFor(table, reach, stock, id),
     }
   }
@@ -587,12 +852,22 @@ export function planFor(
   const eggs = (p: BreedPair) =>
     1 + (reach.cost.get(p.a) ?? Infinity) + (reach.cost.get(p.b) ?? Infinity)
   const cheapest = Math.min(...pairs.map(eggs))
+  // Borrowing breaks the tie but does not narrow the set: every one of these is a
+  // real route of the same length, and a pinned `r=` for one must still resolve.
+  // It only decides which is `options[0]`, and so which is shown by default.
+  const borrowedOf = (p: BreedPair) =>
+    pairBorrow(stock, reach.depth, reach.borrow, p)
   const options = pairs
     .filter((p) => eggs(p) === cheapest)
     // Deterministic, so `options[0]` is the same pair across runs and reloads.
     // Map iteration order plus an unstable sort is exactly how this feature
     // would otherwise develop a personality between two loads of one save.
-    .sort((p, q) => p.a.localeCompare(q.a) || p.b.localeCompare(q.b))
+    .sort(
+      (p, q) =>
+        borrowedOf(p) - borrowedOf(q) ||
+        p.a.localeCompare(q.a) ||
+        p.b.localeCompare(q.b),
+    )
 
   const chosen =
     (prefer &&
@@ -618,8 +893,38 @@ export function planFor(
     tree,
     generations: height(tree),
     options,
+    borrowed: borrowedIn(steps, stock.ownerUid),
     blockers: [],
   }
+}
+
+/**
+ * Every pal in the route that is not the planning player's, once each.
+ *
+ * Walks `steps` rather than `tree`, because the tree repeats a shared intermediate
+ * and its parents would then be counted twice. Deduped by instance id: a
+ * same-species root pair legitimately contributes two, since you need a male and a
+ * female, but one pal used in two steps is still one favour to ask.
+ */
+function borrowedIn(steps: BreedStep[], ownerUid: Guid): BorrowedPal[] {
+  const out = new Map<Guid, BorrowedPal>()
+  for (const step of steps) {
+    for (const side of [step.a, step.b]) {
+      if (side.kind !== 'owned' || !side.use) continue
+      if (ownerUid && side.use.ownerPlayerUid === ownerUid) continue
+      out.set(side.use.instanceId, {
+        species: side.species,
+        pal: side.use,
+        ownerUid: side.use.ownerPlayerUid,
+      })
+    }
+  }
+  return [...out.values()].sort(
+    (x, y) =>
+      (x.ownerUid ?? '').localeCompare(y.ownerUid ?? '') ||
+      x.species.localeCompare(y.species) ||
+      x.pal.instanceId.localeCompare(y.pal.instanceId),
+  )
 }
 
 /** Generations is the tree's height — how many rounds of hatching deep it goes. */
@@ -671,15 +976,22 @@ function expand(
 ): BreedNode {
   const entry = stock.bySpecies.get(species)
   const depth = reach.depth.get(species) ?? 0
-  const blank: StockSpecies = { id: species, male: [], female: [], unknown: [] }
+  const blank: StockSpecies = {
+    id: species,
+    male: [],
+    female: [],
+    unknown: [],
+    ownMale: 0,
+    ownFemale: 0,
+  }
 
   // `via` is only set by the top-level call, which is what lets an owned target
   // still be expanded into "and here is how to breed another".
-  if (!via && depth === 0 && entry) return ownedNode(entry, want)
-  if (budget > MAX_ROUNDS) return ownedNode(entry ?? blank, want)
+  if (!via && depth === 0 && entry) return ownedNode(stock, entry, want)
+  if (budget > MAX_ROUNDS) return ownedNode(stock, entry ?? blank, want)
 
   const pair = via ?? reach.best.get(species)
-  if (!pair) return ownedNode(entry ?? blank, want)
+  if (!pair) return ownedNode(stock, entry ?? blank, want)
 
   // Genders are settled here, for the pair as a whole, before either side is
   // built. Only a root×root pair is constrained — a bred parent can be hatched
@@ -724,24 +1036,43 @@ function assignGenders(
   const rootB = (reach.depth.get(pair.b) ?? 0) === 0
   if (!rootA || !rootB) return [undefined, undefined]
 
-  const sa = stock.bySpecies.get(pair.a)
-  const sb = stock.bySpecies.get(pair.b)
-  if (pair.a === pair.b) return ['Male', 'Female']
-
-  // `reachFrom` already proved one of these two orientations works; this picks
-  // whichever it was.
-  if ((sa?.male.length ?? 0) > 0 && (sb?.female.length ?? 0) > 0) {
-    return ['Male', 'Female']
-  }
-  return ['Female', 'Male']
+  // `reachFrom` already proved one of the two orientations works; this picks
+  // whichever it was, and when both work, the one that borrows fewer of someone
+  // else's pals. With the guild left out of the stock both always tie and ♂×♀
+  // wins, which is what this always did.
+  const chosen = rootOrientation(
+    stock.bySpecies.get(pair.a),
+    stock.bySpecies.get(pair.b),
+    pair.a === pair.b,
+  )
+  return chosen ? chosen.genders : ['Male', 'Female']
 }
 
-/** The best instance of the gender this side needs — high IVs pass down. */
-function ownedNode(entry: StockSpecies, want?: Gender): BreedNode {
+/**
+ * The best instance of the gender this side needs.
+ *
+ * High IVs pass down, so IVs decide — but only among pals the player actually
+ * owns. A guildmate's better Chikipi is not better if the point of choosing this
+ * pair was that nothing has to be borrowed, and a plan whose borrow count and
+ * whose step list disagreed would be worse than either number alone. The instance
+ * id is the last key, so two identical pals cannot swap places between two loads.
+ */
+function ownedNode(
+  stock: Stock,
+  entry: StockSpecies,
+  want?: Gender,
+): BreedNode {
+  const mine = (p: Pal) =>
+    stock.ownerUid && p.ownerPlayerUid === stock.ownerUid ? 0 : 1
   const bestOf = (pals: Pal[]) =>
     pals.length === 0
       ? undefined
-      : [...pals].sort((x, y) => ivTotal(y) - ivTotal(x))[0]
+      : [...pals].sort(
+          (x, y) =>
+            mine(x) - mine(y) ||
+            ivTotal(y) - ivTotal(x) ||
+            x.instanceId.localeCompare(y.instanceId),
+        )[0]
 
   const pool =
     want === 'Male' ? entry.male : want === 'Female' ? entry.female : []

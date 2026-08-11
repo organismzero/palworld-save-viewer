@@ -38,8 +38,22 @@ describe('breedCodec', () => {
       query: 'anu',
       route: { a: 'penguin', b: 'kelpie' },
       assumeUnknownGender: true,
+      includeGuild: true,
     }
     expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('reads the guild flag as 1', () => {
+    // `gp`, not a bare `g` — that would read like a guild id.
+    expect(
+      codec.decode(new URLSearchParams('gp=1'), BREED_DEFAULTS).includeGuild,
+    ).toBe(true)
+    expect(
+      codec.decode(new URLSearchParams('gp=0'), BREED_DEFAULTS).includeGuild,
+    ).toBe(false)
+    expect(
+      codec.decode(new URLSearchParams(''), BREED_DEFAULTS).includeGuild,
+    ).toBe(false)
   })
 
   it('emits nothing for an untouched view', () => {

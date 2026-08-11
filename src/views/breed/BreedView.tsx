@@ -3,9 +3,12 @@
  *
  * ## The question this answers, exactly
  *
- * "What do *I* pair to get that?" — where "I" is one player, and their palbox is
- * the only stock on the table. A route through a guildmate's pal is not one this
- * player can walk, so `buildStock` reads `palsByOwner` and nothing wider.
+ * "What do *I* pair to get that?" — where "I" is one player and their palbox is
+ * the only stock on the table, because a route through a guildmate's pal is not
+ * one they can walk alone. The guild toggle asks the other question, "what could
+ * *we* pair?", and it is off by default: the wider answer is only useful if you
+ * can see which pals are not yours, so every borrowed parent is named in the step
+ * list and counted in the footnote.
  *
  * ## Why the plan is the middle pane
  *
@@ -45,6 +48,7 @@ import {
 } from '../../components/primitives.tsx'
 import { PlanSteps } from './PlanSteps.tsx'
 import { speciesText, type SpeciesText } from './speciesText.ts'
+import { ownerText, type OwnerText } from './ownerText.ts'
 import { BREED_DEFAULTS, breedCodec, type BreedParams } from './params.ts'
 
 export function BreedView({ index }: { index: SaveIndex }) {
@@ -88,9 +92,11 @@ export function BreedView({ index }: { index: SaveIndex }) {
     () =>
       buildStock(index, table, ownerUid, {
         assumeUnknownGender: params.assumeUnknownGender,
+        includeGuild: params.includeGuild,
       }),
-    [index, table, ownerUid, params.assumeUnknownGender],
+    [index, table, ownerUid, params.assumeUnknownGender, params.includeGuild],
   )
+  const owner = useMemo(() => ownerText(index, ownerUid), [index, ownerUid])
   // The expensive one, and the reason for the memo split.
   const reach = useMemo(
     () => (table ? reachFrom(stock, table) : undefined),
@@ -126,16 +132,26 @@ export function BreedView({ index }: { index: SaveIndex }) {
             ))}
           </select>
           <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
-            Only this player’s pals are used. Guildmates’ pals are not counted.
+            {stock.includedGuild
+              ? `All of ${guildLabel(stock)}’s pals are used, base workers included — not just this player’s.`
+              : stock.guild
+                ? 'Only this player’s pals are used. Guildmates’ pals are not counted.'
+                : 'Only this player’s pals are used. They are in no guild, so there is nothing else to pool.'}
           </p>
         </div>
 
         <StockPanel
           stock={stock}
+          owner={owner}
           reachable={reach?.depth.size}
           total={table?.rank.size}
           onToggleUnknown={() =>
             patch({ assumeUnknownGender: !params.assumeUnknownGender })
+          }
+          onToggleGuild={() =>
+            // Clears a pinned route, as the player picker does: a different stock
+            // can make the pinned pair no longer one of the shortest.
+            patch({ includeGuild: !params.includeGuild, route: undefined })
           }
         />
       </aside>
@@ -165,13 +181,20 @@ export function BreedView({ index }: { index: SaveIndex }) {
         {noBreedingData ? (
           <Missing what="Breeding data could not be loaded, so no path can be worked out. Everything else in the app still works." />
         ) : !params.target ? (
-          <Missing what="Pick a species on the left to see how to breed it from this player’s pals." />
+          <Missing
+            what={
+              stock.includedGuild
+                ? `Pick a species on the left to see how to breed it from all of ${guildLabel(stock)}’s pals.`
+                : 'Pick a species on the left to see how to breed it from this player’s pals.'
+            }
+          />
         ) : !plan ? null : (
           <PlanPane
             plan={plan}
             player={player}
             stock={stock}
             text={text}
+            owner={owner}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
           />
@@ -190,6 +213,7 @@ function PlanPane({
   player,
   stock,
   text,
+  owner,
   routeIndex,
   onRoute,
 }: {
@@ -197,9 +221,17 @@ function PlanPane({
   player: Player | undefined
   stock: Stock
   text: SpeciesText
+  owner: OwnerText
   routeIndex: number
   onRoute: (i: number) => void
 }) {
+  // Split, because with the guild pooled in `ownedTarget` is guild-wide, and
+  // "already have 3" would otherwise mean a guildmate has three of them.
+  const mine = plan.ownedTarget.filter(
+    (p) => p.ownerPlayerUid === stock.ownerUid,
+  ).length
+  const elsewhere = plan.ownedTarget.length - mine
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="flex items-start gap-4">
@@ -223,16 +255,27 @@ function PlanPane({
                 <Pill>
                   {plan.steps.length} {plan.steps.length === 1 ? 'egg' : 'eggs'}
                 </Pill>
+                {plan.borrowed.length > 0 && (
+                  <Pill
+                    tone="warn"
+                    title="Pals in this route that belong to someone else, or to nobody."
+                  >
+                    {plan.borrowed.length} borrowed
+                  </Pill>
+                )}
               </>
             )}
-            {plan.ownedTarget.length > 0 && (
+            {mine > 0 && <Pill tone="good">already have {count(mine)}</Pill>}
+            {elsewhere > 0 && (
               <Pill tone="good">
-                already have {count(plan.ownedTarget.length)}
+                {count(elsewhere)} more in {guildLabel(stock)}
               </Pill>
             )}
             {player && (
               <span className="label normal-case">
-                from {player.name}’s pals
+                {stock.includedGuild
+                  ? `from all of ${guildLabel(stock)}’s pals`
+                  : `from ${player.name}’s pals`}
               </span>
             )}
           </div>
@@ -266,7 +309,7 @@ function PlanPane({
               </div>
             </section>
           )}
-          <PlanSteps plan={plan} text={text} />
+          <PlanSteps plan={plan} text={text} owner={owner} />
         </>
       ) : (
         <NoRoute plan={plan} stock={stock} text={text} />
@@ -314,15 +357,16 @@ function NoRoute({
       {plan.reason === 'no-stock' && (
         <p className="text-[var(--color-muted)]">
           {stock.counted === 0
-            ? 'This player owns no pals that the breeding data recognises, so there is nothing to start from.'
-            : 'None of this player’s pals can form a legal pair — every species they hold is one gender only.'}
+            ? stock.includedGuild
+              ? `No pal in ${guildLabel(stock)} is one the breeding data recognises, so there is nothing to start from.`
+              : 'This player owns no pals that the breeding data recognises, so there is nothing to start from.'
+            : stock.includedGuild
+              ? `Nothing in ${guildLabel(stock)} can form a legal pair — every species the guild holds is one gender only.`
+              : 'None of this player’s pals can form a legal pair — every species they hold is one gender only.'}
           {stock.singleGender.length > 0 && (
-            <>
-              {' '}
-              {count(stock.singleGender.length)} of their species are
-              single-gender.
-            </>
+            <> {count(stock.singleGender.length)} species are single-gender.</>
           )}
+          <PoolHint stock={stock} />
         </p>
       )}
 
@@ -360,6 +404,9 @@ function NoRoute({
               </li>
             ))}
           </ul>
+          <p className="text-[var(--color-muted)]">
+            <PoolHint stock={stock} />
+          </p>
         </>
       )}
 
@@ -367,9 +414,27 @@ function NoRoute({
         <p className="text-[var(--color-muted)]">
           Nothing this player can reach pairs into {text.name(plan.target)}.
           Catching a species further along the ladder is the way in.
+          <PoolHint stock={stock} />
         </p>
       )}
     </Panel>
+  )
+}
+
+/**
+ * The "have you tried the guild" nudge, in the three places it earns its keep.
+ *
+ * Silent when the guild is already pooled, or when there is no guild to pool —
+ * suggesting a control that is already on is worse than saying nothing.
+ */
+function PoolHint({ stock }: { stock: Stock }) {
+  if (stock.includedGuild || !stock.guild) return null
+  return (
+    <>
+      {' '}
+      Their guild’s pals are not counted. Pooling them in, on the left, may open
+      a pairing this player cannot make alone.
+    </>
   )
 }
 
@@ -379,18 +444,25 @@ function NoRoute({
 
 function StockPanel({
   stock,
+  owner,
   reachable,
   total,
   onToggleUnknown,
+  onToggleGuild,
 }: {
   stock: Stock
+  owner: OwnerText
   reachable: number | undefined
   total: number | undefined
   onToggleUnknown: () => void
+  onToggleGuild: () => void
 }) {
   return (
     <div className="space-y-3">
-      <SectionHeading title="their stock" />
+      <SectionHeading
+        title={stock.includedGuild ? 'the guild’s stock' : 'their stock'}
+      />{' '}
+      {/* prettier-ignore */}
       <StatTile
         label="species reachable"
         value={
@@ -403,6 +475,15 @@ function StockPanel({
       />
       <Panel className="divide-y divide-[var(--color-line)]/40 text-xs">
         <Row label="pals counted" value={count(stock.counted)} />
+        {stock.includedGuild && (
+          <>
+            <Row label="theirs" value={count(stock.countedOwn)} />
+            <Row label="guildmates’" value={count(stock.countedBorrowed)} />
+            {stock.countedUnowned > 0 && (
+              <Row label="unowned" value={count(stock.countedUnowned)} />
+            )}
+          </>
+        )}
         <Row label="species held" value={count(stock.bySpecies.size)} />
         <Row label="single gender" value={count(stock.singleGender.length)} />
         {stock.skippedUnknownSpecies > 0 && (
@@ -412,7 +493,39 @@ function StockPanel({
           />
         )}
       </Panel>
-
+      {/* `checked` is read off the stock, not off the params, so a flag the
+          domain refused to honour — no guild, or a bookkeeping Organization —
+          cannot render as ticked. */}
+      {stock.guild && (
+        <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
+          <input
+            type="checkbox"
+            checked={stock.includedGuild}
+            onChange={onToggleGuild}
+            className="mt-0.5 accent-[var(--color-signal)]"
+          />
+          <span>
+            Pool all {count(stock.guild.palCount)} of {guildLabel(stock)}’s
+            pals, base workers included. Off by default — a pal a guildmate
+            holds is one you have to go and ask for.
+          </span>
+        </label>
+      )}
+      {stock.includedGuild && stock.byOwner.size > 1 && (
+        <div>
+          <div className="label mb-1.5">who is contributing</div>
+          <Panel className="divide-y divide-[var(--color-line)]/40 text-xs">
+            {[...stock.byOwner]
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+              .map(([uid, n]) => (
+                <Row key={uid} label={owner.name(uid)} value={count(n)} />
+              ))}
+            {stock.countedUnowned > 0 && (
+              <Row label="no owner" value={count(stock.countedUnowned)} />
+            )}
+          </Panel>
+        </div>
+      )}
       {stock.skippedNoGender > 0 && (
         <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
           <input
@@ -533,34 +646,57 @@ function SpeciesList({
 /**
  * The footnote is not decoration.
  *
- * Three of these four sentences describe a way the plan could be optimistic,
- * and a player who does not know them would read a two-generation route as two
- * eggs rather than as "at least two, probably more".
+ * Every sentence here describes a way the plan could be optimistic, or whose pals
+ * it is being optimistic about. A player who did not know them would read a
+ * two-generation route as two eggs rather than as "at least two, probably more",
+ * or a pooled route as one they can walk tonight.
  */
 function Footnote({ stock }: { stock: Stock }) {
   return (
     <section className="border-t border-[var(--color-line)]/40 pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
-        Counted {count(stock.counted)} pals across {count(stock.bySpecies.size)}{' '}
-        species that this player owns. Guildmates’ pals are never counted.
+        {stock.includedGuild ? (
+          <>
+            Counted {count(stock.counted)} pals across{' '}
+            {count(stock.bySpecies.size)} species from all of{' '}
+            {guildLabel(stock)} — {count(stock.countedOwn)} this player’s,{' '}
+            {count(stock.countedBorrowed)} other members’, and{' '}
+            {count(stock.countedUnowned)} owned by nobody. A route through
+            someone else’s pal needs them to put it in the pen.
+          </>
+        ) : (
+          <>
+            Counted {count(stock.counted)} pals across{' '}
+            {count(stock.bySpecies.size)} species that this player owns.
+            Guildmates’ pals are not counted.
+          </>
+        )}
         {stock.skippedNoGender > 0 && (
           <>
             {' '}
-            {count(stock.skippedNoGender)} of their pals have no gender recorded
-            and{' '}
+            {count(stock.skippedNoGender)} of them have no gender recorded and{' '}
             {stock.assumedUnknownGender
               ? 'were counted anyway, at your request'
               : 'were left out'}
             .
           </>
         )}
-        {stock.unownedInWorld > 0 && (
-          <>
-            {' '}
-            {count(stock.unownedInWorld)} pals in this world have no recorded
-            owner, so they count for nobody.
-          </>
-        )}
+        {stock.includedGuild
+          ? stock.countedUnowned > 0 && (
+              <>
+                {' '}
+                The {count(stock.countedUnowned)} with no recorded owner are
+                base workers in shared storage, mostly — nobody has to hand
+                those over.
+              </>
+            )
+          : stock.unownedInWorld > 0 && (
+              <>
+                {' '}
+                {count(stock.unownedInWorld)} pals in this world have no
+                recorded owner, so they count for nobody.
+              </>
+            )}
       </p>
       <p className="mt-2">
         Offspring gender is a coin flip, so anything bred along the way is
@@ -586,6 +722,16 @@ function Missing({ what }: { what: string }) {
 /* -------------------------------------------------------------------------
    Helpers
    ------------------------------------------------------------------------- */
+
+/**
+ * The guild's name, or a stand-in.
+ *
+ * Guild names can be empty in a real save, which the Guild view also falls back
+ * for — an unnamed guild is not a missing guild.
+ */
+function guildLabel(stock: Stock): string {
+  return stock.guild?.name || 'this guild'
+}
 
 /** The player with the most pals — the one most likely to be asking. */
 function busiestPlayer(index: SaveIndex): Player | undefined {

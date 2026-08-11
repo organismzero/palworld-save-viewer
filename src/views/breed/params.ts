@@ -2,8 +2,9 @@
  * What of the Breed view goes in a link.
  *
  * The whole point of this view is an answer worth sending someone, so all of it
- * travels: whose pals, which target, which of the tied routes, and whether the
- * gender assumption was loosened.
+ * travels: whose pals, whether the guild's pals are pooled in with them, which
+ * target, which of the tied routes, and whether the gender assumption was
+ * loosened.
  *
  * ## Why the target is not validated here
  *
@@ -36,6 +37,8 @@ export interface BreedParams {
   route?: BreedPair
   /** Count pals whose gender the save does not record. */
   assumeUnknownGender: boolean
+  /** Pool the whole guild's pals, base workers included. */
+  includeGuild: boolean
 }
 
 export const BREED_DEFAULTS: BreedParams = {
@@ -44,6 +47,7 @@ export const BREED_DEFAULTS: BreedParams = {
   query: '',
   route: undefined,
   assumeUnknownGender: false,
+  includeGuild: false,
 }
 
 export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
@@ -57,6 +61,9 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       if (v.query) out.q = v.query
       if (v.route) out.r = `${v.route.a},${v.route.b}`
       if (v.assumeUnknownGender) out.ug = '1'
+      // `gp`, not a bare `g` — that reads like a guild id, and the Guild view
+      // already spends one. Cheap insurance against a future `g=<shortId>`.
+      if (v.includeGuild) out.gp = '1'
       return out
     },
 
@@ -73,6 +80,7 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         query: str(raw, 'q', d.query),
         route: parseRoute(raw.get('r')),
         assumeUnknownGender: bool(raw, 'ug', d.assumeUnknownGender),
+        includeGuild: bool(raw, 'gp', d.includeGuild),
       }
     },
   }

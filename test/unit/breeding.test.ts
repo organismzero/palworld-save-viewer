@@ -48,11 +48,17 @@ function pal(characterId: string, overrides: Partial<Pal> = {}): Pal {
     workSuitabilityBonus: {},
     oldOwnerUids: [],
     ownerPlayerUid: OWNER,
+    // Inert unless a test pools the guild in, which is what makes "toggle off is
+    // unchanged" testable against the same fixtures.
+    groupId: GUILD,
     ...overrides,
   }
 }
 
 const OWNER = 'aaaaaaaa'.padEnd(32, '0')
+/** A guildmate, for the pooled-stock cases. */
+const MATE = 'bbbbbbbb'.padEnd(32, '0')
+const GUILD = 'cccccccc'.padEnd(32, '0')
 
 function data(
   pals: Record<string, [rank: number, ignore?: boolean]>,
@@ -65,21 +71,60 @@ function data(
   return { pals: out, uniqueCombos }
 }
 
-/** A `SaveIndex` with only the two fields the breeding code reads. */
-function index(pals: Pal[]): SaveIndex {
+/**
+ * A `SaveIndex` with only the fields the breeding code reads: the two pal
+ * groupings, the player table and the guild table. Two members, one guild.
+ *
+ * Both groupings mirror `groupBy`'s behaviour of dropping pals with no key, which
+ * is what makes the "a pal outside the guild stays out of the pool" case real.
+ */
+function index(
+  pals: Pal[],
+  opts: { guildless?: boolean; type?: 'Guild' | 'Organization' } = {},
+): SaveIndex {
   const byOwner = new Map<string, Pal[]>()
-  for (const p of pals) {
-    if (!p.ownerPlayerUid) continue
-    const at = byOwner.get(p.ownerPlayerUid)
+  const byGuild = new Map<string, Pal[]>()
+  const push = (m: Map<string, Pal[]>, k: string | undefined, p: Pal) => {
+    if (!k) return
+    const at = m.get(k)
     if (at) at.push(p)
-    else byOwner.set(p.ownerPlayerUid, [p])
+    else m.set(k, [p])
   }
-  return { pals, palsByOwner: byOwner } as unknown as SaveIndex
+  for (const p of pals) {
+    push(byOwner, p.ownerPlayerUid, p)
+    push(byGuild, p.groupId, p)
+  }
+
+  const groupId = opts.guildless ? undefined : GUILD
+  const players = [
+    { playerUid: OWNER, name: 'Own', groupId },
+    { playerUid: MATE, name: 'Mate', groupId },
+  ]
+  return {
+    pals,
+    palsByOwner: byOwner,
+    palsByGuild: byGuild,
+    playerByUid: new Map(players.map((p) => [p.playerUid, p])),
+    guildById: new Map([
+      [
+        GUILD,
+        { groupId: GUILD, type: opts.type ?? 'Guild', name: 'The Guild' },
+      ],
+    ]),
+  } as unknown as SaveIndex
 }
 
-function stockOf(table: BreedingTable | undefined, pals: Pal[], opts = {}) {
-  return buildStock(index(pals), table, OWNER, opts)
+function stockOf(
+  table: BreedingTable | undefined,
+  pals: Pal[],
+  opts = {},
+  idxOpts = {},
+) {
+  return buildStock(index(pals, idxOpts), table, OWNER, opts)
 }
+
+/** Shorthand for the pooled-stock option. */
+const POOL = { includeGuild: true }
 
 function plan(
   table: BreedingTable,
@@ -304,6 +349,145 @@ describe('buildStock', () => {
     expect(s.counted).toBe(0)
     expect(s.bySpecies.size).toBe(0)
   })
+
+  it('leaves the guild out unless asked', () => {
+    const s = stockOf(table, [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+    ])
+    expect(s.counted).toBe(1)
+    expect(s.includedGuild).toBe(false)
+    // The guild is still *named*, so the toggle can offer it.
+    expect(s.guild?.name).toBe('The Guild')
+    expect(s.guild?.palCount).toBe(2)
+  })
+
+  it('pools the guild when asked', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    expect(s.counted).toBe(2)
+    expect(s.includedGuild).toBe(true)
+    expect(s.countedOwn).toBe(1)
+    expect(s.countedBorrowed).toBe(1)
+    expect(s.byOwner.get(MATE)).toBe(1)
+  })
+
+  it('counts base workers only under the toggle', () => {
+    const pals = [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female', ownerPlayerUid: undefined }),
+    ]
+    const alone = stockOf(table, pals)
+    expect(alone.counted).toBe(1)
+    expect(alone.countedUnowned).toBe(0)
+    expect(alone.unownedInWorld).toBe(1)
+
+    const pooled = stockOf(table, pals, POOL)
+    expect(pooled.counted).toBe(2)
+    expect(pooled.countedUnowned).toBe(1)
+    // Ownerless pals must not invent a map key.
+    expect(pooled.byOwner.has('')).toBe(false)
+  })
+
+  it('leaves a pal outside the guild out of the pool', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', {
+          gender: 'Female',
+          ownerPlayerUid: MATE,
+          groupId: undefined,
+        }),
+      ],
+      POOL,
+    )
+    expect(s.counted).toBe(1)
+  })
+
+  it('never loses the player’s own pals to the wider pool', () => {
+    // `palsByGuild` is keyed on the pal's own group_id, so an own pal with no
+    // group would vanish if pooling replaced rather than unioned. A toggle that
+    // loses stock is a bug nobody suspects.
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male', groupId: undefined }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    expect(s.counted).toBe(2)
+    expect(s.bySpecies.has('aa')).toBe(true)
+  })
+
+  it('has nothing to pool for a player in no guild', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+      { guildless: true },
+    )
+    expect(s.guild).toBeUndefined()
+    expect(s.includedGuild).toBe(false)
+    expect(s.counted).toBe(1)
+  })
+
+  it('treats an Organization as no guild', () => {
+    // `guildById` holds seven empty bookkeeping groups on a real save; pooling
+    // one would offer nothing.
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+      { type: 'Organization' },
+    )
+    expect(s.guild).toBeUndefined()
+    expect(s.includedGuild).toBe(false)
+    expect(s.counted).toBe(1)
+  })
+
+  it('splits the pool three ways, and they add up', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+        pal('mid', { gender: 'Male', ownerPlayerUid: undefined }),
+      ],
+      POOL,
+    )
+    expect(s.countedOwn + s.countedBorrowed + s.countedUnowned).toBe(s.counted)
+    expect([s.countedOwn, s.countedBorrowed, s.countedUnowned]).toEqual([
+      1, 1, 1,
+    ])
+  })
+
+  it('counts own instances per gender, for the tie-break', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('aa', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const aa = s.bySpecies.get('aa')!
+    expect([aa.male.length, aa.female.length]).toEqual([1, 1])
+    expect([aa.ownMale, aa.ownFemale]).toEqual([1, 0])
+  })
 })
 
 /* -------------------------------------------------------------------------
@@ -506,6 +690,172 @@ describe('planFor', () => {
     expect(stale.status).toBe('plan')
   })
 
+  it('unlocks a pair a guildmate completes', () => {
+    // The whole point of the toggle: you hold the male, they hold the female.
+    const pals = [
+      pal('aa', { gender: 'Male' }),
+      pal('aa', { gender: 'Female', ownerPlayerUid: MATE }),
+    ]
+    const alone = plan(table, stockOf(table, pals), 'aa')
+    expect(alone.status).toBe('unreachable')
+    expect(alone.ownedTarget).toHaveLength(1)
+
+    const pooled = plan(table, stockOf(table, pals, POOL), 'aa')
+    expect(pooled.status).toBe('plan')
+    expect(pooled.steps[0]!.selfPair).toBe(true)
+    expect(pooled.borrowed).toHaveLength(1)
+    expect(pooled.borrowed[0]!.ownerUid).toBe(MATE)
+  })
+
+  it('prefers the route through the player’s own pals when the eggs tie', () => {
+    const t = buildBreedingTable(
+      data({ aa: [100], bb: [200], cc: [140], dd: [160], mid: [150] }),
+    )
+    const s = stockOf(
+      t,
+      [
+        // Theirs.
+        pal('cc', { gender: 'Male' }),
+        pal('dd', { gender: 'Female' }),
+        // A guildmate's — reachable, and alphabetically first, so the id
+        // tie-break alone would have picked this pair.
+        pal('aa', { gender: 'Male', ownerPlayerUid: MATE }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const p = plan(t, s, 'mid')
+    expect(p.status).toBe('plan')
+    // The set is not narrowed — both are real one-egg routes.
+    expect(p.options.length).toBeGreaterThan(1)
+    expect([p.options[0]!.a, p.options[0]!.b].sort()).toEqual(['cc', 'dd'])
+    expect(p.borrowed).toHaveLength(0)
+  })
+
+  it('breaks a sub-route tie on borrowing too', () => {
+    // Exercises `costs()` rather than `planFor`'s sort: `mid` is an intermediate
+    // here, so its parent pair is chosen inside the closure.
+    const t = buildBreedingTable(
+      data({ aa: [100], bb: [200], cc: [140], dd: [160], mid: [150], top: [175] }), // prettier-ignore
+    )
+    const s = stockOf(
+      t,
+      [
+        pal('cc', { gender: 'Male' }),
+        pal('dd', { gender: 'Female' }),
+        pal('aa', { gender: 'Male', ownerPlayerUid: MATE }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const reach = reachFrom(s, t)
+    expect(reach.borrow.get('mid')).toBe(0)
+    expect([reach.best.get('mid')!.a, reach.best.get('mid')!.b].sort()).toEqual(
+      ['cc', 'dd'],
+    )
+  })
+
+  it('orients a root pair towards the pals the player owns', () => {
+    // Both orientations are legal here. Scoring one and rendering the other is
+    // the failure this guards: the borrow count would contradict the step list.
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Female' }),
+        pal('bb', { gender: 'Male' }),
+        pal('aa', { gender: 'Male', ownerPlayerUid: MATE }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const step = plan(table, s, 'mid').steps[0]!
+    for (const side of [step.a, step.b]) {
+      if (side.kind !== 'owned') continue
+      expect(side.use?.ownerPlayerUid).toBe(OWNER)
+      expect(side.use?.gender).toBe(side.gender)
+    }
+    expect(plan(table, s, 'mid').borrowed).toHaveLength(0)
+  })
+
+  it('prefers a pal of the player’s own over a better one they must borrow', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male', ivHp: 10, ivAttack: 10, ivDefense: 10 }),
+        pal('aa', {
+          gender: 'Male',
+          ownerPlayerUid: MATE,
+          ivHp: 90,
+          ivAttack: 90,
+          ivDefense: 90,
+        }),
+        pal('aa', { gender: 'Female' }),
+      ],
+      POOL,
+    )
+    const step = plan(table, s, 'aa').steps[0]!
+    const male = [step.a, step.b].find(
+      (x) => x.kind === 'owned' && x.gender === 'Male',
+    )
+    expect(male?.kind === 'owned' && male.use?.ownerPlayerUid).toBe(OWNER)
+  })
+
+  it('falls back to a borrowed pal when they own none of that gender', () => {
+    const s = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('aa', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const step = plan(table, s, 'aa').steps[0]!
+    const female = [step.a, step.b].find(
+      (x) => x.kind === 'owned' && x.gender === 'Female',
+    )
+    expect(female?.kind === 'owned' && female.use?.ownerPlayerUid).toBe(MATE)
+  })
+
+  it('names every borrowed pal once, even when a step is shared', () => {
+    const t = buildBreedingTable(
+      data({ aa: [100], bb: [300], mid: [200], end: [200] }, [
+        { a: 'mid', b: 'mid', child: 'end' },
+      ]),
+    )
+    const s = stockOf(
+      t,
+      [
+        pal('aa', { gender: 'Male', ownerPlayerUid: MATE }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const p = plan(t, s, 'end')
+    expect(p.status).toBe('plan')
+    // `mid` is consumed twice but its two roots are two pals, not four.
+    expect(p.borrowed).toHaveLength(2)
+    const ids = p.borrowed.map((b) => b.pal.instanceId)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('borrows nothing, and reorders nothing, with the guild left out', () => {
+    // The safety property behind this whole change.
+    const pals = [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female' }),
+    ]
+    const implicit = plan(table, stockOf(table, pals), 'top')
+    const explicit = plan(
+      table,
+      stockOf(table, pals, { includeGuild: false }),
+      'top',
+    )
+    expect(implicit).toEqual(explicit)
+    expect(implicit.borrowed).toHaveLength(0)
+    const reach = reachFrom(stockOf(table, pals), table)
+    expect([...reach.borrow.values()].every((v) => v === 0)).toBe(true)
+  })
+
   it('is deterministic across runs', () => {
     // Map iteration order plus an unstable sort is exactly how this would
     // otherwise develop a personality between two loads of one save.
@@ -519,6 +869,23 @@ describe('planFor', () => {
       b.steps.map((x) => [x.n, x.species]),
     )
     expect(a.options).toEqual(b.options)
+
+    // And with a pooled stock, where there is a borrow count to be unstable.
+    const pooled = stockOf(
+      table,
+      [
+        pal('aa', { gender: 'Male' }),
+        pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      ],
+      POOL,
+    )
+    const c = plan(table, pooled, 'top')
+    const d = plan(table, pooled, 'top')
+    expect(c.steps.map((x) => [x.n, x.species])).toEqual(
+      d.steps.map((x) => [x.n, x.species]),
+    )
+    expect(c.options).toEqual(d.options)
+    expect(c.borrowed).toEqual(d.borrowed)
   })
 })
 

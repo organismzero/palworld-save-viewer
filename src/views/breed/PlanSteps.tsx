@@ -7,6 +7,10 @@
  * The tree underneath shows the shape, where that same intermediate appears
  * twice, because a diagram that quietly collapsed it would misdescribe the
  * dependency.
+ *
+ * A parent the selected player does not own is badged with whose it is, because
+ * "borrow a Chikipi" and "borrow Dave's Chikipi" are different amounts of work —
+ * one is a shopping list, the other is a conversation.
  */
 
 import type {
@@ -18,13 +22,16 @@ import { palName } from '../../domain/palText.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { IVBar, Panel, Pill } from '../../components/primitives.tsx'
 import type { SpeciesText } from './speciesText.ts'
+import { borrowSummary, type OwnerText } from './ownerText.ts'
 
 export function PlanSteps({
   plan,
   text,
+  owner,
 }: {
   plan: BreedingPlan
   text: SpeciesText
+  owner: OwnerText
 }) {
   return (
     <div className="space-y-6">
@@ -32,10 +39,11 @@ export function PlanSteps({
         <div className="label mb-2">
           what to do — {plan.steps.length}{' '}
           {plan.steps.length === 1 ? 'egg' : 'eggs'}
+          {plan.borrowed.length > 0 && <> · {borrowSummary(plan.borrowed)}</>}
         </div>
         <div className="space-y-2">
           {plan.steps.map((step) => (
-            <StepRow key={step.n} step={step} text={text} />
+            <StepRow key={step.n} step={step} text={text} owner={owner} />
           ))}
         </div>
       </section>
@@ -52,16 +60,24 @@ export function PlanSteps({
   )
 }
 
-function StepRow({ step, text }: { step: BreedStep; text: SpeciesText }) {
+function StepRow({
+  step,
+  text,
+  owner,
+}: {
+  step: BreedStep
+  text: SpeciesText
+  owner: OwnerText
+}) {
   return (
     <Panel className="px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="num shrink-0 text-xs text-[var(--color-muted)]">
           {step.n}
         </span>
-        <ParentChip node={step.a} text={text} />
+        <ParentChip node={step.a} text={text} owner={owner} />
         <span className="shrink-0 text-[var(--color-muted)]">×</span>
-        <ParentChip node={step.b} text={text} />
+        <ParentChip node={step.b} text={text} owner={owner} />
         <span className="shrink-0 text-[var(--color-muted)]">→</span>
         <span className="flex shrink-0 items-center gap-2">
           <GameIcon
@@ -93,7 +109,15 @@ function StepRow({ step, text }: { step: BreedStep; text: SpeciesText }) {
  * A derived parent points back at the step that makes it rather than repeating
  * its whole subtree.
  */
-function ParentChip({ node, text }: { node: BreedNode; text: SpeciesText }) {
+function ParentChip({
+  node,
+  text,
+  owner,
+}: {
+  node: BreedNode
+  text: SpeciesText
+  owner: OwnerText
+}) {
   if (node.kind === 'bred') {
     return (
       <span className="flex min-w-0 items-center gap-1.5">
@@ -110,6 +134,7 @@ function ParentChip({ node, text }: { node: BreedNode; text: SpeciesText }) {
   }
 
   const pick = node.use
+  const who = pick ? owner.badge(pick) : undefined
 
   return (
     <span className="flex min-w-0 items-center gap-1.5">
@@ -127,6 +152,21 @@ function ParentChip({ node, text }: { node: BreedNode; text: SpeciesText }) {
       {node.gender && (
         <Pill title="Which side of this pair it has to be">
           {node.gender === 'Male' ? '♂' : '♀'}
+        </Pill>
+      )}
+      {/* `warn`, not `signal`: a borrowed parent is an obstacle, the same
+          category as "needs both genders". `signal` in this file means an
+          informational back-reference. */}
+      {who && (
+        <Pill
+          tone="warn"
+          title={
+            who.unowned
+              ? 'No player owns this pal — it is a base worker in shared storage, so any member can fetch it.'
+              : `This pal belongs to ${who.name}. You will need them to put it in the pen.`
+          }
+        >
+          {who.name}
         </Pill>
       )}
       {pick && (
