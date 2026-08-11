@@ -29,6 +29,8 @@ const PLAYER =
 const DPS = '{"header":{},"properties":{"SaveParameterArray":{}}}'
 const LOCAL =
   '{"header":{},"properties":{"Version":100,"SaveData":{"struct_type":"PalLocalSaveData"}}}'
+const LEVELMETA =
+  '{"header":{},"properties":{"Version":100,"SaveData":{"struct_type":"PalWorldBaseInfoSaveData"}}}'
 
 describe('sniff', () => {
   it('classifies a level save', async () => {
@@ -131,6 +133,28 @@ describe('sniff', () => {
     expect((await sniff(file)).kind).toBe('local')
   })
 
+  it('classifies LevelMeta.sav by name, without reading it', async () => {
+    // Must not fall through to the generic `.sav` branch: `acceptSavs` treats
+    // every non-UID-named `.sav` as a level candidate and hands everything but
+    // the largest to the player reader, which used to blame this file for having
+    // no PlayerUId.
+    const { file } = fakeFile('LevelMeta.sav', '', 1_931)
+    const result = await sniff(file)
+    expect(result.kind).toBe('levelmeta')
+    expect(result.reason).toBeUndefined()
+    expect(file.slice).not.toHaveBeenCalled()
+  })
+
+  it('classifies a converted LevelMeta.json too', async () => {
+    const { file } = fakeFile('LevelMeta.json', LEVELMETA)
+    expect((await sniff(file)).kind).toBe('levelmeta')
+  })
+
+  it('recognises a renamed LevelMeta.json by its content', async () => {
+    const { file } = fakeFile('world-meta.json', LEVELMETA)
+    expect((await sniff(file)).kind).toBe('levelmeta')
+  })
+
   it('recognises a LocalData.json that was renamed, by its content', async () => {
     // The name is the cheap first stop, never the discriminator — same
     // contract the DPS check has.
@@ -174,6 +198,33 @@ describe('partition', () => {
       'B_dps.json',
       'notes.txt',
     ])
+  })
+
+  it('keeps LevelMeta out of the raw-sav bucket entirely', async () => {
+    // The regression this guards is what a real world folder drop used to do:
+    // both `Level.sav` and `LevelMeta.sav` are unnamed `.sav`s, so `acceptSavs`
+    // sorted them by size, took the largest as the level, and queued the other
+    // as a player save.
+    const files = [
+      fakeFile('Level.sav', '', 861_566).file,
+      fakeFile('LevelMeta.sav', '', 1_931).file,
+    ]
+    const result = await partition(files)
+
+    expect(result.levelMeta?.file.name).toBe('LevelMeta.sav')
+    expect(result.savs.map((s) => s.file.name)).toEqual(['Level.sav'])
+    expect(result.players).toEqual([])
+    expect(result.rejected).toEqual([])
+  })
+
+  it('keeps only one LevelMeta and rejects the rest', async () => {
+    const files = [
+      fakeFile('LevelMeta.sav', '', 1_931).file,
+      fakeFile('LevelMeta.json', LEVELMETA).file,
+    ]
+    const result = await partition(files)
+    expect(result.levelMeta?.file.name).toBe('LevelMeta.sav')
+    expect(result.rejected.map((r) => r.file.name)).toEqual(['LevelMeta.json'])
   })
 
   it('prefers the largest level file when several are dropped', async () => {

@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 
 import { buildSaveIndex, toSlim } from '../domain/index.ts'
-import type { Guid, LocalDataPayload, SaveIndex } from '../domain/types.ts'
+import type {
+  Guid,
+  LevelMetaPayload,
+  LocalDataPayload,
+  SaveIndex,
+} from '../domain/types.ts'
 import { explainParseError } from '../parse/explain.ts'
 import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
 import type {
@@ -48,6 +53,15 @@ export interface SaveState {
    * neither derived from the world nor invalidated by merging player saves.
    */
   localData?: LocalDataPayload
+
+  /**
+   * The world's `LevelMeta`, if it was in the drop. Beside the index for the same
+   * reason as `localData` — it describes the save file, not its contents.
+   *
+   * Unlike `localData` this needs no world to attribute it to, so it is read
+   * immediately whichever order the files arrive in.
+   */
+  levelMeta?: LevelMetaPayload
 
   /** Ingestion ledger, keyed by file name. Drives the player-saves panel. */
   playerFiles: Record<string, PlayerFileState>
@@ -243,6 +257,7 @@ async function acceptSavs(savs: Sniffed[], set: Setter) {
     // Same reasoning as the JSON path in `ingestWorld`, and missing here until
     // now: a different world means different exploration, so the previous
     // world's fog would be drawn over terrain it never described.
+    levelMeta: undefined,
     localData: undefined,
     restoredFrom: undefined,
     playerFiles: ledgerFrom(players, 'queued'),
@@ -385,6 +400,40 @@ async function parseLocal(file: File, set: Setter) {
  * Attribution needs `palById`, so this can never run before the level — and a
  * fog mask with no map under it would be nothing to look at anyway.
  */
+/**
+ * Reads `LevelMeta.sav` if one was dropped.
+ *
+ * Simpler than `applyLocal`: `LocalData` has to wait for a world because its fog
+ * is meaningless without one to draw it over, whereas this describes the save file
+ * itself and is just as true before the level finishes parsing. So there is no
+ * pending slot and no drop-order dance.
+ */
+async function applyLevelMeta(meta: Sniffed | undefined, set: Setter) {
+  if (!meta) return
+
+  const buf = await meta.file.arrayBuffer()
+  const msg = await request(
+    { t: 'parseLevelMeta', fileName: meta.file.name, buf },
+    [buf],
+  )
+  if (msg.t !== 'levelMetaResult') return
+
+  set((s) => ({
+    // A rejected drop leaves whatever was already read alone, as the other
+    // readers do.
+    levelMeta: msg.payload ?? s.levelMeta,
+    playerFiles: {
+      ...s.playerFiles,
+      [msg.report.fileName]: {
+        fileName: msg.report.fileName,
+        bytes: meta.file.size,
+        status: msg.report.ok ? ('loaded' as const) : ('rejected' as const),
+        reason: msg.report.reason,
+      },
+    },
+  }))
+}
+
 async function applyLocal(
   local: Sniffed | undefined,
   set: Setter,
@@ -426,6 +475,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       fileName: undefined,
       fileBytes: undefined,
       timings: undefined,
+      levelMeta: undefined,
       localData: undefined,
       restoredFrom: undefined,
       playerFiles: {},
@@ -443,6 +493,9 @@ export const useSaveStore = create<SaveState>((set, get) => ({
   async acceptFiles(files) {
     const parts = await partition(files)
     await ingestWorld(parts, set, get)
+    // After `ingestWorld`, not before: that replaces the ingestion ledger
+    // wholesale, so an entry written earlier would be dropped on the floor.
+    await applyLevelMeta(parts.levelMeta, set)
     await applyLocal(parts.local, set, get)
   },
 }))
@@ -514,6 +567,7 @@ async function ingestWorld(
       index: undefined,
       // A different world means different exploration; the fog from the last
       // one would be drawn over terrain it never described.
+      levelMeta: undefined,
       localData: undefined,
       // This one is being parsed, whatever the last one was.
       restoredFrom: undefined,

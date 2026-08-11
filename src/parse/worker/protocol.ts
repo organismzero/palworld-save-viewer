@@ -3,7 +3,12 @@
  * stay free of anything that cannot run in a worker.
  */
 
-import type { Guid, LocalDataPayload, SlimPayload } from '../../domain/types.ts'
+import type {
+  Guid,
+  LevelMetaPayload,
+  LocalDataPayload,
+  SlimPayload,
+} from '../../domain/types.ts'
 import type { Phase } from './buildIndexes.ts'
 
 export type { Phase } from './buildIndexes.ts'
@@ -32,6 +37,11 @@ export type ToWorker =
    * describes a single client, so there is never more than one to read.
    */
   | { t: 'parseLocal'; id: number; fileName: string; buf: ArrayBuffer }
+  /**
+   * The world's `LevelMeta`. One file for the same reason as `parseLocal`, and a
+   * tiny one — two kilobytes, decoded through the same container path.
+   */
+  | { t: 'parseLevelMeta'; id: number; fileName: string; buf: ArrayBuffer }
   /**
    * Seeds the worker from a payload the main thread already has.
    *
@@ -85,6 +95,13 @@ export type FromWorker =
       id: number
       /** Absent when the file was rejected; `report` says why. */
       payload?: LocalDataPayload
+      report: PlayerFileReport
+    }
+  | {
+      t: 'levelMetaResult'
+      id: number
+      /** Absent when the file was rejected; `report` says why. */
+      payload?: LevelMetaPayload
       report: PlayerFileReport
     }
   | { t: 'adopted'; id: number }

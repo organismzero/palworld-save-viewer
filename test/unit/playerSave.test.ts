@@ -151,6 +151,31 @@ function playerSave(over: Record<string, unknown> = {}) {
 }
 
 describe('readPlayerSave', () => {
+  it('rejects a LevelMeta save by naming what it actually is', () => {
+    // The bug this closes: `LevelMeta.sav` has a `SaveData` of its own, so a
+    // presence-only check let it through and it was then blamed for having no
+    // PlayerUId — an accusation against a perfectly valid file.
+    const raw = {
+      properties: {
+        SaveData: {
+          struct_type: 'PalWorldBaseInfoSaveData',
+          value: { WorldName: { value: 'Autosave_W' } },
+        },
+      },
+    }
+    expect(() => readPlayerSave(raw, 'LevelMeta.sav', new Warnings())).toThrow(
+      /expected properties.SaveData to be a PalWorldPlayerSaveData, found a PalWorldBaseInfoSaveData/,
+    )
+  })
+
+  it('still accepts a tree that names no struct type', () => {
+    // Only a *wrong* struct type is rejected. Converted trees in the wild omit
+    // it, and this reader has always tolerated that.
+    expect(() =>
+      readPlayerSave(playerSave(), 'a.json', new Warnings()),
+    ).not.toThrow()
+  })
+
   it('reads the core fields', () => {
     const warn = new Warnings()
     const d = readPlayerSave(playerSave(), 'a.json', warn)

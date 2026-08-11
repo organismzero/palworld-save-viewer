@@ -2,7 +2,13 @@ import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
 import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
 import { palTooltip } from '../domain/palText.ts'
-import { bytes, count, relativeTime, ticksToDate } from '../lib/format.ts'
+import {
+  bytes,
+  count,
+  relativeTime,
+  saveClock,
+  ticksToDate,
+} from '../lib/format.ts'
 import { formatMapPos, posToMap } from '../domain/coords.ts'
 import {
   formatUptimeAgo,
@@ -36,9 +42,19 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
     timings,
     playerFiles,
     localData,
+    levelMeta,
     restoredFrom,
     reset,
   } = useSaveStore()
+
+  // The save's own record of when it was written, from `LevelMeta.sav`. Distinct
+  // from `restoredFrom`, which is when *this browser* stored a snapshot, and from
+  // the file's mtime, which the app never sees and which copying destroys.
+  //
+  // Rendered as a clock reading rather than as "3 hours ago" on purpose: the game
+  // writes these ticks with no timezone, so the instant is unknowable and a
+  // relative time would be wrong by the server's offset. See `saveClock`.
+  const writtenAt = saveClock(levelMeta?.savedAtTicks)
   const guilds = playerGuilds(index)
   const s = index.stats
   const ownerName = localData?.ownerUid
@@ -61,9 +77,19 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <h1 className="font-display text-3xl tracking-tight">
             {fileName ?? 'Save'}
           </h1>
-          <p className="label mt-2">
+          <p
+            className="label mt-2"
+            title={
+              writtenAt
+                ? `The save's own clock reading. Palworld records no timezone, so this is the server's local time rather than a known instant.`
+                : undefined
+            }
+          >
             {[
               fileBytes ? bytes(fileBytes) : null,
+              // Ahead of the parse timing, because when the world is *from* is a
+              // more useful first fact than how long reading it took.
+              writtenAt ? `written ${writtenAt}` : null,
               restoredFrom !== undefined
                 ? `restored · saved ${relativeTime(new Date(restoredFrom))}`
                 : totalMs
@@ -128,6 +154,13 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <StatTile label="pal storage" value={s.charContainers} />
           <StatTile label="dynamic items" value={s.dynamicItems} />
           <StatTile label="guilds" value={s.guilds} />
+          {levelMeta?.inGameDay !== undefined && (
+            <StatTile
+              label="in-game day"
+              value={levelMeta.inGameDay}
+              hint="from LevelMeta.sav"
+            />
+          )}
         </div>
       </section>
 

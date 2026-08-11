@@ -333,6 +333,8 @@ export interface SaveWarning {
     | 'ownership-conflict'
     /** A `LocalData` `SaveData` key we do not read yet. Same canary role. */
     | 'unknown-local-field'
+    /** A `LevelMeta` `SaveData` key we do not read yet. Same canary role. */
+    | 'unknown-levelmeta-field'
     /** A fog mask keyed by a map this build has never heard of. */
     | 'unknown-map-mask'
     /** A fog mask whose byte count is not four times a square. */
@@ -491,6 +493,34 @@ export interface LocalDataPayload {
   ownerUid?: Guid
   /** Surfaced in Diagnostics alongside the level save's own. */
   warnings: SaveWarning[]
+}
+
+/**
+ * `LevelMeta.sav` — four values describing the world save rather than its
+ * contents.
+ *
+ * Kept beside the index rather than inside `SlimPayload` for the same reason as
+ * `LocalDataPayload`: it is not derived from the world and is not invalidated by
+ * merging a player save, so folding it in would force a full payload re-post on
+ * every merge.
+ */
+export interface LevelMetaPayload {
+  fileName: string
+  /** Save format version. `100` in every file seen so far. */
+  version?: number
+  /**
+   * When the level save was written, in .NET ticks.
+   *
+   * A **naive** wall clock: the game writes whatever its own clock read and
+   * records no timezone, so this is not a known instant. Format it with
+   * `saveClock`, never with `relativeTime`. Differences between two tick values
+   * are exact regardless, since both sit in the same unknown frame.
+   */
+  savedAtTicks?: number
+  /** As shown on the game's load screen. `"Autosave_W"` for an autosave. */
+  worldName?: string
+  /** In-game days elapsed. Climbs roughly two per real hour. */
+  inGameDay?: number
 }
 
 /** The main-thread view: flat arrays plus the derived lookup indexes. */

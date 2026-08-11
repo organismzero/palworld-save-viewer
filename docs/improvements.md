@@ -238,10 +238,16 @@ SaveData   PalWorldBaseInfoSaveData
              InGameDay  398          IntProperty
 ```
 
-`Timestamp` is **absolute .NET ticks and a genuine wall clock** — the existing
-`ticksToDate` in `src/lib/format.ts` decodes it with no adjustment, and across a
-30-snapshot autosave set it matches each folder's own name to the second.
-`InGameDay` climbs monotonically, roughly two in-game days per real hour.
+`Timestamp` is .NET ticks, and **a naive wall clock rather than UTC** — measured,
+and the correction matters. Across a 30-snapshot autosave set the ticks' digits
+equal each folder's own name to the second, which says the game wrote what its own
+clock read and attached no zone. Since nothing in the save records the server's
+offset, the _instant_ is unknowable: pointing `relativeTime` at it on a UTC+10 host
+renders this afternoon's save as written in the future. Format the reading with
+`saveClock`, and say whose clock it is.
+
+Tick _differences_ are unaffected, because both values sit in the same unknown
+frame. `InGameDay` climbs monotonically, roughly two in-game days per real hour.
 
 Note it does **not** resolve the guild `last_online_real_time` epoch the README's
 Limitations section flags as unknown. Those values are ~4.7 × 10¹², which as .NET
@@ -249,20 +255,36 @@ ticks land in year 0001 — an elapsed duration of a few days, consistent with t
 README's reading of them as server uptime. Anchoring them would need
 uptime-at-save-time, which nothing records, so the honest position stays as it is.
 
-- **Sniffer:** a `levelmeta` kind keyed on content marker
-  `PalWorldBaseInfoSaveData`, plus a field on `Partitioned`. It decodes through
-  the existing container and GVAS path with no new reader.
+- **Sniffer:** a `levelmeta` kind plus a field on `Partitioned`. Matched **by
+  filename**, not by content marker — `sniff`'s stated invariant is that it never
+  decodes, and a `.sav` is compressed, so there is nothing to scan. This is the
+  same concession `LocalData` already makes, and the authority stays inside the
+  file: the reader checks `SaveData` is a `PalWorldBaseInfoSaveData` and rejects it
+  by name if not. The content marker is still worth adding to `MARKERS` for a
+  converted `LevelMeta.json`, which _can_ be sniffed.
+- **This is a bug fix, not only a feature.** `acceptSavs` treats every
+  non-UID-named `.sav` as a level candidate and hands everything but the largest
+  to the player reader, so dropping a real world folder — which always contains
+  `LevelMeta.sav` — ended in `LevelMeta.sav has no PlayerUId.` The file is fine;
+  the router was wrong. `readPlayerSave` checked only that `SaveData` _existed_,
+  and `LevelMeta` has one, so it should also name the struct it actually found the
+  way `readLocalData` does.
 - **Placement:** beside the index, like `localData` — it is not world data and is
   not invalidated by a player-save merge.
 - **Why it earns its keep, in order of value:**
   1. **Feature 3 gets a free, exact ordering key.** Comparison has to know which
      of two saves is older; today it would guess or ask. `InGameDay` is a
      sanity cross-check on the timestamp.
-  2. **Relative times can stop lying.** Every "2 hours ago" in the app is
-     currently relative to `Date.now()`. Load a week-old backup and all of them
-     are wrong by a week. Anchoring `relativeTime` to the save's own timestamp
-     makes them true, and is the sort of latent inaccuracy this codebase
-     otherwise goes out of its way to avoid.
+  2. **Ages measured against the save instead of against now.** Every "2 hours
+     ago" in the app is currently relative to `Date.now()`, so loading a week-old
+     backup renders all of them a week out. The fix is a _difference_ — "caught
+     nine days before this save was written" — which needs no timezone and is
+     exact. Note this is not `relativeTime(saveDate)`, which would reintroduce the
+     unknown offset; it is arithmetic on two tick values in the same frame.
+     **This also means the app's existing tick displays are already suspect**: a
+     pal's `ownedTime` and a player's `lastOnlineTicks` are the same naive clock
+     run through `relativeTime`, so they are out by the server's offset today.
+     Worth its own pass rather than being folded in here.
   3. Save-write time in the Summary, where the only handle today is file mtime —
      which a copy or a move destroys.
   4. `InGameDay` is a world-age stat the app has nowhere else.

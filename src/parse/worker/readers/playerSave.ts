@@ -152,10 +152,18 @@ export function readPlayerSave(
   fileName: string,
   warn: Warnings,
 ): PlayerDetail {
+  // Presence is not enough, and checking only presence is how `LevelMeta.sav`
+  // used to end up here and be blamed for having no `PlayerUId` — it has a
+  // `SaveData` of its own, just a `PalWorldBaseInfoSaveData` one. Naming the
+  // struct actually found turns a misleading accusation into a diagnosis, the
+  // way `readLocalData` already does.
+  const struct = raw?.properties?.SaveData?.struct_type
   const sd = raw?.properties?.SaveData?.value
-  if (!sd) {
+  if (!sd || (struct && struct !== 'PalWorldPlayerSaveData')) {
     throw new Error(
-      `${fileName} does not look like a Palworld player save: properties.SaveData is missing.`,
+      `${fileName} does not look like a Palworld player save: expected properties.SaveData to be a PalWorldPlayerSaveData${
+        struct ? `, found a ${struct}` : ', which is missing'
+      }.`,
     )
   }
 

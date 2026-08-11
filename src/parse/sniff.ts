@@ -21,7 +21,8 @@ import { normGuid, type Guid } from './guid.ts'
  * file and the app can read its container header, so it gets its own kind and
  * a purpose-built explanation rather than being lumped in with `unknown`.
  */
-export type SaveKind = 'level' | 'player' | 'dps' | 'sav' | 'local' | 'unknown'
+export type SaveKind =
+  'level' | 'player' | 'dps' | 'sav' | 'local' | 'levelmeta' | 'unknown'
 
 export interface Sniffed {
   file: File
@@ -52,6 +53,7 @@ const PREFIX_BYTES = 64 * 1024
 const MARKERS: readonly [string, SaveKind][] = [
   ['SaveParameterArray', 'dps'],
   ['PalLocalSaveData', 'local'],
+  ['PalWorldBaseInfoSaveData', 'levelmeta'],
   ['PalWorldPlayerSaveData', 'player'],
   ['worldSaveData', 'level'],
 ]
@@ -87,6 +89,26 @@ const UID_FILENAME = /^([0-9A-Fa-f]{32})(?:_dps)?\.(json|sav)$/i
  */
 const LOCALDATA_FILENAME = /^LocalData\.(json|sav)$/i
 
+/**
+ * The world's metadata sidecar, which sits beside `Level.sav` in every world
+ * folder and every autosave backup.
+ *
+ * Matched by name for the same reason as `LocalData` — a `.sav` is compressed and
+ * this function does not decode — and it has to be matched at all because
+ * `acceptSavs` treats every non-UID-named `.sav` as a level candidate and hands
+ * everything but the largest to the player reader. Left unrecognised, dropping a
+ * real world folder ends in `LevelMeta.sav has no PlayerUId.`, which blames a
+ * perfectly good file for not being something it never claimed to be.
+ *
+ * As with `LocalData`, the authority stays inside the file: the reader checks
+ * `SaveData` is a `PalWorldBaseInfoSaveData` and rejects it by name if not.
+ */
+const LEVELMETA_FILENAME = /^LevelMeta\.(json|sav)$/i
+
+export function looksLikeLevelMetaName(name: string): boolean {
+  return LEVELMETA_FILENAME.test(name)
+}
+
 export function filenameUidOf(name: string): Guid | undefined {
   const m = UID_FILENAME.exec(name)
   return m ? normGuid(m[1]!) : undefined
@@ -114,6 +136,12 @@ export async function sniff(
   // of its own, and so would quietly produce a junk player record.
   if (looksLikeLocalDataName(name)) {
     return { file, kind: 'local', filenameUid }
+  }
+
+  // Same reasoning, and the same order requirement: it must be caught before the
+  // generic `.sav` branch or `acceptSavs` hands it to the player reader.
+  if (looksLikeLevelMetaName(name)) {
+    return { file, kind: 'levelmeta', filenameUid }
   }
 
   // Classified, not rejected: the container header says which compression it
@@ -189,6 +217,12 @@ export interface Partitioned {
    * see it; only one is kept, since it describes a single client.
    */
   local?: Sniffed
+  /**
+   * The world's `LevelMeta`. Its own bucket for the same reason as `local`: the
+   * level-picking heuristic must never see it, and only one is kept because it
+   * describes a single world.
+   */
+  levelMeta?: Sniffed
 }
 
 /**
@@ -200,18 +234,21 @@ export async function partition(files: File[]): Promise<Partitioned> {
   const levels = sniffed.filter((s) => s.kind === 'level')
   levels.sort((a, b) => b.file.size - a.file.size)
   const locals = sniffed.filter((s) => s.kind === 'local')
+  const metas = sniffed.filter((s) => s.kind === 'levelmeta')
 
   return {
     level: levels[0],
     players: sniffed.filter((s) => s.kind === 'player'),
     savs: sniffed.filter((s) => s.kind === 'sav'),
     local: locals[0],
+    levelMeta: metas[0],
     rejected: sniffed.filter(
       (s) =>
         s.kind === 'dps' ||
         s.kind === 'unknown' ||
         levels.indexOf(s) > 0 ||
-        locals.indexOf(s) > 0,
+        locals.indexOf(s) > 0 ||
+        metas.indexOf(s) > 0,
     ),
   }
 }

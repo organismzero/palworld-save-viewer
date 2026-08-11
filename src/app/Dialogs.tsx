@@ -107,8 +107,7 @@ export function AboutDialog() {
           <p className="text-[var(--color-muted)]">
             Pal names, icons, item tables, breeding combinations, the world map
             and the levelling curve are Pocketpair&rsquo;s, and none of them are
-            in this repository.
-            They are fetched on demand from the{' '}
+            in this repository. They are fetched on demand from the{' '}
             <Link href="https://github.com/deafdudecomputers/PalworldSaveTools">
               PalworldSaveTools
             </Link>{' '}

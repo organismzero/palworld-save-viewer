@@ -301,6 +301,52 @@ async function handleParseLocal(
   }
 }
 
+/**
+ * `LevelMeta.sav`, which is two kilobytes and carries nothing transferable.
+ *
+ * No transfer list, unlike `parseLocal`: there are no mask buffers here, just
+ * four scalars, so the structured clone is free.
+ */
+async function handleParseLevelMeta(
+  id: number,
+  fileName: string,
+  buf: ArrayBuffer,
+) {
+  const { readLevelMeta } = await import('./readers/levelMeta.ts')
+  const warn = new Warnings()
+
+  try {
+    progress('decode', 'Reading world metadata')
+    let tree: unknown
+    if (isJsonName(fileName)) {
+      tree = JSON.parse(new TextDecoder().decode(buf))
+    } else {
+      const { decodeSav } = await import('../sav/decode.ts')
+      const { readGvas } = await import('../sav/gvas.ts')
+      const result = await decodeSav(buf)
+      if (!result.ok) throw new Error(result.message)
+      tree = readGvas(result.gvas)
+    }
+
+    post({
+      t: 'levelMetaResult',
+      id,
+      payload: readLevelMeta(tree, fileName, warn),
+      report: { fileName, ok: true },
+    })
+  } catch (err) {
+    post({
+      t: 'levelMetaResult',
+      id,
+      report: {
+        fileName,
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      },
+    })
+  }
+}
+
 function isJsonName(fileName: string): boolean {
   return fileName.toLowerCase().endsWith('.json')
 }
@@ -326,6 +372,10 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
 
     case 'parseLocal':
       void handleParseLocal(msg.id, msg.fileName, msg.buf)
+      break
+
+    case 'parseLevelMeta':
+      void handleParseLevelMeta(msg.id, msg.fileName, msg.buf)
       break
 
     /**
