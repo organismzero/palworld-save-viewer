@@ -195,9 +195,13 @@ The prompts and the coordinate readout share one dark bar on the frame's bottom 
 
 ### Stage 9 — Breed
 
-_Files:_ `src/views/breed/BreedView.tsx`, `PlanSteps.tsx`
+**Landed.** _Files:_ `src/views/breed/BreedView.tsx`, `PlanSteps.tsx`
 
-Two rails onto the new controls, `StockPanel` onto `Field` rows, the species list onto `ListRow` with its depth pills, step rows onto `Panel` with the `→` route glyph. The footnote and every "why there is no route" paragraph stay verbatim — they are the most load-bearing copy in the app.
+Two rails onto the new controls, `StockPanel` onto `Field` rows, the species list onto `ListRow` with its depth pills, step rows and the tree onto padded `Panel`s. The two "off by default" toggles — pooling the guild, and counting pals whose gender the save does not record — become `Checkbox`es with their full explanations intact, because those sentences are the reason the toggles are off. The tied-route buttons become `Button tone="signal"` for the active one, which is the same selected-versus-not language as everything else.
+
+The footnote and every "why there is no route" paragraph are verbatim. They are the most load-bearing copy in the app and the redesign has no opinion about them.
+
+`PlanSteps` held the last two sub-11px sites in the codebase, so **the 11px floor is now complete**: `grep` for `text-[10px]` or `text-[9px]` across `src/` returns nothing.
 
 ### Stage 10 — cleanup
 

@@ -34,18 +34,25 @@ import {
 } from '../../domain/breeding.ts'
 import type { Player, SaveIndex } from '../../domain/types.ts'
 import { count } from '../../lib/format.ts'
-import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import {
+  Field,
   Panel,
   Pill,
   RawId,
   SectionHeading,
   StatTile,
 } from '../../components/primitives.tsx'
+import {
+  Button,
+  Checkbox,
+  ListRow,
+  SelectControl,
+  TextInput,
+} from '../../components/controls.tsx'
 import { PlanSteps } from './PlanSteps.tsx'
 import { speciesText, type SpeciesText } from './speciesText.ts'
 import { ownerText, type OwnerText } from './ownerText.ts'
@@ -116,21 +123,17 @@ export function BreedView({ index }: { index: SaveIndex }) {
 
   return (
     <div className="flex h-full">
-      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
+      <aside className="w-[var(--rail-width)] shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
         <div>
-          <div className="label mb-2">whose pals</div>
-          <select
+          <SelectControl
+            label="whose pals"
             value={ownerUid ?? ''}
-            onChange={(e) => patch({ playerUid: e.target.value, route: undefined })} // prettier-ignore
-            className="w-full rounded-[6px] border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-signal)]"
-          >
-            {index.players.map((p) => (
-              <option key={p.playerUid} value={p.playerUid}>
-                {p.name} —{' '}
-                {count(index.palsByOwner.get(p.playerUid)?.length ?? 0)} pals
-              </option>
-            ))}
-          </select>
+            onChange={(v) => patch({ playerUid: v, route: undefined })}
+            options={index.players.map((p) => ({
+              value: p.playerUid,
+              label: `${p.name} — ${count(index.palsByOwner.get(p.playerUid)?.length ?? 0)} pals`,
+            }))}
+          />
           <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
             {stock.includedGuild
               ? `All of ${guildLabel(stock)}’s pals are used, base workers included — not just this player’s.`
@@ -158,12 +161,11 @@ export function BreedView({ index }: { index: SaveIndex }) {
 
       <aside className="w-72 shrink-0 overflow-hidden border-r border-[var(--color-line)]">
         <div className="p-4 pb-2">
-          <div className="label mb-2">what to breed</div>
-          <input
+          <TextInput
+            label="what to breed"
             value={params.query}
-            onChange={(e) => patch({ query: e.target.value })}
+            onChange={(v) => patch({ query: v })}
             placeholder="Search species"
-            className="w-full rounded-[6px] border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-signal)]"
           />
         </div>
         <SpeciesList
@@ -242,9 +244,7 @@ function PlanPane({
           size={56}
         />
         <div className="min-w-0">
-          <h2 className="font-display text-2xl leading-tight">
-            {text.name(plan.target)}
-          </h2>
+          <h2 className="text-2xl leading-tight">{text.name(plan.target)}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {plan.status === 'plan' && (
               <>
@@ -291,20 +291,15 @@ function PlanPane({
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {plan.options.map((o, i) => (
-                  <button
+                  <Button
                     key={`${o.a}|${o.b}`}
-                    type="button"
+                    size="sm"
+                    tone={i === routeIndex ? 'signal' : 'default'}
                     onClick={() => onRoute(i)}
                     aria-current={i === routeIndex ? 'true' : undefined}
-                    className={cn(
-                      'rounded-[6px] border px-2.5 py-1 text-xs transition-colors',
-                      i === routeIndex
-                        ? 'border-[var(--color-signal)] text-[var(--color-text)]'
-                        : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-[var(--color-muted)]',
-                    )}
                   >
                     {text.name(o.a)} × {text.name(o.b)}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </section>
@@ -344,7 +339,7 @@ function NoRoute({
 
   if (plan.status === 'not-in-data') {
     return (
-      <Panel className="px-4 py-3 text-sm text-[var(--color-muted)]">
+      <Panel padded className="text-sm text-[var(--color-muted)]">
         The reference data has no species called <RawId>{plan.target}</RawId>,
         so there is nothing to plan. A link from a different version of the data
         would land here.
@@ -353,7 +348,7 @@ function NoRoute({
   }
 
   return (
-    <Panel className="space-y-3 px-4 py-3 text-sm">
+    <Panel padded className="space-y-3 text-sm">
       {plan.reason === 'no-stock' && (
         <p className="text-[var(--color-muted)]">
           {stock.counted === 0
@@ -473,7 +468,7 @@ function StockPanel({
         accent
         hint="including the ones they already hold"
       />
-      <Panel className="divide-y divide-[var(--color-line-faint)] text-xs">
+      <Panel className="px-3 py-1">
         <Row label="pals counted" value={count(stock.counted)} />
         {stock.includedGuild && (
           <>
@@ -497,24 +492,23 @@ function StockPanel({
           domain refused to honour — no guild, or a bookkeeping Organization —
           cannot render as ticked. */}
       {stock.guild && (
-        <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
-          <input
-            type="checkbox"
-            checked={stock.includedGuild}
-            onChange={onToggleGuild}
-            className="mt-0.5 accent-[var(--color-signal)]"
-          />
-          <span>
-            Pool all {count(stock.guild.palCount)} of {guildLabel(stock)}’s
-            pals, base workers included. Off by default — a pal a guildmate
-            holds is one you have to go and ask for.
-          </span>
-        </label>
+        <Checkbox
+          checked={stock.includedGuild}
+          onChange={onToggleGuild}
+          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
+          label={
+            <span>
+              Pool all {count(stock.guild.palCount)} of {guildLabel(stock)}’s
+              pals, base workers included. Off by default — a pal a guildmate
+              holds is one you have to go and ask for.
+            </span>
+          }
+        />
       )}
       {stock.includedGuild && stock.byOwner.size > 1 && (
         <div>
           <div className="label mb-1.5">who is contributing</div>
-          <Panel className="divide-y divide-[var(--color-line-faint)] text-xs">
+          <Panel className="px-3 py-1">
             {[...stock.byOwner]
               .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
               .map(([uid, n]) => (
@@ -527,31 +521,25 @@ function StockPanel({
         </div>
       )}
       {stock.skippedNoGender > 0 && (
-        <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
-          <input
-            type="checkbox"
-            checked={stock.assumedUnknownGender}
-            onChange={onToggleUnknown}
-            className="mt-0.5 accent-[var(--color-signal)]"
-          />
-          <span>
-            Count the {count(stock.skippedNoGender)} pals whose gender this save
-            does not record, splitting them evenly. Off by default — it invents
-            data.
-          </span>
-        </label>
+        <Checkbox
+          checked={stock.assumedUnknownGender}
+          onChange={onToggleUnknown}
+          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
+          label={
+            <span>
+              Count the {count(stock.skippedNoGender)} pals whose gender this
+              save does not record, splitting them evenly. Off by default — it
+              invents data.
+            </span>
+          }
+        />
       )}
     </div>
   )
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 px-3 py-1.5">
-      <span className="label">{label}</span>
-      <span className="num text-[var(--color-muted)]">{value}</span>
-    </div>
-  )
+  return <Field label={label} value={value} className="last:border-b-0" />
 }
 
 /**
@@ -604,17 +592,10 @@ function SpeciesList({
   return (
     <div className="h-[calc(100%-5.5rem)] overflow-y-auto px-2 pb-4">
       {rows.map((r) => (
-        <button
+        <ListRow
           key={r.id}
-          type="button"
+          selected={r.id === selected}
           onClick={() => onPick(r.id)}
-          aria-current={r.id === selected ? 'true' : undefined}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left transition-colors',
-            r.id === selected
-              ? 'bg-[var(--color-raised)]'
-              : 'hover:bg-[var(--color-raised)]/50',
-          )}
         >
           <GameIcon
             path={text.icon(r.id)}
@@ -628,7 +609,7 @@ function SpeciesList({
           ) : r.depth !== undefined ? (
             <Pill tone="signal">{r.depth} gen</Pill>
           ) : null}
-        </button>
+        </ListRow>
       ))}
       {rows.length === 0 && (
         <p className="px-2 py-3 text-xs text-[var(--color-muted)]">

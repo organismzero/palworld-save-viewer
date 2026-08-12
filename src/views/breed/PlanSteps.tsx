@@ -51,7 +51,7 @@ export function PlanSteps({
       {plan.tree && (
         <section>
           <div className="label mb-2">the shape of it</div>
-          <Panel className="overflow-x-auto px-3 py-3">
+          <Panel padded className="overflow-x-auto">
             <TreeNode node={plan.tree} text={text} depth={0} />
           </Panel>
         </section>
@@ -70,7 +70,7 @@ function StepRow({
   owner: OwnerText
 }) {
   return (
-    <Panel className="px-3 py-2.5">
+    <Panel padded className="py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="num shrink-0 text-xs text-[var(--color-muted)]">
           {step.n}
@@ -171,7 +171,7 @@ function ParentChip({
       )}
       {pick && (
         <>
-          <span className="num shrink-0 text-[10px] text-[var(--color-muted)]">
+          <span className="num shrink-0 text-[11px] text-[var(--color-muted)]">
             lv{pick.level}
           </span>
           <IVBar
@@ -183,7 +183,7 @@ function ParentChip({
         </>
       )}
       {node.count > 1 && (
-        <span className="num shrink-0 text-[10px] text-[var(--color-muted)]">
+        <span className="num shrink-0 text-[11px] text-[var(--color-muted)]">
           of {node.count}
         </span>
       )}
