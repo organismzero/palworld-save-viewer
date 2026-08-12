@@ -169,9 +169,17 @@ The two capacity notes and the attribution copy stay verbatim.
 
 ### Stage 7 — Guild
 
-_Files:_ `src/views/guild/GuildView.tsx`, `PlayerDetailPanel.tsx`, `Paldex.tsx`, `src/components/charts.tsx`
+**Landed.** _Files:_ `src/views/guild/GuildView.tsx`, `PlayerDetailPanel.tsx`, `Paldex.tsx`, `src/components/charts.tsx`
 
-Stat tiles, player cards with real XP meters, element distribution, and the roster panels. Charts keep their hand-rolled SVG and pick up the new line and signal tokens; the radar axis keeps `fontSize={8}` with the comment from decision 10. `PlayerDetailPanel`'s tab pair becomes `SegmentBar`. Paldex cells become square slots with the lucky ring and the alpha mark.
+Stat tiles, player cards with real XP meters, element distribution, and the roster panels. The guild picker and the system-groups toggle move onto `SelectControl` and `Checkbox`; every aggregate `Panel` takes `padded` instead of its own classes.
+
+**Player XP is a real `Meter`** — tone `xp`, no printed value — but only when `levelProgress` has the levelling curve to divide by. Without it the card still prints the raw figure, because that is all the save knows.
+
+Charts keep their hand-rolled SVG and pick up the tokens. Their bars and the histogram lose `rounded-full` and `rounded-t`, because a squared bar is the system's rule and only a floating HUD meter is a pill; the progress ring drops its round stroke cap for the same reason. The radar axis keeps `fontSize={8}` with decision 10's reasoning written next to it, so it reads as a decision rather than an oversight.
+
+`PlayerDetailPanel` narrows to `--detail-width`, drops its private `Field`, and its tab pair becomes a `SegmentBar` with the same real semantics as the view strip — verified by watching the panel's `aria-labelledby` follow the selection from `player-tab-overview` to `player-tab-paldex`. Paldex cells become square slots in a sunken well, with the lucky ring turned into a signal border and glow.
+
+**The 11px floor is now complete outside stage 9**: the last sub-11px sites in this view (the ring's `sub`, the member monograms, a status figure, a level in the best-pals list) are all raised, leaving only `PlanSteps.tsx` for the Breed stage.
 
 ### Stage 8 — Map
 

@@ -22,10 +22,16 @@ import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useSaveStore } from '../../store/saveStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
-import { IVBar, Panel, Pill } from '../../components/primitives.tsx'
+import { Field, IVBar, Panel, Pill } from '../../components/primitives.tsx'
+import { Button, IconButton, SegmentBar } from '../../components/controls.tsx'
+import { tabId } from '../../lib/utils.ts'
 import { CapacityNote, ContainerGrid } from '../bases/ContainerGrid.tsx'
 import { PaldexGrid } from './Paldex.tsx'
 import { buildPaldex } from './paldex.ts'
+
+/** Ties the tab pair to the panel it drives, for `aria-controls`. */
+const PLAYER_TABS = 'player'
+const PLAYER_PANEL = 'player-panel'
 
 export function PlayerDetailPanel({
   index,
@@ -72,171 +78,174 @@ export function PlayerDetailPanel({
   )
 
   return (
-    <aside className="w-96 shrink-0 overflow-y-auto border-l border-[var(--color-line)]">
+    <aside className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)]">
       <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate font-display text-xl leading-tight">
-            {player.name}
-          </div>
-          <div className="label mt-1">
+          <div className="truncate text-xl leading-tight">{player.name}</div>
+          <div className="label mt-1.5">
             level {player.level}
             {detail ? ` · ${detail.platform}` : ''}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-text)]"
-        >
+        <IconButton label="Close" tone="ghost" size={24} onClick={onClose}>
           ×
-        </button>
+        </IconButton>
       </div>
 
-      <div className="flex gap-1 border-b border-[var(--color-line)] px-4 pt-2">
-        {(['overview', 'paldex'] as const).map((id) => (
-          <button
-            key={id}
-            type="button"
-            aria-current={tab === id ? 'true' : undefined}
-            onClick={() => setTab(id)}
-            className={cn(
-              'rounded-t-[4px] px-2.5 py-1 text-xs transition-colors',
-              tab === id
-                ? 'bg-[var(--color-raised)] text-[var(--color-text)]'
-                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]',
-            )}
-          >
-            {id}
-          </button>
-        ))}
-      </div>
+      {/* A genuine tab pair, so it gets genuine tab semantics: the panel below
+          points back at whichever of the two is selected. */}
+      <SegmentBar
+        name={PLAYER_TABS}
+        panelId={PLAYER_PANEL}
+        value={tab}
+        onChange={(id) => setTab(id as 'overview' | 'paldex')}
+        className="border-b border-[var(--color-line)] p-2"
+        tabs={[
+          { id: 'overview', label: 'overview' },
+          { id: 'paldex', label: 'paldex' },
+        ]}
+      />
 
-      {tab === 'paldex' && (
-        <div className="p-4">
-          <PaldexGrid view={paldex} />
-        </div>
-      )}
-
-      <div className={cn('space-y-6 p-4', tab !== 'overview' && 'hidden')}>
-        <section>
-          <Field label="pals owned" value={count(summary.pals.length)} />
-          <Field label="structures built" value={count(summary.built)} />
-          <Field
-            label="position"
-            value={formatMapPos(posToMap(detail?.pos ?? player.pos))}
-            hint={detail ? 'from player save' : 'last jump point'}
-          />
-          {detail?.technologyPoints !== undefined && (
-            <Field label="technology" value={count(detail.technologyPoints)} />
-          )}
-          {detail && (
-            <Field
-              label="paldex"
-              value={`${detail.record.paldexUnlocked} unlocked`}
-            />
-          )}
-          {detail?.lastOnlineTicks !== undefined && (
-            <Field
-              label="last online"
-              value={relativeTime(ticksToDate(detail.lastOnlineTicks))}
-            />
-          )}
-        </section>
-
-        {bases.length > 0 && (
-          <section>
-            <div className="label mb-2">bases they built in</div>
-            <ul className="space-y-1">
-              {bases.map((b) => (
-                <li key={b.baseId} className="text-xs">
-                  {baseLabel(
-                    b,
-                    index.bases.findIndex((x) => x.baseId === b.baseId) + 1,
-                    data?.landmarks,
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+      <div
+        id={PLAYER_PANEL}
+        role="tabpanel"
+        aria-labelledby={tabId(PLAYER_TABS, tab)}
+      >
+        {tab === 'paldex' && (
+          <div className="p-4">
+            <PaldexGrid view={paldex} />
+          </div>
         )}
 
-        {built.size > 0 && (
+        <div className={cn('space-y-6 p-4', tab !== 'overview' && 'hidden')}>
           <section>
-            {/* Uncapped. This was `.slice(0, 8)` with nothing saying so, which
+            <Field label="pals owned" value={count(summary.pals.length)} />
+            <Field label="structures built" value={count(summary.built)} />
+            <Field
+              label="position"
+              value={
+                <>
+                  {formatMapPos(posToMap(detail?.pos ?? player.pos))}
+                  <span className="label ml-2 normal-case">
+                    {detail ? 'from player save' : 'last jump point'}
+                  </span>
+                </>
+              }
+            />
+            {detail?.technologyPoints !== undefined && (
+              <Field
+                label="technology"
+                value={count(detail.technologyPoints)}
+              />
+            )}
+            {detail && (
+              <Field
+                label="paldex"
+                value={`${detail.record.paldexUnlocked} unlocked`}
+              />
+            )}
+            {detail?.lastOnlineTicks !== undefined && (
+              <Field
+                label="last online"
+                value={relativeTime(ticksToDate(detail.lastOnlineTicks))}
+              />
+            )}
+          </section>
+
+          {bases.length > 0 && (
+            <section>
+              <div className="label mb-2">bases they built in</div>
+              <ul className="space-y-1">
+                {bases.map((b) => (
+                  <li key={b.baseId} className="text-xs">
+                    {baseLabel(
+                      b,
+                      index.bases.findIndex((x) => x.baseId === b.baseId) + 1,
+                      data?.landmarks,
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {built.size > 0 && (
+            <section>
+              {/* Uncapped. This was `.slice(0, 8)` with nothing saying so, which
                 read as missing data rather than as a truncated list — the
                 biggest builder in a real save has 38 distinct types. */}
-            <div className="label mb-2">
-              what they build — {count(built.size)} types,{' '}
-              {count(summary.built)} placed
-            </div>
-            <Panel className="divide-y divide-[var(--color-line-faint)]">
-              {[...built]
-                .sort((a, b) => b[1] - a[1])
-                .map(([id, n]) => (
-                  <div
-                    key={id}
-                    className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
-                  >
-                    <span className="truncate">
-                      {data?.structures[id.toLowerCase()]?.name ?? id}
-                    </span>
-                    <span className="num shrink-0 text-[var(--color-muted)]">
-                      {count(n)}
-                    </span>
-                  </div>
-                ))}
-            </Panel>
-          </section>
-        )}
+              <div className="label mb-2">
+                what they build — {count(built.size)} types,{' '}
+                {count(summary.built)} placed
+              </div>
+              <Panel className="divide-y divide-[var(--color-line-faint)]">
+                {[...built]
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([id, n]) => (
+                    <div
+                      key={id}
+                      className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
+                    >
+                      <span className="truncate">
+                        {data?.structures[id.toLowerCase()]?.name ?? id}
+                      </span>
+                      <span className="num shrink-0 text-[var(--color-muted)]">
+                        {count(n)}
+                      </span>
+                    </div>
+                  ))}
+              </Panel>
+            </section>
+          )}
 
-        {topPals.length > 0 && (
-          <section>
-            <div className="label mb-2">
-              best pals{summary.pals.length > 12 ? ' — top 12 by IV' : ''}
-            </div>
-            <ul className="space-y-1.5">
-              {topPals.map((pal) => {
-                const info = data?.species[pal.characterId.toLowerCase()]
-                return (
-                  <li
-                    key={pal.instanceId}
-                    // The row shows a name, an IV bar and a level; everything
-                    // else about the pal was previously a click away.
-                    title={palTooltip(
-                      pal,
-                      info,
-                      (a) => data?.passives[a.toLowerCase()],
-                    )}
-                    className="flex items-center gap-2"
-                  >
-                    <GameIcon
-                      path={info?.icon}
-                      name={pal.characterId}
-                      elementName={info?.element1}
-                      size={24}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-xs">
-                      {palName(pal, info)}
-                    </span>
-                    {pal.isBoss && <Pill tone="warn">alpha</Pill>}
-                    <IVBar
-                      hp={pal.ivHp}
-                      attack={pal.ivAttack}
-                      defense={pal.ivDefense}
-                      width={40}
-                    />
-                    <span className="num w-8 shrink-0 text-right text-[10px] text-[var(--color-muted)]">
-                      {pal.level}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )}
+          {topPals.length > 0 && (
+            <section>
+              <div className="label mb-2">
+                best pals{summary.pals.length > 12 ? ' — top 12 by IV' : ''}
+              </div>
+              <ul className="space-y-1.5">
+                {topPals.map((pal) => {
+                  const info = data?.species[pal.characterId.toLowerCase()]
+                  return (
+                    <li
+                      key={pal.instanceId}
+                      // The row shows a name, an IV bar and a level; everything
+                      // else about the pal was previously a click away.
+                      title={palTooltip(
+                        pal,
+                        info,
+                        (a) => data?.passives[a.toLowerCase()],
+                      )}
+                      className="flex items-center gap-2"
+                    >
+                      <GameIcon
+                        path={info?.icon}
+                        name={pal.characterId}
+                        elementName={info?.element1}
+                        size={24}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs">
+                        {palName(pal, info)}
+                      </span>
+                      {pal.isBoss && <Pill tone="warn">alpha</Pill>}
+                      <IVBar
+                        hp={pal.ivHp}
+                        attack={pal.ivAttack}
+                        defense={pal.ivDefense}
+                        width={40}
+                      />
+                      <span className="num w-8 shrink-0 text-right text-[11px] text-[var(--color-muted)]">
+                        {pal.level}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
 
-        <Inventory index={index} playerUid={player.playerUid} />
+          <Inventory index={index} playerUid={player.playerUid} />
+        </div>
       </div>
     </aside>
   )
@@ -280,17 +289,14 @@ function Inventory({
       <CapacityNote className="mb-3" />
       <div className="space-y-4">
         {containers.map(({ slot, container }) => (
-          <div
-            key={container.containerId}
-            className="overflow-hidden rounded-[10px] border border-[var(--color-line)]"
-          >
+          <Panel key={container.containerId} className="overflow-hidden">
             <ContainerGrid
               container={container}
               index={index}
               title={SLOT_NAMES[slot] ?? slot}
               note={false}
             />
-          </div>
+          </Panel>
         ))}
       </div>
     </section>
@@ -320,7 +326,7 @@ function InventoryPrompt({ playerUid }: { playerUid: string }) {
   return (
     <section>
       <div className="label mb-2">inventory</div>
-      <Panel className="px-4 py-3">
+      <Panel padded>
         <p className="text-xs leading-relaxed text-[var(--color-muted)]">
           This player’s inventory lives in{' '}
           <span className="num text-[var(--color-text)]">
@@ -329,13 +335,13 @@ function InventoryPrompt({ playerUid }: { playerUid: string }) {
           , which the level file does not contain. Add it to see what they are
           carrying, their true position and their paldex progress.
         </p>
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={() => inputRef.current?.click()}
-          className="mt-3 w-full rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-xs transition-colors hover:border-[var(--color-signal)]"
+          className="mt-3 w-full"
         >
           Add player saves
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -349,25 +355,5 @@ function InventoryPrompt({ playerUid }: { playerUid: string }) {
         />
       </Panel>
     </section>
-  )
-}
-
-function Field({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] py-1.5">
-      <span className="label">{label}</span>
-      <span className="num text-right text-sm">
-        {value}
-        {hint && <span className="label ml-2 normal-case">{hint}</span>}
-      </span>
-    </div>
   )
 }

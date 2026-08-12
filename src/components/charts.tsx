@@ -115,14 +115,13 @@ export function Ring({
           fill="none"
           stroke="var(--color-signal)"
           strokeWidth={stroke}
-          strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - fraction)}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="num text-xl leading-none">{label ?? value}</span>
-        {sub && <span className="label mt-1 text-[9px]">{sub}</span>}
+        {sub && <span className="label mt-1">{sub}</span>}
       </div>
     </div>
   )
@@ -156,7 +155,7 @@ export function Histogram({
           <div
             key={b.from}
             title={`Level ${b.from}–${b.to}: ${count(b.count)}`}
-            className="min-w-0 flex-1 rounded-t-[2px] transition-opacity hover:opacity-80"
+            className="min-w-0 flex-1 transition-opacity hover:opacity-80"
             style={{
               // A one-pal band must still be visible, or the tail of the
               // distribution silently disappears.
@@ -318,9 +317,9 @@ export function BarList({
               {row.hint ?? count(row.value)}
             </span>
           </div>
-          <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]">
+          <div className="mt-1 h-[3px] w-full overflow-hidden bg-[var(--color-line)]">
             <div
-              className="h-full rounded-full"
+              className="h-full"
               style={{
                 width: `${(row.value / max) * 100}%`,
                 background: color,
@@ -419,6 +418,9 @@ export function Radar({
               Math.abs(x - cx) < 6 ? 'middle' : x > cx ? 'start' : 'end'
             }
             dominantBaseline="central"
+            // The 11px floor's one exception. Axis labels at 11px overlap at
+            // this radius, and growing the chart to fit them is a layout change
+            // for another day — see docs/redesign.md, decision 10.
             fontSize={8}
             fill="var(--color-muted)"
             fontFamily="var(--font-mono)"

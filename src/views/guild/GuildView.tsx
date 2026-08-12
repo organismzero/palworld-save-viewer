@@ -36,6 +36,7 @@ import {
   Ring,
 } from '../../components/charts.tsx'
 import {
+  Meter,
   OnlineDot,
   Panel,
   PassiveChip,
@@ -43,6 +44,7 @@ import {
   SectionHeading,
   type PillTone,
 } from '../../components/primitives.tsx'
+import { Button, Checkbox, SelectControl } from '../../components/controls.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 
 /**
@@ -177,7 +179,7 @@ function GuildHero({
     <header className="mb-10">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate font-display text-3xl tracking-tight">
+          <h1 className="truncate font-display text-3xl leading-none font-[200] tracking-[0.06em]">
             {guild.name || 'Unnamed guild'}
           </h1>
           <p className="label mt-2">
@@ -196,33 +198,29 @@ function GuildHero({
 
         <div className="flex flex-wrap items-center gap-3">
           {guilds.length > 1 && (
-            <select
+            <SelectControl
+              aria-label="Guild"
               value={guild.groupId}
-              onChange={(e) => onSelect(e.target.value)}
-              className="rounded-[6px] border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-signal)]"
-            >
-              {guilds.map((g) => (
-                <option key={g.groupId} value={g.groupId}>
-                  {g.name || 'Unnamed'} ({g.members.length})
-                </option>
-              ))}
-            </select>
+              onChange={onSelect}
+              className="w-56"
+              options={guilds.map((g) => ({
+                value: g.groupId,
+                label: `${g.name || 'Unnamed'} (${g.members.length})`,
+              }))}
+            />
           )}
           {hasGroups && (
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted)]">
-              <input
-                type="checkbox"
-                checked={showGroups}
-                onChange={(e) => onShowGroups(e.target.checked)}
-                className="accent-[var(--color-signal)]"
-              />
-              show system groups
-            </label>
+            <Checkbox
+              checked={showGroups}
+              onChange={onShowGroups}
+              label="show system groups"
+              className="text-xs text-[var(--color-muted)]"
+            />
           )}
         </div>
       </div>
 
-      <Panel className="flex flex-wrap items-center gap-8 px-6 py-5">
+      <Panel padded className="flex flex-wrap items-center gap-8">
         {/*
           The ring shows how much of this dashboard is exact, not the camp
           level — the camp level has no known maximum, and a progress ring
@@ -335,7 +333,7 @@ function MemberStrip({ index, guild }: { index: SaveIndex; guild: Guild }) {
               player ? ` · level ${player.level}` : ''
             }`}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full border font-mono text-[10px] uppercase',
+              'flex h-8 w-8 items-center justify-center rounded-full border font-mono text-[11px] uppercase',
               RING_TONES[role.tone],
             )}
           >
@@ -362,7 +360,7 @@ function Markers({ guild }: { guild: Guild }) {
       {guild.markers.map((m) => (
         <span
           key={m.markerId}
-          className="num rounded-[4px] border border-[var(--color-line)] px-2 py-1 text-[11px] text-[var(--color-muted)]"
+          className="num rounded-control border border-[var(--color-line-strong)] px-2 py-1 text-[11px] text-[var(--color-muted)]"
         >
           #{m.icon} · {formatMapPos(posToMap(m.pos))}
         </span>
@@ -378,13 +376,9 @@ function Markers({ guild }: { guild: Guild }) {
         positional member on the `Focus` union — worth doing, but alongside map
         deep links rather than here.
       */}
-      <button
-        type="button"
-        onClick={() => useUiStore.getState().setView('map')}
-        className="rounded-[6px] border border-[var(--color-line)] px-2.5 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
-      >
+      <Button size="sm" onClick={() => useUiStore.getState().setView('map')}>
         Open map
-      </button>
+      </Button>
     </div>
   )
 }
@@ -444,7 +438,7 @@ function Players({
               onSelect={() => onSelect(m.player!)}
             />
           ) : (
-            <Panel key={m.uid} className="px-4 py-3">
+            <Panel key={m.uid} padded>
               <div className="text-sm">{m.name}</div>
               <p className="label mt-2">
                 in the guild record, but no character in this save
@@ -487,10 +481,10 @@ function PlayerCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        'raised-edge rounded-[10px] border bg-[var(--color-surface)] p-4 text-left transition-colors',
+        'raised-edge rounded-panel border bg-[rgb(10_24_33/0.7)] p-4 text-left transition-colors',
         selected
-          ? 'border-[var(--color-signal)]/60'
-          : 'border-[var(--color-line)] hover:border-[var(--color-signal)]/40',
+          ? 'border-[var(--color-signal)]'
+          : 'border-[var(--color-line)] hover:border-[var(--color-signal)]/60',
       )}
     >
       <div className="flex items-baseline gap-2">
@@ -504,19 +498,22 @@ function PlayerCard({
         <span className="num ml-auto shrink-0 text-sm">{player.level}</span>
       </div>
 
-      {/* An XP bar only when the levelling curve gives it a real denominator. */}
+      {/* A real meter only when the levelling curve gives it a real
+          denominator; otherwise the raw figure, which is all the save knows. */}
       {progress !== undefined ? (
         <div
-          className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]"
+          className="mt-2"
           title={`${Math.round(progress * 100)}% to level ${player.level + 1}`}
         >
-          <div
-            className="h-full rounded-full bg-[var(--color-signal)]"
-            style={{ width: `${progress * 100}%` }}
+          <Meter
+            value={Math.round(progress * 100)}
+            tone="xp"
+            height={6}
+            showValue={false}
           />
         </div>
       ) : (
-        <div className="num mt-2 text-[10px] text-[var(--color-muted)]">
+        <div className="num mt-2 text-[11px] text-[var(--color-muted)]">
           {count(player.exp)} xp
         </div>
       )}
@@ -531,12 +528,12 @@ function PlayerCard({
         {STATUS_ORDER.filter((k) => (player.statusPoints[k] ?? 0) > 0).map(
           (k) => (
             <div key={k} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 truncate text-[10px] text-[var(--color-muted)]">
+              <span className="w-24 shrink-0 truncate text-[11px] text-[var(--color-muted)]">
                 {STATUS_LABELS[k]}
               </span>
-              <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--color-line)]">
+              <span className="h-[3px] flex-1 overflow-hidden bg-[var(--color-line)]">
                 <span
-                  className="block h-full rounded-full bg-[var(--color-signal)]/70"
+                  className="block h-full bg-[var(--color-signal)]/70"
                   style={{
                     // Points are unbounded in principle; 20 is a readable
                     // full-bar reference for a real save's spread.
@@ -544,7 +541,7 @@ function PlayerCard({
                   }}
                 />
               </span>
-              <span className="num w-4 shrink-0 text-right text-[10px]">
+              <span className="num w-4 shrink-0 text-right text-[11px]">
                 {player.statusPoints[k]}
               </span>
             </div>
@@ -568,14 +565,14 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dd className="num text-sm">{value}</dd>
-      <dt className="label text-[9px]">{label}</dt>
+      <dt className="label">{label}</dt>
     </div>
   )
 }
 
 function LastSeen({ seen }: { seen: ReturnType<typeof lastSeenFor> }) {
   if (seen.onlineAtSave) {
-    return <span className="text-[oklch(0.78_0.16_150)]">online at save</span>
+    return <span className="text-[var(--color-hp)]">online at save</span>
   }
   if (seen.source === 'player-save') return <>{relativeTime(seen.at)}</>
   if (seen.source === 'guild-uptime') {
@@ -650,17 +647,17 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
       <PaldexRollup index={index} guild={guild} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel className="p-5">
+        <Panel padded>
           <div className="label mb-3">level distribution</div>
           <Histogram bins={bins} />
         </Panel>
 
-        <Panel className="p-5">
+        <Panel padded>
           <div className="label mb-3">elements</div>
           <Donut slices={slices} />
         </Panel>
 
-        <Panel className="p-5">
+        <Panel padded>
           <div className="label mb-3">most common species</div>
           <BarList
             rows={topSpecies.map(({ id, count: n }) => ({
@@ -671,7 +668,7 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
           />
         </Panel>
 
-        <Panel className="p-5">
+        <Panel padded>
           <div className="label mb-1">work suitability coverage</div>
           <p className="mb-2 text-xs text-[var(--color-muted)]">
             {weakest && weakest.levels === 0
@@ -688,7 +685,7 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
           </div>
         </Panel>
 
-        <Panel className="p-5 lg:col-span-2">
+        <Panel padded className="lg:col-span-2">
           <div className="label mb-3">most common passives</div>
           <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
             {passives.map((p) => (
@@ -741,7 +738,7 @@ function PaldexRollup({ index, guild }: { index: SaveIndex; guild: Guild }) {
   if (rows.length === 0) return null
 
   return (
-    <Panel className="mb-4 p-5">
+    <Panel padded className="mb-4">
       <div className="label mb-1">paldex by member</div>
       <p className="mb-3 text-xs text-[var(--color-muted)]">
         Species caught, per player. Rows marked “owned now” are counted from the

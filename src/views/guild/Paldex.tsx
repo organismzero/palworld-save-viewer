@@ -21,7 +21,7 @@ export function PaldexGrid({ view }: { view: PaldexView }) {
   return (
     <>
       <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="num text-2xl">
+        <span className="num text-2xl leading-none">
           {count(view.caught)}
           <span className="text-[var(--color-muted)]">
             /{count(view.total)}
@@ -55,20 +55,21 @@ export function PaldexGrid({ view }: { view: PaldexView }) {
               c.caught ? '' : ' · not caught'
             }`}
             className={cn(
-              'relative flex aspect-square items-center justify-center rounded-[4px] border',
+              'relative flex aspect-square items-center justify-center rounded-slot border',
               c.caught
-                ? 'border-[var(--color-line)]'
+                ? 'border-[var(--color-line)] bg-[rgb(3_9_13/0.75)] shadow-[var(--edge-sunken)]'
                 : 'border-transparent opacity-20 grayscale',
               // A ring rather than a tint: lucky pals are a property of the
               // pal, and tinting the cell would collide with element colour.
-              c.lucky && 'ring-1 ring-[var(--color-signal)]',
+              c.lucky &&
+                'border-[var(--color-signal)] shadow-[var(--glow-signal)]',
             )}
           >
             <GameIcon path={c.icon} name={c.name} size={34} />
             {c.alpha && (
               <span
                 aria-hidden
-                className="absolute top-0 right-0.5 text-[9px] leading-none text-[var(--color-signal)]"
+                className="absolute top-0 right-0.5 text-[11px] leading-none text-[var(--color-signal)]"
               >
                 ▲
               </span>
