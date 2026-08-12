@@ -19,6 +19,7 @@ import {
   type Column,
 } from '../lib/export.ts'
 import { useSaveStore } from '../store/saveStore.ts'
+import { Button } from './controls.tsx'
 
 export function ExportMenu<T>({
   rows,
@@ -53,9 +54,9 @@ export function ExportMenu<T>({
     <span className="flex items-center gap-1" title={title}>
       <span className="label">export</span>
       {(['csv', 'json'] as const).map((ext) => (
-        <button
+        <Button
           key={ext}
-          type="button"
+          size="sm"
           disabled={disabled}
           onClick={() => save(ext)}
           title={
@@ -63,10 +64,10 @@ export function ExportMenu<T>({
               ? 'Nothing to export'
               : `Download ${rows.length.toLocaleString()} rows as ${ext.toUpperCase()}`
           }
-          className="rounded-[4px] border border-[var(--color-line)] px-1.5 py-0.5 text-[11px] uppercase transition-colors hover:border-[var(--color-signal)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-[var(--color-line)]"
+          className="uppercase"
         >
           {ext}
-        </button>
+        </Button>
       ))}
     </span>
   )

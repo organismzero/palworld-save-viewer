@@ -2,14 +2,13 @@
  * The two informational surfaces: where the data comes from, and what the
  * keyboard does.
  *
- * Hand-rolled rather than pulled from a component library. A modal needs three
- * things to be correct — Escape closes it, a backdrop click closes it, and
- * focus does not escape behind it — and `<dialog>` gives all three natively,
- * including the top-layer stacking that otherwise takes a portal and a
- * z-index argument.
+ * Both sit in the shared `Modal`, which is still `<dialog>` underneath — a modal
+ * needs Escape, a backdrop click and contained focus to be correct, and the
+ * platform gives all three, including top-layer stacking that otherwise takes a
+ * portal and a z-index argument.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { clearCache } from '../refdata/refdata.ts'
 import { bytes, relativeTime } from '../lib/format.ts'
@@ -21,55 +20,7 @@ import {
   setRememberPref,
 } from '../store/session.ts'
 import { useUiStore } from '../store/uiStore.ts'
-
-function Modal({
-  open,
-  onClose,
-  title,
-  children,
-}: {
-  open: boolean
-  onClose: () => void
-  title: string
-  children: ReactNode
-}) {
-  const ref = useRef<HTMLDialogElement>(null)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    // `showModal` is what puts the element in the top layer and traps focus;
-    // toggling the `open` attribute directly does neither.
-    if (open && !el.open) el.showModal()
-    else if (!open && el.open) el.close()
-  }, [open])
-
-  return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => {
-        // The backdrop is part of the dialog element, so a click landing on
-        // the element itself rather than its contents is a backdrop click.
-        if (e.target === ref.current) onClose()
-      }}
-      className="raised-edge m-auto w-full max-w-2xl rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)] p-0 text-[var(--color-text)] backdrop:bg-black/60 backdrop:backdrop-blur-sm"
-    >
-      <div className="flex items-center justify-between gap-4 border-b border-[var(--color-line)] px-5 py-3">
-        <h2 className="font-display text-lg">{title}</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="text-[var(--color-muted)] hover:text-[var(--color-text)]"
-        >
-          ×
-        </button>
-      </div>
-      <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
-    </dialog>
-  )
-}
+import { Modal } from '../components/controls.tsx'
 
 /* -------------------------------------------------------------------------
    Data sources and licence

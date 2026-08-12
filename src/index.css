@@ -213,6 +213,13 @@
   --tick-size: 10px;
   --tick-color: var(--color-line-strong);
 
+  /* The one filled state in the system: an active tab, a selected menu entry, a
+     ticked checkbox, a primary button. Everything else is a hairline. */
+  --surface-select-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-select) 82%, white),
+    color-mix(in srgb, var(--color-select) 88%, black)
+  );
   /* Selected rows fill left-to-right so long rows stay readable. */
   --surface-row-selected: linear-gradient(
     90deg,
@@ -293,9 +300,14 @@
   }
 
   /* A native dialog is display:none until opened; these restore the layout the
-     modal wants without needing a wrapper element inside it. */
+     modal wants without needing a wrapper element inside it.
+
+     The entrance animation lives here rather than on a class because it has to
+     fire on *open*: going from `display: none` to `block` restarts it, where a
+     class on a permanently mounted element would only ever run once, at mount. */
   dialog[open] {
     display: block;
+    animation: pw-panel-in var(--dur-base) var(--ease-out);
   }
 
   /* One rule covering every animation and transition in the app, including
@@ -362,7 +374,7 @@
     --tick: linear-gradient(var(--tick-color), var(--tick-color));
     content: '';
     position: absolute;
-    inset: 0;
+    inset: var(--tick-inset, 0);
     z-index: -1;
     pointer-events: none;
     background-image:

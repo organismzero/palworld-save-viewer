@@ -99,7 +99,7 @@ Also worth recording: **`SaveSummary.tsx` was missing from this plan entirely.**
 
 ### Stage 3 — the controls
 
-_Files:_ `src/components/controls.tsx` (new), `src/components/ExportMenu.tsx`
+**Landed.** _Files:_ `src/components/controls.tsx` (new), `src/components/ExportMenu.tsx`, `src/app/Dialogs.tsx`, `src/index.css`, `src/lib/utils.ts`
 
 The controls the views currently write inline become named components: `Button` (tones `default|signal|primary|danger|ghost`, sizes `sm|md|lg`, `keyHint`, `icon`) · `IconButton` · `TextInput` · `Checkbox` · `SelectControl` · `RangeControl` · `TabBar` · `SegmentBar` · `MenuButton` · `ListRow` · `Modal` · `ConfirmDialog`.
 
@@ -109,7 +109,13 @@ The controls the views currently write inline become named components: `Button` 
 
 `ExportMenu` is restyled in place, keeping its `rows` + `columns` API.
 
-Additive apart from `ExportMenu`, so this stage is cheap to review and unblocks 4–9.
+Additive apart from `ExportMenu` and `Dialogs.tsx`, which drops its private `Modal` for the shared one — so this stage is cheap to review and unblocks 4–9.
+
+Landed with four notes. **Manual activation** on both tab strips: arrows and Home/End move focus, and only Enter, Space or a click selects, because automatic activation would mount the Pixi map chunk on the way past it. **`tabId` lives in `lib/utils.ts`**, not beside `TabBar`, because exporting a function from a component module costs a `react-refresh` warning and this repo has none. **`ListRow` is a real `<button>`** when clickable rather than the package's `<div role="button">`, which no keyboard can reach; **`Checkbox` drives a styled span from a hidden input** through `peer-*`, since its tick is a `✓` character and pseudo-elements on a replaced element are not worth betting a checkbox on.
+
+Two bugs the throwaway render caught, both invisible to typecheck. The modal's close cross did not appear at all: the UA stylesheet sets `dialog { overflow: auto }`, which clips a child floating above the frame, so the dialog is now explicitly `overflow-visible`. And the entrance animation had to move to `dialog[open]` in `index.css` — on a class it would fire once at mount rather than on every open, because `display: none` → `block` is what restarts an animation.
+
+**`ConfirmDialog` is deliberately absent.** The package defines it because the game asks before it acts; nothing in this app asks. _Forget this save_ and _Clear cached game data_ both act immediately, and adding a confirmation step is a behaviour change rather than a restyling. It is fifteen lines on top of `Modal` if a surface ever needs one.
 
 ### Stage 4 — the shell
 
