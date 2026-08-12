@@ -4,3 +4,7 @@ pnpm-lock.yaml
 test/fixtures
 data
 LICENSE
+
+# The design-system skill is a vendored specification — reformatting it would
+# make it diverge from the package it was generated as. See docs/redesign.md.
+.claude

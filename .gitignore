@@ -154,3 +154,8 @@ data
 # never be committed — see SOURCES.md.
 spike/
 .gstack/
+
+# Agent skills, including the design-system package the redesign is built
+# against. A local specification rather than part of the app — see
+# docs/redesign.md, which cites it.
+.claude/

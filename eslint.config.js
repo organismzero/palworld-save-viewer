@@ -7,7 +7,11 @@ import tseslint from 'typescript-eslint'
 export default tseslint.config(
   // `spike/` is the gitignored M0 measurement harness — throwaway by design,
   // and not held to the same bar as shipping code. See docs/spike-m0.md.
-  { ignores: ['dist', 'node_modules', 'test/fixtures', 'spike'] },
+  //
+  // `.claude/` holds the design-system skill: framework-free JSX and hand-written
+  // `.d.ts` props contracts that are a specification to read, not code that ships.
+  // Linting them fails on their own unused React imports. See docs/redesign.md.
+  { ignores: ['dist', 'node_modules', 'test/fixtures', 'spike', '.claude'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
