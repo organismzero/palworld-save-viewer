@@ -116,7 +116,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
 
   return (
     <div className="flex h-[calc(100dvh-3.25rem)]">
-      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)]/60 p-4">
+      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
         <div>
           <div className="label mb-2">whose pals</div>
           <select
@@ -156,7 +156,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
         />
       </aside>
 
-      <aside className="w-72 shrink-0 overflow-hidden border-r border-[var(--color-line)]/60">
+      <aside className="w-72 shrink-0 overflow-hidden border-r border-[var(--color-line)]">
         <div className="p-4 pb-2">
           <div className="label mb-2">what to breed</div>
           <input
@@ -473,7 +473,7 @@ function StockPanel({
         accent
         hint="including the ones they already hold"
       />
-      <Panel className="divide-y divide-[var(--color-line)]/40 text-xs">
+      <Panel className="divide-y divide-[var(--color-line-faint)] text-xs">
         <Row label="pals counted" value={count(stock.counted)} />
         {stock.includedGuild && (
           <>
@@ -514,7 +514,7 @@ function StockPanel({
       {stock.includedGuild && stock.byOwner.size > 1 && (
         <div>
           <div className="label mb-1.5">who is contributing</div>
-          <Panel className="divide-y divide-[var(--color-line)]/40 text-xs">
+          <Panel className="divide-y divide-[var(--color-line-faint)] text-xs">
             {[...stock.byOwner]
               .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
               .map(([uid, n]) => (
@@ -653,7 +653,7 @@ function SpeciesList({
  */
 function Footnote({ stock }: { stock: Stock }) {
   return (
-    <section className="border-t border-[var(--color-line)]/40 pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
+    <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
         {stock.includedGuild ? (
           <>

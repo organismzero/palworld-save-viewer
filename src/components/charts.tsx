@@ -318,7 +318,7 @@ export function BarList({
               {row.hint ?? count(row.value)}
             </span>
           </div>
-          <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]/60">
+          <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]">
             <div
               className="h-full rounded-full"
               style={{

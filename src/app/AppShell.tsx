@@ -201,7 +201,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex h-13 shrink-0 items-center gap-4 border-b border-[var(--color-line)]/60 px-4">
+      <header className="flex h-13 shrink-0 items-center gap-4 border-b border-[var(--color-line)] px-4">
         <span className="font-display text-sm tracking-tight">
           Palworld Save Viewer
         </span>
@@ -329,7 +329,7 @@ function RememberOffer() {
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-line)]/60 bg-[var(--color-surface)] px-4 py-2 text-sm">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm">
       <span>Keep this save in this browser?</span>
       <span className="text-[var(--color-muted)]">
         It stays on this machine and is never uploaded — it just means you do

@@ -65,9 +65,13 @@ Add `.claude` to all three. Ends with `pnpm lint` passing for the first time sin
 
 ### Stage 1 — tokens
 
-_Files:_ `src/index.css`, `src/main.tsx`, `src/fonts/` (new), `SOURCES.md`
+**Landed.** _Files:_ `src/index.css`, `src/main.tsx`, `src/fonts/` (new), `SOURCES.md`, `package.json`
 
 Vendor Titillium Web and JetBrains Mono as `.woff2` with local `@font-face` rules, replacing the three `@fontsource-variable` imports in `main.tsx`. Record the substitution in `SOURCES.md`.
+
+Landed as: Titillium Web 200/400/600/700 and the JetBrains Mono variable cut, `latin` and `latin-ext` each — ten files, 160 KB. Titillium 300 is not included because nothing uses it, no italics because nothing in the product is italic, and mono needs only the one variable file per subset. The three now-unused `@fontsource-variable` packages were removed from `package.json` rather than left installed.
+
+Two notes on what was not ported. The package's `--type-*` composites are `font:` shorthands, which reset every font property they omit — including the `tabular-nums` that `.num` exists to set — so type is said with utilities plus `.num` and `.label`, as this codebase already does. `--blur-panel` lands as a bare `14px` because Tailwind's namespace wants a length; the `saturate(115%)` half of the system's value belongs on the component in stage 2.
 
 Replace the `@theme` block per decision 12. In `@theme`: `--color-*` for ground, lines, ink, accents, status, rarity and the nine element hues; `--font-display|ui|mono`; `--text-2xs … --text-title`; `--radius-slot|control|panel`; `--tracking-title|label`; `--blur-panel`; `--shadow-modal`; `--ease-out|in-out|snap`; `--animate-pulse-dot`. In `:root`: `--space-*`, `--slot-size`, `--slot-gap`, `--row-height`, `--tab-height`, `--panel-pad`, `--rail-width`, `--detail-width`, `--header-height`, `--edge-raised|sunken|panel`, `--sheen-panel`, `--tick-size|color`, `--glow-signal|select`, `--dur-*`, `--weight-*`.
 

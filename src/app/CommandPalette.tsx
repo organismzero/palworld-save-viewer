@@ -222,7 +222,7 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
               ? 'Search pals, items, players, bases…'
               : 'Load a save to search it'
           }
-          className="w-full border-b border-[var(--color-line)]/60 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-[var(--color-muted)]"
+          className="w-full border-b border-[var(--color-line)] bg-transparent px-4 py-3 text-sm outline-none placeholder:text-[var(--color-muted)]"
         />
         <Command.List className="max-h-[50vh] overflow-y-auto p-2">
           <Command.Empty className="label px-2 py-6 text-center">

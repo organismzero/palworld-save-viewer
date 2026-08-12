@@ -41,7 +41,7 @@ export function ContainerGrid({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)]/60 px-4 py-3">
+      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate font-display text-lg leading-tight">
             {title}
@@ -156,7 +156,7 @@ function ItemList({ container }: { container: Container }) {
   }
 
   return (
-    <Panel className="mt-4 divide-y divide-[var(--color-line)]/40">
+    <Panel className="mt-4 divide-y divide-[var(--color-line-faint)]">
       {[...merged]
         .sort((a, b) => b[1] - a[1])
         .map(([staticId, n]) => {

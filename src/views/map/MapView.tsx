@@ -232,7 +232,7 @@ export function MapView({ index }: { index: SaveIndex }) {
             className="w-full bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[var(--color-muted)]"
           />
           {results.length > 0 && (
-            <ul className="max-h-64 overflow-y-auto border-t border-[var(--color-line)]/50">
+            <ul className="max-h-64 overflow-y-auto border-t border-[var(--color-line)]">
               {results.map((r) => (
                 <li key={r.kind + r.id}>
                   <button

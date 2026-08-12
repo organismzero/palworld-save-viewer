@@ -72,7 +72,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
 
   return (
     <div className="mx-auto max-w-6xl p-8">
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-line)]/60 pb-5">
+      <header className="mb-10 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-line)] pb-5">
         <div>
           <h1 className="font-display text-3xl tracking-tight">
             {fileName ?? 'Save'}
@@ -133,7 +133,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
 
       <section className="mb-10">
         <SectionHeading title="Overview" />
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)]/60 bg-[var(--color-line)]/60 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3 lg:grid-cols-6">
           <StatTile label="pals" value={s.pals} accent />
           <StatTile label="species" value={s.species} />
           <StatTile label="players" value={s.players} />
@@ -184,7 +184,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               )
             }
           />
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)]/60 bg-[var(--color-line)]/60 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3 lg:grid-cols-6">
             {localData.fog.map((f) => (
               <StatTile
                 key={f.map}
@@ -454,7 +454,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           )}
 
           {ledger.length > 0 && (
-            <div className="mt-4 border-t border-[var(--color-line)]/40 pt-3">
+            <div className="mt-4 border-t border-[var(--color-line-faint)] pt-3">
               <div className="label mb-2">player saves</div>
               <ul className="grid gap-1 text-xs sm:grid-cols-2">
                 {ledger.map((f) => (

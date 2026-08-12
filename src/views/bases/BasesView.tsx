@@ -275,14 +275,14 @@ export function BasesView({ index }: { index: SaveIndex }) {
         )}
       </div>
 
-      <aside className="flex w-80 shrink-0 flex-col border-l border-[var(--color-line)]/60">
+      <aside className="flex w-80 shrink-0 flex-col border-l border-[var(--color-line)]">
         {/*
           Exports whatever the centre column is currently listing, which is the
           useful granularity here: "everything in this base" rather than the
           one container that happens to be selected. One row per stack, because
           a container is a sparse set of slots and not a rectangle.
         */}
-        <div className="flex shrink-0 justify-end border-b border-[var(--color-line)]/60 px-3 py-1.5">
+        <div className="flex shrink-0 justify-end border-b border-[var(--color-line)] px-3 py-1.5">
           <ExportMenu
             rows={containerRows(index, data, visibleContainers)}
             columns={CONTAINER_COLUMNS}
@@ -358,7 +358,7 @@ function SourceRail({
   const unknown = orphans.filter((c) => c.ownerKind === 'unknown').length
 
   return (
-    <aside className="w-60 shrink-0 overflow-y-auto border-r border-[var(--color-line)]/60 p-3">
+    <aside className="w-60 shrink-0 overflow-y-auto border-r border-[var(--color-line)] p-3">
       <div className="label mb-2 px-1">bases</div>
       <ul className="space-y-1">
         {bases.map((base) => {
@@ -599,7 +599,7 @@ function StructureList({
       </div>
 
       {base && (
-        <div className="w-72 shrink-0 border-l border-[var(--color-line)]/60 p-4">
+        <div className="w-72 shrink-0 border-l border-[var(--color-line)] p-4">
           <div className="label mb-2">plan</div>
           <BasePlan
             base={base}
@@ -645,7 +645,7 @@ function GroupHeader({
     <button
       type="button"
       onClick={onToggle}
-      className="flex h-full w-full items-center gap-2 border-b border-[var(--color-line)]/40 bg-[var(--color-abyss)]/80 px-4 text-left backdrop-blur"
+      className="flex h-full w-full items-center gap-2 border-b border-[var(--color-line-faint)] bg-[var(--color-abyss)]/80 px-4 text-left backdrop-blur"
     >
       <span
         aria-hidden
@@ -757,7 +757,7 @@ function OrphanList({
 
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-      <p className="border-b border-[var(--color-line)]/40 px-4 py-3 text-xs leading-relaxed text-[var(--color-muted)]">
+      <p className="border-b border-[var(--color-line-faint)] px-4 py-3 text-xs leading-relaxed text-[var(--color-muted)]">
         No map object claims these. Most are pal gear and player inventories,
         whose owning records live in <span className="num">Players/*.sav</span>{' '}
         rather than in the level — drop that folder to attribute them exactly.
@@ -900,7 +900,7 @@ function StructureDetail({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)]/60 px-4 py-3">
+      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate font-display text-lg leading-tight">
             {name}
@@ -961,7 +961,7 @@ function StructureDetail({
         </dl>
 
         {container ? (
-          <div className="-mx-4 mt-4 border-t border-[var(--color-line)]/60">
+          <div className="-mx-4 mt-4 border-t border-[var(--color-line)]">
             <ContainerGrid
               container={container}
               index={index}
@@ -995,7 +995,7 @@ function DetailRow({
   return (
     <div
       title={hint}
-      className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line)]/30 pb-1.5"
+      className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] pb-1.5"
     >
       <dt className="label shrink-0">{label}</dt>
       <dd className="num truncate text-right">{value}</dd>
@@ -1037,7 +1037,7 @@ function ItemSearch({
   const [expanded, setExpanded] = useState<string>()
 
   return (
-    <div className="relative border-b border-[var(--color-line)]/60">
+    <div className="relative border-b border-[var(--color-line)]">
       <div className="flex items-center gap-3 px-4 py-2.5">
         <input
           value={query}
@@ -1064,7 +1064,7 @@ function ItemSearch({
 
       {query.trim() !== '' && (
         <div className="absolute inset-x-4 top-full z-20 max-h-[60vh] overflow-y-auto">
-          <Panel className="divide-y divide-[var(--color-line)]/40">
+          <Panel className="divide-y divide-[var(--color-line-faint)]">
             {hits.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-[var(--color-muted)]">
                 Nothing in this save matches “{query}”.
@@ -1103,7 +1103,7 @@ function ItemSearch({
                     </button>
 
                     {expanded === hit.staticId && (
-                      <ul className="border-t border-[var(--color-line)]/40 bg-[var(--color-abyss)]/40">
+                      <ul className="border-t border-[var(--color-line-faint)] bg-[var(--color-abyss)]/40">
                         {hit.places.map((place) => {
                           const c = index.containerById.get(place.containerId)
                           if (!c) return null

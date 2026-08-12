@@ -160,7 +160,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
   return (
     <div className="flex h-[calc(100dvh-3.25rem)]">
       {/* Filter rail */}
-      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)]/60 p-4">
+      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
         <div>
           <input
             value={query}
@@ -283,7 +283,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
           comes out. An export that ignored the filters would make the rail
           pointless for the one job people want a spreadsheet for.
         */}
-        <div className="mt-auto border-t border-[var(--color-line)]/60 pt-3">
+        <div className="mt-auto border-t border-[var(--color-line)] pt-3">
           <ExportMenu
             rows={filtered}
             columns={palColumns(index, data)}
@@ -299,7 +299,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
 
       {/* Grid */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-3 border-b border-[var(--color-line)]/60 px-4 py-2.5">
+        <div className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-2.5">
           <span className="label">
             {count(filtered.length)} of {count(index.pals.length)} pals
           </span>
@@ -416,7 +416,7 @@ function PalCard({
           ? `radial-gradient(120% 100% at 0% 100%, color-mix(in oklch, ${el.oklch} 16%, transparent), transparent 70%)`
           : undefined,
       }}
-      className="raised-edge group relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-[var(--color-line)]/60 bg-[var(--color-surface)] p-3 text-left transition-colors hover:border-[var(--color-signal)]/60"
+      className="raised-edge group relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)] p-3 text-left transition-colors hover:border-[var(--color-signal)]/60"
     >
       <div className="flex items-start gap-2.5">
         <GameIcon
@@ -506,7 +506,7 @@ function PalDetail({
   const percentile = cohort.length > 1 ? better / cohort.length : 0
 
   return (
-    <aside className="w-80 shrink-0 overflow-y-auto border-l border-[var(--color-line)]/60 p-4">
+    <aside className="w-80 shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <GameIcon
@@ -591,7 +591,7 @@ function PalDetail({
       {info?.work && Object.keys(info.work).length > 0 && (
         <>
           <div className="label mt-5 mb-2">work suitability</div>
-          <Panel className="divide-y divide-[var(--color-line)]/40">
+          <Panel className="divide-y divide-[var(--color-line-faint)]">
             {Object.entries(info.work).map(([id, level]) => (
               <div
                 key={id}
@@ -633,7 +633,7 @@ function Field({
   return (
     <div
       title={title}
-      className="mt-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-line)]/30 pb-1.5"
+      className="mt-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] pb-1.5"
     >
       <span className="label">{label}</span>
       <span className="num text-sm">{value}</span>

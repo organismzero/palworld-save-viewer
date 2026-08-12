@@ -55,7 +55,7 @@ function Modal({
       }}
       className="raised-edge m-auto w-full max-w-2xl rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)] p-0 text-[var(--color-text)] backdrop:bg-black/60 backdrop:backdrop-blur-sm"
     >
-      <div className="flex items-center justify-between gap-4 border-b border-[var(--color-line)]/60 px-5 py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-[var(--color-line)] px-5 py-3">
         <h2 className="font-display text-lg">{title}</h2>
         <button
           type="button"
@@ -223,7 +223,7 @@ export function ShortcutsDialog() {
         {SHORTCUTS.map((s) => (
           <div
             key={s.what}
-            className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line)]/30 pb-1.5"
+            className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] pb-1.5"
           >
             <dt className="text-sm">{s.what}</dt>
             <dd className="flex shrink-0 gap-1">

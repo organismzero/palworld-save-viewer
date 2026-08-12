@@ -114,8 +114,28 @@ PalworldSaveTools is itself downstream of
 
 - [`ooz-wasm`](https://github.com/SnosMe/ooz-wasm) — GPL-3.0-or-later (see above)
 - [Pixi.js](https://pixijs.com/) — MIT
-- Fonts: Bricolage Grotesque, Instrument Sans, Martian Mono — all SIL OFL,
-  self-hosted rather than loaded from a CDN.
+
+## Fonts
+
+Two families, both [SIL OFL 1.1](https://openfontlicense.org), vendored as
+`.woff2` under `src/fonts/` with their licence text beside them, as the OFL
+requires. They are neither loaded from a CDN nor installed as a package: a
+webfont request on every cold load would make the game-art fetch above the
+second exception to "nothing leaves your machine" rather than the only one, and
+would break the promise that a second visit needs no network at all.
+
+- [Titillium Web](https://fonts.google.com/specimen/Titillium+Web) — © 2009–2011
+  Accademia di Belle Arti di Urbino and students of the MA course in Visual
+  design. Weights 200, 400, 600 and 700, `latin` and `latin-ext`.
+- [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) — © 2020 The
+  JetBrains Mono Project Authors. Variable weight axis, `latin` and `latin-ext`.
+
+**Both are substitutions.** Palworld's own UI typeface is not redistributable
+and is not in this repository; Titillium Web is the closest freely available
+match to its squarish humanist letterforms, and JetBrains Mono carries the save
+data. Files were taken from [Fontsource](https://fontsource.org) via jsDelivr.
+The previous stack — Bricolage Grotesque, Instrument Sans and Martian Mono —
+belonged to the design this one replaced.
 
 ## Privacy
 

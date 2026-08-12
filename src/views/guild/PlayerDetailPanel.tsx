@@ -72,8 +72,8 @@ export function PlayerDetailPanel({
   )
 
   return (
-    <aside className="w-96 shrink-0 overflow-y-auto border-l border-[var(--color-line)]/60">
-      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)]/60 px-4 py-3">
+    <aside className="w-96 shrink-0 overflow-y-auto border-l border-[var(--color-line)]">
+      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate font-display text-xl leading-tight">
             {player.name}
@@ -93,7 +93,7 @@ export function PlayerDetailPanel({
         </button>
       </div>
 
-      <div className="flex gap-1 border-b border-[var(--color-line)]/60 px-4 pt-2">
+      <div className="flex gap-1 border-b border-[var(--color-line)] px-4 pt-2">
         {(['overview', 'paldex'] as const).map((id) => (
           <button
             key={id}
@@ -170,7 +170,7 @@ export function PlayerDetailPanel({
               what they build — {count(built.size)} types,{' '}
               {count(summary.built)} placed
             </div>
-            <Panel className="divide-y divide-[var(--color-line)]/40">
+            <Panel className="divide-y divide-[var(--color-line-faint)]">
               {[...built]
                 .sort((a, b) => b[1] - a[1])
                 .map(([id, n]) => (
@@ -282,7 +282,7 @@ function Inventory({
         {containers.map(({ slot, container }) => (
           <div
             key={container.containerId}
-            className="overflow-hidden rounded-[10px] border border-[var(--color-line)]/60"
+            className="overflow-hidden rounded-[10px] border border-[var(--color-line)]"
           >
             <ContainerGrid
               container={container}
@@ -362,7 +362,7 @@ function Field({
   hint?: string
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line)]/30 py-1.5">
+    <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] py-1.5">
       <span className="label">{label}</span>
       <span className="num text-right text-sm">
         {value}

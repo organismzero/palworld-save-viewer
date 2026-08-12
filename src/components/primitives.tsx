@@ -24,7 +24,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        'raised-edge rounded-[10px] border border-[var(--color-line)]/60 bg-[var(--color-surface)]',
+        'raised-edge rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)]',
         className,
       )}
     >
@@ -138,7 +138,7 @@ export function IVBar({
         <div
           key={label}
           title={`${label} ${v ?? '—'}`}
-          className="relative h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]/70"
+          className="relative h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]"
         >
           {v !== undefined && (
             <div
@@ -280,10 +280,10 @@ export function Table({
 }) {
   const isNum = align ?? ((i: number) => i > 0)
   return (
-    <div className="overflow-x-auto rounded-[10px] border border-[var(--color-line)]/60">
+    <div className="overflow-x-auto rounded-[10px] border border-[var(--color-line)]">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead>
-          <tr className="border-b border-[var(--color-line)]/60">
+          <tr className="border-b border-[var(--color-line)]">
             {head.map((h, i) => (
               <th key={i} className="label px-4 py-2.5 text-left font-normal">
                 {h}
@@ -295,7 +295,7 @@ export function Table({
           {rows.map((row, i) => (
             <tr
               key={i}
-              className="border-b border-[var(--color-line)]/40 transition-colors last:border-0 hover:bg-[var(--color-raised)]/40"
+              className="border-b border-[var(--color-line-faint)] transition-colors last:border-0 hover:bg-[var(--color-raised)]/40"
             >
               {row.map((cell, j) => (
                 <td

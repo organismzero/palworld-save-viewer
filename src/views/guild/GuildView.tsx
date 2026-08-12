@@ -489,7 +489,7 @@ function PlayerCard({
         'raised-edge rounded-[10px] border bg-[var(--color-surface)] p-4 text-left transition-colors',
         selected
           ? 'border-[var(--color-signal)]/60'
-          : 'border-[var(--color-line)]/60 hover:border-[var(--color-signal)]/40',
+          : 'border-[var(--color-line)] hover:border-[var(--color-signal)]/40',
       )}
     >
       <div className="flex items-baseline gap-2">
@@ -506,7 +506,7 @@ function PlayerCard({
       {/* An XP bar only when the levelling curve gives it a real denominator. */}
       {progress !== undefined ? (
         <div
-          className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]/60"
+          className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-line)]"
           title={`${Math.round(progress * 100)}% to level ${player.level + 1}`}
         >
           <div
@@ -533,7 +533,7 @@ function PlayerCard({
               <span className="w-24 shrink-0 truncate text-[10px] text-[var(--color-muted)]">
                 {STATUS_LABELS[k]}
               </span>
-              <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--color-line)]/60">
+              <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--color-line)]">
                 <span
                   className="block h-full rounded-full bg-[var(--color-signal)]/70"
                   style={{

@@ -127,7 +127,7 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
             )}
           </dl>
 
-          <div className="mt-3 border-t border-[var(--color-line)]/40 pt-3">
+          <div className="mt-3 border-t border-[var(--color-line-faint)] pt-3">
             {warnings.length === 0 ? (
               <p className="text-xs text-[oklch(0.78_0.16_150)]">
                 Every cross-reference in this save resolved.
@@ -150,7 +150,7 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
           </div>
 
           {Object.values(playerFiles).some((f) => f.status === 'rejected') && (
-            <div className="mt-3 border-t border-[var(--color-line)]/40 pt-3">
+            <div className="mt-3 border-t border-[var(--color-line-faint)] pt-3">
               <div className="label mb-1.5">rejected files</div>
               <ul className="space-y-1 text-[11px] text-[var(--color-muted)]">
                 {Object.values(playerFiles)

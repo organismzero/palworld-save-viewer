@@ -1,15 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-// Self-hosted rather than loaded from a CDN: the premise of this app is that
-// nothing leaves your machine, and game art from jsDelivr is the one
-// deliberate, disclosed exception.
-import '@fontsource-variable/bricolage-grotesque'
-import '@fontsource-variable/instrument-sans'
-import '@fontsource-variable/martian-mono'
-
 import { App } from './App.tsx'
 import { installSessionPersistence } from './store/session.ts'
+// Pulls in `fonts/fonts.css`, which declares the two self-hosted families. They
+// are vendored rather than fetched from a CDN or installed as a package: the
+// premise of this app is that nothing leaves your machine, and game art from
+// jsDelivr is the one deliberate, disclosed exception.
 import './index.css'
 
 const root = document.getElementById('root')
