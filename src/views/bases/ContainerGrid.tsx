@@ -1,12 +1,20 @@
 /**
- * The right-hand pane: one container, rendered as the game renders it.
+ * One container, rendered as the game renders it: the cells on the left, and
+ * what is in them as a table on the right.
+ *
+ * Both, rather than one or the other, because they answer different questions.
+ * The grid answers "what does this look like" — the *shape* of a container is
+ * information, which is why the empty cells are drawn at all. The table answers
+ * "how much of what is in here", which is what somebody hunting for materials
+ * actually has. Side by side is the design system's own layout for this pane.
  */
 
 import { slotGridSize, slotsByIndex } from '../../domain/bases.ts'
 import type { Container, ItemStack, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ItemSlot, type SlotContents } from '../../components/ItemSlot.tsx'
-import { Panel, Pill } from '../../components/primitives.tsx'
+import { Pill } from '../../components/primitives.tsx'
+import { IconButton } from '../../components/controls.tsx'
 import { count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -28,7 +36,8 @@ export function ContainerGrid({
 }: {
   container: Container
   index: SaveIndex
-  title: string
+  /** Omit when the caller's own header already names this container. */
+  title?: string
   subtitle?: string
   onClose?: () => void
   note?: boolean
@@ -40,62 +49,61 @@ export function ContainerGrid({
   const items = container.slots.reduce((sum, s) => sum + s.count, 0)
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate font-display text-lg leading-tight">
-            {title}
+          {title !== undefined && (
+            <div className="truncate text-lg leading-tight">{title}</div>
+          )}
+          <div
+            className={cn(
+              'label flex flex-wrap items-center gap-x-2 gap-y-1',
+              title !== undefined && 'mt-1.5',
+            )}
+          >
+            <Pill tone={container.confidence === 'exact' ? 'good' : 'neutral'}>
+              {container.confidence}
+            </Pill>
+            <span>
+              {container.slots.length} stacks · {count(items)} items
+            </span>
+            {subtitle && <span className="truncate">· {subtitle}</span>}
           </div>
-          {subtitle && <div className="label mt-1 truncate">{subtitle}</div>}
         </div>
         {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-text)]"
-          >
+          <IconButton label="Close" tone="ghost" size={24} onClick={onClose}>
             ×
-          </button>
+          </IconButton>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-        <Pill tone={container.confidence === 'exact' ? 'good' : 'neutral'}>
-          {container.confidence}
-        </Pill>
-        <span className="label">
-          {container.slots.length} stacks · {count(items)} items
-        </span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {container.slots.length === 0 ? (
-          <p className="text-sm text-[var(--color-muted)]">
-            This container is empty.
-          </p>
-        ) : (
-          <div
-            className="grid gap-1"
-            style={{
-              gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`,
-            }}
-          >
-            {Array.from({ length: size }, (_, i) => (
-              <ItemSlot
-                key={i}
-                size={52}
-                contents={contentsFor(occupied.get(i), index, data)}
-              />
-            ))}
+      {container.slots.length === 0 ? (
+        <p className="p-4 text-sm text-[var(--color-muted)]">
+          This container is empty.
+        </p>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-wrap items-start gap-6 overflow-y-auto p-4">
+          <div className="shrink-0">
+            <div
+              className="grid gap-[var(--slot-gap)]"
+              style={{
+                gridTemplateColumns: `repeat(${COLUMNS}, var(--slot-size))`,
+              }}
+            >
+              {Array.from({ length: size }, (_, i) => (
+                <ItemSlot
+                  key={i}
+                  contents={contentsFor(occupied.get(i), index, data)}
+                />
+              ))}
+            </div>
+            {/* The one thing about this view that is a guess, said plainly. */}
+            {note && <CapacityNote className="mt-3 max-w-[340px]" />}
           </div>
-        )}
 
-        {/* The one thing about this view that is a guess, said plainly. */}
-        {note && <CapacityNote className="mt-3" />}
-
-        <ItemList container={container} />
-      </div>
+          <ItemList container={container} />
+        </div>
+      )}
     </div>
   )
 }
@@ -138,41 +146,39 @@ function contentsFor(
   }
 }
 
-/**
- * The same contents as a list.
- *
- * The grid answers "what does this look like"; the list answers "how much of
- * what is in here", which is the question someone hunting for materials
- * actually has. Both are cheap, so both are shown.
- */
+/** The same contents, merged by item, because one material fills many slots. */
 function ItemList({ container }: { container: Container }) {
   const { data } = useRefdataStore()
   if (container.slots.length === 0) return null
 
-  // Merged by item, because the same material commonly occupies several slots.
   const merged = new Map<string, number>()
   for (const slot of container.slots) {
     merged.set(slot.staticId, (merged.get(slot.staticId) ?? 0) + slot.count)
   }
 
   return (
-    <Panel className="mt-4 divide-y divide-[var(--color-line-faint)]">
-      {[...merged]
-        .sort((a, b) => b[1] - a[1])
-        .map(([staticId, n]) => {
-          const info = data?.items[staticId.toLowerCase()]
-          return (
-            <div
-              key={staticId}
-              className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
-            >
-              <span className="truncate">{info?.name ?? staticId}</span>
-              <span className="num shrink-0 text-[var(--color-muted)]">
-                {count(n)}
-              </span>
-            </div>
-          )
-        })}
-    </Panel>
+    <div className="min-w-[220px] flex-1">
+      <div className="label mb-2">
+        contents <span className="ml-2 normal-case">{merged.size} kinds</span>
+      </div>
+      <div className="divide-y divide-[var(--color-line-faint)] border-y border-[var(--color-line-faint)]">
+        {[...merged]
+          .sort((a, b) => b[1] - a[1])
+          .map(([staticId, n]) => {
+            const info = data?.items[staticId.toLowerCase()]
+            return (
+              <div
+                key={staticId}
+                className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
+              >
+                <span className="truncate">{info?.name ?? staticId}</span>
+                <span className="num shrink-0 text-[var(--color-muted)]">
+                  {count(n)}
+                </span>
+              </div>
+            )
+          })}
+      </div>
+    </div>
   )
 }

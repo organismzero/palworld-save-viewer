@@ -24,10 +24,10 @@ import { cn } from '../lib/utils.ts'
  */
 const RARITY = [
   { name: 'common', color: undefined },
-  { name: 'uncommon', color: 'oklch(0.78 0.16 150)' },
-  { name: 'rare', color: 'oklch(0.72 0.15 250)' },
-  { name: 'epic', color: 'oklch(0.68 0.16 305)' },
-  { name: 'legendary', color: 'oklch(0.80 0.15 85)' },
+  { name: 'uncommon', color: 'var(--color-rarity-uncommon)' },
+  { name: 'rare', color: 'var(--color-rarity-rare)' },
+  { name: 'epic', color: 'var(--color-rarity-epic)' },
+  { name: 'legendary', color: 'var(--color-rarity-legendary)' },
 ] as const
 
 function rarityOf(rarity: number | undefined): (typeof RARITY)[number] {
@@ -93,14 +93,19 @@ export function ItemSlot({
         borderColor: selected
           ? 'var(--color-signal)'
           : (frame.color ?? 'var(--color-line)'),
+        // A sunken well behind the art, with the rarity glow rising from the
+        // bottom edge as the game lights its cells.
         background: frame.color
-          ? `radial-gradient(120% 120% at 50% 120%, color-mix(in oklch, ${frame.color} 18%, transparent), transparent 70%), var(--color-raised)`
-          : 'var(--color-raised)',
+          ? `radial-gradient(120% 120% at 50% 120%, color-mix(in oklch, ${frame.color} 22%, transparent), transparent 70%), rgb(3 9 13 / 0.75)`
+          : 'rgb(3 9 13 / 0.75)',
       }}
       className={cn(
-        'raised-edge relative shrink-0 overflow-hidden rounded-[4px] border transition-transform',
-        'hover:z-10 hover:scale-105',
-        selected && 'ring-1 ring-[var(--color-signal)]',
+        // Hover raises the border and never moves the cell: a grid of 300 slots
+        // that jumps under the cursor is unusable, and the design system's own
+        // rule is that hover changes colour rather than position.
+        'relative shrink-0 overflow-hidden rounded-slot border shadow-[var(--edge-sunken)] transition-colors',
+        !selected && 'hover:border-[var(--color-signal)]',
+        selected && 'shadow-[var(--glow-signal)]',
       )}
     >
       <span className="flex h-full w-full items-center justify-center p-1">
@@ -108,15 +113,15 @@ export function ItemSlot({
       </span>
 
       {stack.count > 1 && (
-        <span className="num absolute right-0.5 bottom-0 text-[10px] leading-tight text-[var(--color-text)] [text-shadow:0_1px_2px_rgb(0_0_0/0.9)]">
+        <span className="num absolute right-1 bottom-0.5 text-[11px] leading-none text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.9)]">
           {compact(stack.count)}
         </span>
       )}
 
       {wear !== undefined && (
-        <span className="absolute inset-x-0.5 top-0.5 h-[2px] overflow-hidden rounded-full bg-black/50">
+        <span className="absolute inset-x-[3px] top-[3px] h-[2px] overflow-hidden bg-black/55">
           <span
-            className="block h-full rounded-full"
+            className="block h-full"
             style={{ width: `${wear * 100}%`, background: wearColor(wear) }}
           />
         </span>
@@ -125,17 +130,18 @@ export function ItemSlot({
       {dynamic && dynamic.passives.length > 0 && (
         <span
           aria-hidden
-          className="absolute top-0.5 left-0.5 h-1.5 w-1.5 rounded-full bg-[var(--color-signal)]"
+          className="absolute top-[3px] left-[3px] h-1.5 w-1.5 rounded-full bg-[var(--color-signal)]"
         />
       )}
     </button>
   )
 }
 
+/** Wear genuinely is a good / warning / bad scale, so it keeps status colour. */
 function wearColor(fraction: number): string {
-  if (fraction > 0.5) return 'oklch(0.78 0.16 150)'
-  if (fraction > 0.2) return 'oklch(0.80 0.15 85)'
-  return 'oklch(0.72 0.16 28)'
+  if (fraction > 0.5) return 'var(--color-hp)'
+  if (fraction > 0.2) return 'var(--color-stamina)'
+  return 'var(--color-danger)'
 }
 
 /**

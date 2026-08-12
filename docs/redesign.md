@@ -153,9 +153,17 @@ Two fixes the render forced. The owner was truncating to a single letter beside 
 
 ### Stage 6 — Bases
 
-_Files:_ `src/views/bases/BasesView.tsx`, `ContainerGrid.tsx`, `src/components/ItemSlot.tsx`, `src/components/GameIcon.tsx`
+**Landed.** _Files:_ `src/views/bases/BasesView.tsx`, `ContainerGrid.tsx`, `BasePlan.tsx`, `src/components/ItemSlot.tsx`
 
-The three-pane explorer. Source rail onto `MenuButton`, structure and orphan rows onto `ListRow` (34px, selection as the blue fade), group headers as the pale title strip. `ItemSlot` to 52px cells on a 4px gutter with 3px radius, rarity in the frame, sunken well behind the art, wear bar and passive dot kept. Global item search onto `TextInput` with results in a glass `Panel`. `GameIcon` keeps its lazy load and per-URL failure memo untouched — only the fallback tile's styling changes. `StructureDetail` gains a real `Meter` for condition, which is the one place HP has a genuine maximum.
+The three-pane explorer, **reproportioned to the design system's own layout**: the rail keeps its width, the structure list becomes a fixed 300px column, and the detail pane takes everything left so the item grid and the contents table can sit side by side as the kit draws them. Rail rows are `ListRow`s inside titled panels and keep all three of their mono sub-lines. `ItemSlot` goes to 52px cells on the `--slot-gap` gutter with 3px radius, rarity in the frame, a sunken well behind the art, wear bar and passive dot kept. Global item search onto `TextInput` with a `Checkbox`, its results overlaying the detail pane at 560px because three columns of information do not fit in a 300px column. `GameIcon` needed no change at all — its lazy load and per-URL failure memo are untouched, and stage 2 had already restyled the monogram it falls back to.
+
+`StructureDetail` gains the one honest `Meter` in the app: a structure records `hpCurrent` and `hpMax`, so condition is a bar with a real denominator rather than an invented one.
+
+**The base plan moved into the detail pane** as its resting state. It used to be a 288px column beside the structure list, and the new proportions leave no room for a fourth pane — but as the pane's default it has space to be read, gains the base's facts as a `Field` list, and every dot is still a shortcut into its structure. `BasePlan`'s raw oklch literals became tokens on the way, since it is now the first thing you see in a base rather than a thumbnail.
+
+Two duplications the render exposed, both of them the same mistake — saying something twice because two components each thought they owned it. The structure header and the nested container header both named the container and its base, so `ContainerGrid`'s `title` became optional and `StructureDetail` passes neither. And condition appeared as a `Field` row _and_ as the new meter directly beneath it; the row is gone and the meter's label carries the percentage, which is the part a bar cannot say.
+
+`ROW_HEIGHT` stays at 40 rather than dropping to the system's 34: these rows carry two lines, a name and a position, where the system's 34px row carries one.
 
 The two capacity notes and the attribution copy stay verbatim.
 

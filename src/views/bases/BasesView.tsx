@@ -23,7 +23,13 @@ import {
   containerRows,
   itemHitRows,
 } from '../../domain/exportRows.ts'
-import { Panel, Pill } from '../../components/primitives.tsx'
+import { Field, Meter, Panel, Pill } from '../../components/primitives.tsx'
+import {
+  Checkbox,
+  IconButton,
+  ListRow,
+  TextInput,
+} from '../../components/controls.tsx'
 import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -222,7 +228,13 @@ export function BasesView({ index }: { index: SaveIndex }) {
         }}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/*
+        The list column is fixed and the detail pane takes the room, which is
+        the design system's own proportion for this screen: the grid and the
+        contents table sit side by side over there and need the width far more
+        than a column of structure names does.
+      */}
+      <div className="flex w-[300px] shrink-0 flex-col border-r border-[var(--color-line)]">
         <ItemSearch
           index={index}
           query={query}
@@ -259,11 +271,6 @@ export function BasesView({ index }: { index: SaveIndex }) {
                 ? (index.structuresByBase.get(source.baseId) ?? [])
                 : worldChests
             }
-            base={
-              source.kind === 'base'
-                ? index.baseById.get(source.baseId)
-                : undefined
-            }
             storageOnly={storageOnly}
             nameOfStructure={nameOfStructure}
             selected={selectedStructure}
@@ -275,7 +282,7 @@ export function BasesView({ index }: { index: SaveIndex }) {
         )}
       </div>
 
-      <aside className="flex w-80 shrink-0 flex-col border-l border-[var(--color-line)]">
+      <aside className="flex min-w-0 flex-1 flex-col">
         {/*
           Exports whatever the centre column is currently listing, which is the
           useful granularity here: "everything in this base" rather than the
@@ -299,7 +306,6 @@ export function BasesView({ index }: { index: SaveIndex }) {
             structure={structure}
             index={index}
             name={nameOfStructure(structure)}
-            nameOfStructure={nameOfStructure}
             nameOfBase={nameOfBase}
             onClose={() => {
               setSelectedStructure(undefined)
@@ -315,11 +321,28 @@ export function BasesView({ index }: { index: SaveIndex }) {
             onClose={() => setSelectedContainer(undefined)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center p-6 text-center">
-            <p className="text-sm text-[var(--color-muted)]">
-              Pick a structure or a container to see its details.
-            </p>
-          </div>
+          /* Nothing picked yet, so the pane shows the base itself. Clicking a
+             dot in the plan selects that structure, which swaps this out. */
+          <BaseOverview
+            index={index}
+            base={
+              source.kind === 'base'
+                ? index.baseById.get(source.baseId)
+                : undefined
+            }
+            name={
+              source.kind === 'base'
+                ? (baseNames.get(source.baseId) ?? 'Base')
+                : undefined
+            }
+            selected={selectedStructure}
+            onSelect={(id) => {
+              const st = index.structureById.get(id)
+              if (!st) return
+              setSelectedStructure(st.instanceId)
+              setSelectedContainer(st.containerId)
+            }}
+          />
         )}
       </aside>
     </div>
@@ -358,75 +381,81 @@ function SourceRail({
   const unknown = orphans.filter((c) => c.ownerKind === 'unknown').length
 
   return (
-    <aside className="w-60 shrink-0 overflow-y-auto border-r border-[var(--color-line)] p-3">
-      <div className="label mb-2 px-1">bases</div>
-      <ul className="space-y-1">
-        {bases.map((base) => {
-          const structures = index.structuresByBase.get(base.baseId) ?? []
-          const totals = storageTotals(
-            index,
-            structures.flatMap((s) => (s.containerId ? [s.containerId] : [])),
-          )
-          const workers = base.workerContainerId
-            ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
-            : 0
-          const guild = base.groupId
-            ? index.guildById.get(base.groupId)
-            : undefined
+    <aside className="w-[var(--rail-width)] shrink-0 space-y-3 overflow-y-auto border-r border-[var(--color-line)] p-3">
+      <Panel title="Bases">
+        <ul>
+          {bases.map((base) => {
+            const structures = index.structuresByBase.get(base.baseId) ?? []
+            const totals = storageTotals(
+              index,
+              structures.flatMap((s) => (s.containerId ? [s.containerId] : [])),
+            )
+            const workers = base.workerContainerId
+              ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
+              : 0
+            const guild = base.groupId
+              ? index.guildById.get(base.groupId)
+              : undefined
 
-          return (
-            <li key={base.baseId}>
-              <RailButton
-                active={source.kind === 'base' && source.baseId === base.baseId}
-                title={baseNames.get(base.baseId) ?? 'Base'}
-                lines={[
-                  `${count(structures.length)} structures · ${totals.containers} chests`,
-                  `${workers} workers · ${compact(totals.items)} items`,
-                  guild
-                    ? `${guild.name} · camp level ${guild.baseCampLevel}`
-                    : formatMapPos(posToMap(base.pos)),
-                ]}
-                onClick={() => onSelect({ kind: 'base', baseId: base.baseId })}
-              />
+            return (
+              <li key={base.baseId}>
+                <RailButton
+                  active={
+                    source.kind === 'base' && source.baseId === base.baseId
+                  }
+                  title={baseNames.get(base.baseId) ?? 'Base'}
+                  lines={[
+                    `${count(structures.length)} structures · ${totals.containers} chests`,
+                    `${workers} workers · ${compact(totals.items)} items`,
+                    guild
+                      ? `${guild.name} · camp level ${guild.baseCampLevel}`
+                      : formatMapPos(posToMap(base.pos)),
+                  ]}
+                  onClick={() =>
+                    onSelect({ kind: 'base', baseId: base.baseId })
+                  }
+                />
+              </li>
+            )
+          })}
+          {bases.length === 0 && (
+            <li className="px-3 py-2 text-xs text-[var(--color-muted)]">
+              No bases in this save.
             </li>
-          )
-        })}
-        {bases.length === 0 && (
-          <li className="px-1 text-xs text-[var(--color-muted)]">
-            No bases in this save.
+          )}
+        </ul>
+      </Panel>
+
+      <Panel title="Elsewhere">
+        <ul>
+          <li>
+            <RailButton
+              active={source.kind === 'world'}
+              title="Out in the world"
+              lines={[
+                `${count(worldChests.length)} containers`,
+                `${compact(worldTotals.items)} items`,
+                'treasure boxes and drops',
+              ]}
+              onClick={() => onSelect({ kind: 'world' })}
+            />
           </li>
-        )}
-      </ul>
+          <li>
+            <RailButton
+              active={source.kind === 'unattributed'}
+              title="Unattributed storage"
+              lines={[
+                `${count(orphans.length)} containers`,
+                `${compact(orphanTotals.items)} items`,
+                `${unknown} with no owner at all`,
+              ]}
+              onClick={() => onSelect({ kind: 'unattributed' })}
+            />
+          </li>
+        </ul>
+      </Panel>
 
-      <div className="label mt-5 mb-2 px-1">elsewhere</div>
-      <ul className="space-y-1">
-        <li>
-          <RailButton
-            active={source.kind === 'world'}
-            title="Out in the world"
-            lines={[
-              `${count(worldChests.length)} containers`,
-              `${compact(worldTotals.items)} items`,
-              'treasure boxes and drops',
-            ]}
-            onClick={() => onSelect({ kind: 'world' })}
-          />
-        </li>
-        <li>
-          <RailButton
-            active={source.kind === 'unattributed'}
-            title="Unattributed storage"
-            lines={[
-              `${count(orphans.length)} containers`,
-              `${compact(orphanTotals.items)} items`,
-              `${unknown} with no owner at all`,
-            ]}
-            onClick={() => onSelect({ kind: 'unattributed' })}
-          />
-        </li>
-      </ul>
-
-      <p className="mt-4 px-1 text-[11px] leading-relaxed text-[var(--color-muted)]">
+      <p className="px-1 text-[11px] leading-relaxed text-[var(--color-muted)]">
         Containers do not record an owner. Anything a map object claims is
         exact; the rest is inferred, and player saves upgrade it.
       </p>
@@ -446,26 +475,22 @@ function RailButton({
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full rounded-[6px] border px-2.5 py-2 text-left transition-colors',
-        active
-          ? 'border-[var(--color-signal)]/60 bg-[var(--color-raised)]'
-          : 'border-transparent hover:border-[var(--color-line)]',
-      )}
-    >
-      <div className="truncate text-sm leading-tight">{title}</div>
-      {lines.map((l) => (
-        <div
-          key={l}
-          className="num truncate text-[10px] text-[var(--color-muted)]"
-        >
-          {l}
-        </div>
-      ))}
-    </button>
+    <ListRow selected={active} onClick={onClick} className="items-start py-1.5">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate leading-tight">{title}</span>
+        {lines.map((l) => (
+          <span
+            key={l}
+            className={cn(
+              'num block truncate text-[11px]',
+              active ? 'text-white/75' : 'text-[var(--color-muted)]',
+            )}
+          >
+            {l}
+          </span>
+        ))}
+      </span>
+    </ListRow>
   )
 }
 
@@ -480,7 +505,6 @@ type Row =
 function StructureList({
   index,
   structures,
-  base,
   storageOnly,
   nameOfStructure,
   selected,
@@ -488,7 +512,6 @@ function StructureList({
 }: {
   index: SaveIndex
   structures: Structure[]
-  base?: Base
   storageOnly: boolean
   nameOfStructure: (s: Structure) => string
   selected?: Guid
@@ -541,12 +564,6 @@ function StructureList({
     overscan: 8,
   })
 
-  const chestIds = useMemo(
-    () =>
-      new Set(structures.flatMap((s) => (s.containerId ? [s.instanceId] : []))),
-    [structures],
-  )
-
   return (
     <div className="flex min-h-0 flex-1">
       <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
@@ -597,39 +614,81 @@ function StructureList({
           </div>
         )}
       </div>
+    </div>
+  )
+}
 
-      {base && (
-        <div className="w-72 shrink-0 border-l border-[var(--color-line)] p-4">
-          <div className="label mb-2">plan</div>
+/**
+ * What the detail pane shows before anything in a base is picked: the base as a
+ * place, rather than "pick something".
+ *
+ * The plan was a 288px column beside the structure list until the panes were
+ * reproportioned; here it has room to be read, and every dot is still a
+ * shortcut into the structure it belongs to.
+ */
+function BaseOverview({
+  index,
+  base,
+  name,
+  selected,
+  onSelect,
+}: {
+  index: SaveIndex
+  base?: Base
+  name?: string
+  selected?: Guid
+  onSelect: (id: Guid) => void
+}) {
+  if (!base) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center">
+        <p className="text-sm text-[var(--color-muted)]">
+          Pick a structure or a container to see its details.
+        </p>
+      </div>
+    )
+  }
+
+  const structures = index.structuresByBase.get(base.baseId) ?? []
+  const chestIds = new Set(
+    structures.flatMap((s) => (s.containerId ? [s.instanceId] : [])),
+  )
+  const workers = base.workerContainerId
+    ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
+    : 0
+
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-start gap-8">
+        <div className="w-[320px] shrink-0">
           <BasePlan
             base={base}
             structures={structures}
             chestIds={chestIds}
             selectedId={selected}
-            onSelect={(id) => {
-              const s = index.structureById.get(id)
-              if (s) onSelect(s)
-            }}
+            onSelect={onSelect}
           />
-          <dl className="mt-4 space-y-1.5 text-xs">
-            <PlanFact label="centre" value={formatMapPos(posToMap(base.pos))} />
-            <PlanFact
+        </div>
+        <div className="min-w-[220px] flex-1">
+          <div className="text-lg leading-tight">{name}</div>
+          <div className="label mt-1.5">plan</div>
+          <dl className="mt-4">
+            <Field label="centre" value={formatMapPos(posToMap(base.pos))} />
+            <Field
               label="build radius"
               value={`${base.areaRange.toFixed(0)} units`}
             />
-            <PlanFact label="structures" value={count(structures.length)} />
+            <Field label="structures" value={count(structures.length)} />
+            <Field label="with storage" value={count(chestIds.size)} />
+            <Field label="workers" value={count(workers)} />
           </dl>
+          <p className="mt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
+            Every dot is a structure, drawn from the same coordinates as the
+            world map. The ring is the camp's build radius; buildings outside it
+            are normal.
+          </p>
         </div>
-      )}
-    </div>
-  )
-}
-
-function PlanFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="label">{label}</dt>
-      <dd className="num text-[var(--color-muted)]">{value}</dd>
+      </div>
     </div>
   )
 }
@@ -645,11 +704,12 @@ function GroupHeader({
     <button
       type="button"
       onClick={onToggle}
-      className="flex h-full w-full items-center gap-2 border-b border-[var(--color-line-faint)] bg-[var(--color-abyss)]/80 px-4 text-left backdrop-blur"
+      aria-expanded={row.open}
+      className="flex h-full w-full items-center gap-2 border-y border-[var(--color-line-faint)] bg-[rgb(5_13_19/0.85)] px-3 text-left backdrop-blur-sm transition-colors hover:bg-[var(--color-signal)]/[0.08]"
     >
       <span
         aria-hidden
-        className="num w-3 shrink-0 text-[10px] text-[var(--color-muted)]"
+        className="num w-3 shrink-0 text-[11px] text-[var(--color-muted)]"
       >
         {row.open ? '−' : '+'}
       </span>
@@ -688,20 +748,16 @@ function StructureRow({
     : undefined
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'flex h-full w-full items-center gap-3 px-4 pl-9 text-left transition-colors',
-        selected
-          ? 'bg-[var(--color-raised)]'
-          : 'hover:bg-[var(--color-raised)]/50',
-      )}
-    >
+    <ListRow selected={selected} onClick={onSelect} className="h-full pl-6">
       <GameIcon path={info?.icon} name={name} size={22} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm leading-tight">{name}</span>
-        <span className="num block truncate text-[10px] text-[var(--color-muted)]">
+        <span className="block truncate leading-tight">{name}</span>
+        <span
+          className={cn(
+            'num block truncate text-[11px]',
+            selected ? 'text-white/75' : 'text-[var(--color-muted)]',
+          )}
+        >
           {formatMapPos(posToMap(structure.pos))}
           {damaged &&
             ` · ${Math.round((structure.hpCurrent! / structure.hpMax!) * 100)}% hp`}
@@ -710,11 +766,11 @@ function StructureRow({
       </span>
       {structure.locked && <Pill tone="warn">locked</Pill>}
       {container && (
-        <span className="num shrink-0 text-xs text-[oklch(0.80_0.15_85)]">
+        <span className="num shrink-0 text-xs text-[var(--color-gold)]">
           {container.slots.length}
         </span>
       )}
-    </button>
+    </ListRow>
   )
 }
 
@@ -776,29 +832,24 @@ function OrphanList({
                 transform: `translateY(${v.start}px)`,
               }}
             >
-              <button
-                type="button"
+              <ListRow
+                selected={c.containerId === selected}
                 onClick={() => onSelect(c.containerId)}
-                className={cn(
-                  'flex h-full w-full items-center gap-3 px-4 text-left transition-colors',
-                  c.containerId === selected
-                    ? 'bg-[var(--color-raised)]'
-                    : 'hover:bg-[var(--color-raised)]/50',
-                )}
+                className="h-full"
               >
                 <OwnerKindPill kind={c.ownerKind} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm leading-tight">
+                  <span className="block truncate leading-tight">
                     {ownerLabel(index, c)}
                   </span>
-                  <span className="num block truncate text-[10px] text-[var(--color-muted)]">
+                  <span className="num block truncate text-[11px] text-[var(--color-muted)]">
                     {c.containerId.slice(0, 8)}
                   </span>
                 </span>
                 <span className="num shrink-0 text-xs text-[var(--color-muted)]">
                   {c.slots.length} · {compact(items)}
                 </span>
-              </button>
+              </ListRow>
             </div>
           )
         })}
@@ -871,14 +922,12 @@ function StructureDetail({
   structure,
   index,
   name,
-  nameOfStructure,
   nameOfBase,
   onClose,
 }: {
   structure: Structure
   index: SaveIndex
   name: string
-  nameOfStructure: (s: Structure) => string
   nameOfBase: (b: Base) => string
   onClose: () => void
 }) {
@@ -899,90 +948,94 @@ function StructureDetail({
     structure.hpCurrent < structure.hpMax
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate font-display text-lg leading-tight">
-            {name}
-          </div>
-          <div className="label mt-1 truncate">
+          <div className="truncate text-lg leading-tight">{name}</div>
+          <div className="label mt-1.5 truncate">
             {base ? nameOfBase(base) : 'out in the world'}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-text)]"
-        >
+        <IconButton label="Close" tone="ghost" size={24} onClick={onClose}>
           ×
-        </button>
+        </IconButton>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <dl className="space-y-1.5 text-xs">
-          <DetailRow
-            label="type"
-            value={info?.category ?? info?.typeA ?? '—'}
-          />
-          <DetailRow
-            label="built by"
-            value={
-              builder?.name ??
-              (structure.buildPlayerUid
-                ? 'a player not in this save'
-                : 'not player-built')
-            }
-            hint={
-              structure.buildPlayerUid
-                ? undefined
-                : 'World scenery, or placed by a pal rather than a player.'
-            }
-          />
-          <DetailRow
-            label="position"
-            value={formatMapPos(posToMap(structure.pos))}
-          />
-          {structure.hpMax !== undefined && (
+      <div className="flex min-h-0 flex-1">
+        <div className="w-[300px] shrink-0 overflow-y-auto border-r border-[var(--color-line)] p-4">
+          <dl>
             <DetailRow
-              label="condition"
+              label="type"
+              value={info?.category ?? info?.typeA ?? '—'}
+            />
+            <DetailRow
+              label="built by"
               value={
-                damaged
-                  ? `${Math.round((structure.hpCurrent! / structure.hpMax) * 100)}% — ${count(structure.hpCurrent!)} / ${count(structure.hpMax)}`
-                  : 'undamaged'
+                builder?.name ??
+                (structure.buildPlayerUid
+                  ? 'a player not in this save'
+                  : 'not player-built')
+              }
+              hint={
+                structure.buildPlayerUid
+                  ? undefined
+                  : 'World scenery, or placed by a pal rather than a player.'
               }
             />
-          )}
-          <DetailRow
-            label="lock"
-            value={structure.locked ? 'password set' : 'unlocked'}
-          />
-          <DetailRow label="asset" value={structure.mapObjectId} />
-        </dl>
+            <DetailRow
+              label="position"
+              value={formatMapPos(posToMap(structure.pos))}
+            />
+            <DetailRow
+              label="lock"
+              value={structure.locked ? 'password set' : 'unlocked'}
+            />
+            <DetailRow label="asset" value={structure.mapObjectId} />
+          </dl>
 
-        {container ? (
-          <div className="-mx-4 mt-4 border-t border-[var(--color-line)]">
-            <ContainerGrid
-              container={container}
-              index={index}
-              title="Contents"
-              subtitle={
-                containerLocation(index, container, nameOfStructure, nameOfBase)
-                  .detail
-              }
-            />
+          {structure.hpMax !== undefined && (
+            <div className="mt-4">
+              <div className="label mb-1.5">
+                condition
+                <span className="ml-2 normal-case">
+                  {damaged
+                    ? `${Math.round((structure.hpCurrent! / structure.hpMax!) * 100)}% — damaged`
+                    : 'undamaged'}
+                </span>
+              </div>
+              {/* The one HP in this app with a maximum the save actually
+                records, so the one place a meter is honest. */}
+              <Meter
+                value={structure.hpCurrent ?? structure.hpMax}
+                max={structure.hpMax}
+                tone={damaged ? 'stamina' : 'hp'}
+                height={12}
+              />
+            </div>
+          )}
+
+          {!container && (
+            <p className="mt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
+              This structure holds no items. The save does not record who
+              crafted an item, so storage shows what is inside and where, not
+              who made it.
+            </p>
+          )}
+        </div>
+
+        {container && (
+          <div className="min-w-0 flex-1">
+            {/* No title or location here: the structure's own header two
+                inches up says both. */}
+            <ContainerGrid container={container} index={index} />
           </div>
-        ) : (
-          <p className="mt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
-            This structure holds no items. The save does not record who crafted
-            an item, so storage shows what is inside and where, not who made it.
-          </p>
         )}
       </div>
     </div>
   )
 }
 
+/** `Field` in a `<dl>`, so the pane stays a description list. */
 function DetailRow({
   label,
   value,
@@ -992,15 +1045,7 @@ function DetailRow({
   value: string
   hint?: string
 }) {
-  return (
-    <div
-      title={hint}
-      className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] pb-1.5"
-    >
-      <dt className="label shrink-0">{label}</dt>
-      <dd className="num truncate text-right">{value}</dd>
-    </div>
-  )
+  return <Field label={label} value={value} title={hint} />
 }
 
 /* -------------------------------------------------------------------------
@@ -1038,32 +1083,28 @@ function ItemSearch({
 
   return (
     <div className="relative border-b border-[var(--color-line)]">
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <input
+      <div className="space-y-2 px-3 py-2.5">
+        <TextInput
           value={query}
-          onChange={(e) => {
-            onQuery(e.target.value)
+          onChange={(v) => {
+            onQuery(v)
             setExpanded(undefined)
           }}
           aria-label="Find an item anywhere in the world"
-          placeholder="Find an item anywhere in the world…"
-          className="min-w-0 flex-1 rounded-[6px] border border-[var(--color-line)] bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-signal)]"
+          placeholder="Find an item anywhere…"
         />
         {showStorageToggle && (
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-[var(--color-muted)]">
-            <input
-              type="checkbox"
-              checked={storageOnly}
-              onChange={(e) => onStorageOnly(e.target.checked)}
-              className="accent-[var(--color-signal)]"
-            />
-            storage only
-          </label>
+          <Checkbox
+            checked={storageOnly}
+            onChange={onStorageOnly}
+            label="storage only"
+            className="text-xs text-[var(--color-muted)]"
+          />
         )}
       </div>
 
       {query.trim() !== '' && (
-        <div className="absolute inset-x-4 top-full z-20 max-h-[60vh] overflow-y-auto">
+        <div className="absolute top-full left-3 z-20 max-h-[60vh] w-[560px] max-w-[calc(100vw-var(--rail-width)-2rem)] overflow-y-auto">
           <Panel className="divide-y divide-[var(--color-line-faint)]">
             {hits.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-[var(--color-muted)]">

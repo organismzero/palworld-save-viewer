@@ -61,8 +61,8 @@ export function BasePlan({
     >
       <circle
         r={radius * scale}
-        fill="oklch(0.82 0.12 205 / 0.05)"
-        stroke="oklch(0.82 0.12 205 / 0.35)"
+        fill="color-mix(in oklch, var(--color-signal) 5%, transparent)"
+        stroke="color-mix(in oklch, var(--color-signal) 35%, transparent)"
         strokeWidth={1}
       />
       {/* North is up, matching the world map. */}
@@ -98,7 +98,7 @@ export function BasePlan({
               isSelected
                 ? 'var(--color-signal)'
                 : isChest
-                  ? 'oklch(0.80 0.15 85)'
+                  ? 'var(--color-gold)'
                   : 'var(--color-muted)'
             }
             opacity={isSelected || isChest ? 1 : 0.55}
@@ -114,7 +114,7 @@ export function BasePlan({
       <circle
         r={2.5}
         fill="none"
-        stroke="oklch(0.82 0.12 205)"
+        stroke="var(--color-signal)"
         strokeWidth={1.2}
       />
     </svg>
