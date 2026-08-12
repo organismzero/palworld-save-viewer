@@ -26,6 +26,7 @@
 
 import { buildIndexes, mergePlayerDetails, type Phase } from './buildIndexes.ts'
 import { readPlayerSave } from './readers/playerSave.ts'
+import { playerBelongs } from '../../domain/verify.ts'
 import { Warnings } from '../warnings.ts'
 import type { Guid, PlayerDetail, SlimPayload } from '../../domain/types.ts'
 import type { FromWorker, PlayerFileReport, ToWorker } from './protocol.ts'
@@ -101,7 +102,59 @@ function handleParseJson(id: number, buf: ArrayBuffer) {
   }
 }
 
-function handleParsePlayerJson(
+/**
+ * Reads a batch of player saves onto the world already loaded.
+ *
+ * Shared by the JSON and `.sav` paths, which differ only in how they get from
+ * bytes to a tree. They were two near-identical loops until this was factored
+ * out, which is exactly how both came to be missing the same check.
+ *
+ * **A save whose player is not in this world is refused, not merged.** Files
+ * arrive one gesture at a time now, so a save from a different world is a real
+ * possibility rather than a theoretical one — and merging one is not harmless:
+ * its container ids resolve against nothing, its row in the progression table
+ * has no name to show, and it inflates `playerDetails` until the summary reads
+ * "3 of 2 player saves". The same refusal covers a save left behind by a player
+ * who has since left this world, because nothing in the files distinguishes the
+ * two, and the reason says so.
+ */
+async function readPlayerBatch(
+  files: { fileName: string; buf: ArrayBuffer }[],
+  world: SlimPayload,
+  toTree: (buf: ArrayBuffer) => unknown | Promise<unknown>,
+): Promise<{ reports: PlayerFileReport[]; warn: Warnings }> {
+  const warn = new Warnings()
+  const reports: PlayerFileReport[] = []
+
+  progress('players', `Reading ${files.length} player saves`)
+  for (const { fileName, buf } of files) {
+    try {
+      const detail = readPlayerSave(await toTree(buf), fileName, warn)
+      if (!playerBelongs(world.players, detail.playerUid)) {
+        reports.push({
+          fileName,
+          uid: detail.playerUid,
+          ok: false,
+          reason:
+            'Not a player in this world — from a different save, or from a player who has left.',
+        })
+        continue
+      }
+      details.set(detail.playerUid, detail)
+      reports.push({ fileName, uid: detail.playerUid, ok: true })
+    } catch (err) {
+      reports.push({
+        fileName,
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return { reports, warn }
+}
+
+async function handleParsePlayerJson(
   id: number,
   files: { fileName: string; buf: ArrayBuffer }[],
 ) {
@@ -115,24 +168,9 @@ function handleParsePlayerJson(
     return
   }
 
-  const warn = new Warnings()
-  const reports: PlayerFileReport[] = []
-
-  progress('players', `Reading ${files.length} player saves`)
-  for (const { fileName, buf } of files) {
-    try {
-      const parsed = JSON.parse(new TextDecoder().decode(buf))
-      const detail = readPlayerSave(parsed, fileName, warn)
-      details.set(detail.playerUid, detail)
-      reports.push({ fileName, uid: detail.playerUid, ok: true })
-    } catch (err) {
-      reports.push({
-        fileName,
-        ok: false,
-        reason: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
+  const { reports, warn } = await readPlayerBatch(files, payload, (buf) =>
+    JSON.parse(new TextDecoder().decode(buf)),
+  )
 
   progress('merge', 'Re-deriving ownership')
   mergePlayerDetails(
@@ -221,25 +259,16 @@ async function handleParsePlayerSav(
 
   const { decodeSav } = await import('../sav/decode.ts')
   const { readGvas } = await import('../sav/gvas.ts')
-  const warn = new Warnings()
-  const reports: PlayerFileReport[] = []
 
-  progress('players', `Reading ${files.length} player saves`)
-  for (const { fileName, buf } of files) {
-    try {
+  const { reports, warn } = await readPlayerBatch(
+    files,
+    payload,
+    async (buf) => {
       const result = await decodeSav(buf)
       if (!result.ok) throw new Error(result.message)
-      const detail = readPlayerSave(readGvas(result.gvas), fileName, warn)
-      details.set(detail.playerUid, detail)
-      reports.push({ fileName, uid: detail.playerUid, ok: true })
-    } catch (err) {
-      reports.push({
-        fileName,
-        ok: false,
-        reason: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
+      return readGvas(result.gvas)
+    },
+  )
 
   progress('merge', 'Re-deriving ownership')
   mergePlayerDetails(
@@ -359,7 +388,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       break
 
     case 'parsePlayerJson':
-      handleParsePlayerJson(msg.id, msg.files)
+      void handleParsePlayerJson(msg.id, msg.files)
       break
 
     case 'parseSav':

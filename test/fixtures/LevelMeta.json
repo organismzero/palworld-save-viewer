@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Hand-written world metadata sidecar for level.mini.json.",
+    "",
+    "Named LevelMeta.json rather than something.mini.json because that is how the",
+    "app finds it: a .sav is compressed, so `sniff` matches this slot on the",
+    "filename and the reader checks the contents. Renaming this file stops it being",
+    "recognised, which is the intended behaviour, not a fragility.",
+    "",
+    "The whole real file is four values in 2,122 decompressed bytes, so unlike",
+    "level.mini.json there is nothing here to redact — this is the shape.",
+    "",
+    "Timestamp is the level's own Timestamp to the tick, which is what a real pair",
+    "has — both are written by the same save operation. It is comfortably after the",
+    "newest OwnedTime in the world (639211541161540000), so the Files row reads",
+    "`loaded` rather than `flagged`. Lower it below that figure and",
+    "levelMetaPredatesWorld flags it as an earlier snapshot instead, which is the",
+    "other half of what this fixture is for."
+  ],
+  "header": {
+    "magic": "GVAS",
+    "save_game_version": 3,
+    "package_file_version_ue4": 522,
+    "package_file_version_ue5": 1008,
+    "engine_version_major": 5,
+    "engine_version_minor": 1,
+    "engine_version_patch": 1,
+    "engine_version_changelist": 0,
+    "engine_version_branch": "++UE5+Release-5.1",
+    "custom_version_format": 3,
+    "save_game_class_name": "/Script/Pal.PalWorldBaseInfoSaveGame"
+  },
+  "properties": {
+    "Version": { "id": null, "value": 100, "type": "IntProperty" },
+    "Timestamp": {
+      "struct_type": "DateTime",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": 639214026450400000,
+      "type": "StructProperty"
+    },
+    "SaveData": {
+      "struct_type": "PalWorldBaseInfoSaveData",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "type": "StructProperty",
+      "value": {
+        "WorldName": {
+          "id": null,
+          "value": "The Fixture World",
+          "type": "StrProperty"
+        },
+        "InGameDay": { "id": null, "value": 47, "type": "IntProperty" }
+      }
+    }
+  },
+  "trailer": "AAAAAA=="
+}

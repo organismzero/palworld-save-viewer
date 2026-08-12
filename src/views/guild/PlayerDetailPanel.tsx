@@ -9,7 +9,7 @@
  * as an affordance — a drop target for exactly that file.
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
@@ -20,7 +20,7 @@ import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
-import { useSaveStore } from '../../store/saveStore.ts'
+import { useFilePicker } from '../../app/filePicker.tsx'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { Field, IVBar, Panel, Pill } from '../../components/primitives.tsx'
 import { Button, IconButton, SegmentBar } from '../../components/controls.tsx'
@@ -320,8 +320,7 @@ const SLOT_NAMES: Record<string, string> = {
  * one specific file.
  */
 function InventoryPrompt({ playerUid }: { playerUid: string }) {
-  const acceptFiles = useSaveStore((s) => s.acceptFiles)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const picker = useFilePicker()
 
   return (
     <section>
@@ -335,24 +334,10 @@ function InventoryPrompt({ playerUid }: { playerUid: string }) {
           , which the level file does not contain. Add it to see what they are
           carrying, their true position and their paldex progress.
         </p>
-        <Button
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-          className="mt-3 w-full"
-        >
+        <Button size="sm" onClick={picker.open} className="mt-3 w-full">
           Add player saves
         </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".sav,.json,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const files = e.target.files
-            if (files) void acceptFiles(Array.from(files))
-          }}
-        />
+        {picker.input}
       </Panel>
     </section>
   )

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
 import { bytes, relativeTime } from '../lib/format.ts'
@@ -9,6 +9,7 @@ import {
 } from '../store/session.ts'
 import { filesFromDrop } from './dropEntries.ts'
 import { Button } from '../components/controls.tsx'
+import { useFilePicker } from './filePicker.tsx'
 import { ScreenTitle } from '../components/primitives.tsx'
 import { cn } from '../lib/utils.ts'
 
@@ -20,15 +21,8 @@ export function DropZone() {
   const acceptFiles = useSaveStore((s) => s.acceptFiles)
   const error = useSaveStore((s) => s.error)
   const [dragging, setDragging] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const folderRef = useRef<HTMLInputElement>(null)
-
-  // Classification happens in the store, by file *content* — a name check
-  // cannot tell a player save from a 244 MB DPS-storage file.
-  const accept = (files: FileList | File[] | null) => {
-    if (!files) return
-    void acceptFiles(Array.from(files))
-  }
+  const files = useFilePicker()
+  const folder = useFilePicker({ directory: true })
 
   return (
     <div
@@ -40,7 +34,9 @@ export function DropZone() {
       onDrop={(e) => {
         e.preventDefault()
         setDragging(false)
-        void filesFromDrop(e.dataTransfer).then(accept)
+        void filesFromDrop(e.dataTransfer).then((dropped) => {
+          if (dropped.length > 0) void acceptFiles(dropped)
+        })
       }}
       className="flex min-h-dvh flex-col items-center justify-center gap-7 p-8"
     >
@@ -54,7 +50,7 @@ export function DropZone() {
 
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={files.open}
         className={cn(
           'corner-ticks relative isolate w-full max-w-xl border border-dashed px-8 py-14 transition-colors',
           dragging
@@ -74,30 +70,13 @@ export function DropZone() {
       </button>
 
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
-        <Button onClick={() => inputRef.current?.click()}>Choose files</Button>
-        <Button onClick={() => folderRef.current?.click()}>
-          Choose a folder
-        </Button>
+        <Button onClick={files.open}>Choose files</Button>
+        <Button onClick={folder.open}>Choose a folder</Button>
         <ReopenButton />
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept=".sav,.json,application/json"
-        className="hidden"
-        onChange={(e) => accept(e.target.files)}
-      />
-      <input
-        ref={folderRef}
-        type="file"
-        // Non-standard but supported everywhere this app targets; the
-        // File System Access API is Chromium-only.
-        {...{ webkitdirectory: '', directory: '' }}
-        className="hidden"
-        onChange={(e) => accept(e.target.files)}
-      />
+      {files.input}
+      {folder.input}
 
       {error && (
         <p className="max-w-xl text-center text-sm text-[var(--color-el-fire)]">

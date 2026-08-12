@@ -30,7 +30,11 @@
 
 import { SESSION_STORE, database } from '../lib/db.ts'
 import { buildSaveIndex, toSlim } from '../domain/index.ts'
-import type { LocalDataPayload, SlimPayload } from '../domain/types.ts'
+import type {
+  LevelMetaPayload,
+  LocalDataPayload,
+  SlimPayload,
+} from '../domain/types.ts'
 import { useSaveStore, type PlayerFileState } from './saveStore.ts'
 
 /**
@@ -41,7 +45,10 @@ import { useSaveStore, type PlayerFileState } from './saveStore.ts'
  * missing data, which is far worse than one that refuses to load. Treat "did
  * you bump it?" as a review question on anything under `parse/worker/readers/`.
  */
-export const SNAPSHOT_VERSION = 1
+// 2: carries `levelMeta`. A restored session used to lose it, so the save's own
+// clock reading and its in-game day vanished on reopen — which matters more now
+// that metadata is usually added in a gesture of its own.
+export const SNAPSHOT_VERSION = 2
 
 const KEY = 'current'
 const PREF_KEY = 'psv.remember'
@@ -54,6 +61,7 @@ export interface SessionSnapshot {
   fileBytes: number
   payload: SlimPayload
   localData?: LocalDataPayload
+  levelMeta?: LevelMetaPayload
   playerFiles: Record<string, PlayerFileState>
 }
 
@@ -219,6 +227,7 @@ export async function restoreSession(): Promise<boolean> {
     status: 'ready',
     index: buildSaveIndex(snap.payload),
     localData: snap.localData,
+    levelMeta: snap.levelMeta,
     playerFiles: snap.playerFiles,
     fileName: snap.fileName,
     fileBytes: snap.fileBytes,
@@ -245,6 +254,7 @@ function snapshotFromStore(): SessionSnapshot | undefined {
     fileBytes: s.fileBytes ?? 0,
     payload: toSlim(s.index),
     localData: s.localData,
+    levelMeta: s.levelMeta,
     playerFiles: s.playerFiles,
   }
 }
@@ -312,7 +322,8 @@ export async function flushSessionWrite(): Promise<void> {
  * every worker progress message, dozens per parse, and debouncing that is
  * fighting the wrong signal. `index` gets a fresh identity from
  * `buildSaveIndex` on the initial parse and on every player merge; `localData`
- * on each client-save merge. That is the complete trigger list.
+ * on each client-save merge; `levelMeta` when world metadata is added, which is
+ * now usually a gesture of its own. That is the complete trigger list.
  *
  * `playerFiles` is deliberately excluded even though it is snapshotted: the
  * ledger flips to `'parsing'` *before* the payload changes, so keying on it
@@ -321,6 +332,7 @@ export async function flushSessionWrite(): Promise<void> {
 export function installSessionPersistence(): () => void {
   let lastIndex = useSaveStore.getState().index
   let lastLocal = useSaveStore.getState().localData
+  let lastMeta = useSaveStore.getState().levelMeta
 
   const unsubscribe = useSaveStore.subscribe((s) => {
     if (s.status !== 'ready') {
@@ -328,11 +340,19 @@ export function installSessionPersistence(): () => void {
       if (s.status === 'idle' || s.status === 'loading') cancelPending()
       lastIndex = s.index
       lastLocal = s.localData
+      lastMeta = s.levelMeta
       return
     }
-    if (s.index === lastIndex && s.localData === lastLocal) return
+    if (
+      s.index === lastIndex &&
+      s.localData === lastLocal &&
+      s.levelMeta === lastMeta
+    ) {
+      return
+    }
     lastIndex = s.index
     lastLocal = s.localData
+    lastMeta = s.levelMeta
     // A restored world is already exactly what is in storage.
     if (s.restoredFrom !== undefined) return
     scheduleWrite()

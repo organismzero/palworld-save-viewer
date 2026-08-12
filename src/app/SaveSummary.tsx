@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
 import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
@@ -15,8 +17,9 @@ import {
   lastSeenBasis,
   lastSeenFor,
 } from '../domain/lastSeen.ts'
-import { useSaveStore } from '../store/saveStore.ts'
+import { useSaveStore, type PlayerFileState } from '../store/saveStore.ts'
 import { Button } from '../components/controls.tsx'
+import { useFilePicker } from './filePicker.tsx'
 import {
   ElementBadge,
   IVBar,
@@ -29,6 +32,7 @@ import {
   SectionHeading,
   StatTile,
   Table,
+  type PillTone,
 } from '../components/primitives.tsx'
 
 /**
@@ -41,7 +45,6 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
     fileName,
     fileBytes,
     timings,
-    playerFiles,
     localData,
     levelMeta,
     restoredFrom,
@@ -69,7 +72,6 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
   const totalMs = timings
     ? Object.values(timings).reduce((a, b) => a + b, 0)
     : undefined
-  const ledger = Object.values(playerFiles)
 
   return (
     // Scrolls itself. The shell is a fixed-height flex column, so a view that
@@ -109,23 +111,9 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <Button onClick={reset}>Load another</Button>
         </header>
 
-        {s.playerDetails < s.playersInLevel && (
-          <Panel padded className="mb-10">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <Pill tone="warn">partial</Pill>
-              <span className="text-sm">
-                {s.playersInLevel - s.playerDetails} player save
-                {s.playersInLevel - s.playerDetails === 1 ? '' : 's'} missing.
-              </span>
-              <span className="text-sm text-[var(--color-muted)]">
-                Drop your <span className="num">Players</span> folder for exact
-                inventories, true positions and paldex progress. Without them,{' '}
-                {count(s.unattributedContainers)} containers stay unattributed
-                and last-seen falls back to the server-uptime clock.
-              </span>
-            </div>
-          </Panel>
-        )}
+        {/* First, above the overview: what the numbers below are computed from
+            determines how much to trust them. */}
+        <FilesPanel index={index} />
 
         <section className="mb-10">
           <SectionHeading title="Overview" />
@@ -453,34 +441,10 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               </ul>
             )}
 
-            {ledger.length > 0 && (
-              <div className="mt-4 border-t border-[var(--color-line-faint)] pt-3">
-                <div className="label mb-2">player saves</div>
-                <ul className="grid gap-1 text-xs sm:grid-cols-2">
-                  {ledger.map((f) => (
-                    <li key={f.fileName} className="flex items-center gap-2">
-                      <Pill
-                        tone={
-                          f.status === 'loaded'
-                            ? 'good'
-                            : f.status === 'rejected'
-                              ? 'warn'
-                              : 'neutral'
-                        }
-                      >
-                        {f.status}
-                      </Pill>
-                      <span className="num truncate">{f.fileName}</span>
-                      {f.reason && (
-                        <span className="text-[var(--color-muted)]">
-                          {f.reason}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {/* The ingestion ledger used to be repeated here. It is the Files
+              panel's now: that panel exists to answer "what did this session
+              actually read", and saying it twice on one screen invited the two
+              copies to disagree. */}
 
             {/* A restored session has no per-phase breakdown because no phase
               ever ran. Losing the line silently would look like a bug in the
@@ -503,6 +467,250 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
         </section>
       </div>
     </div>
+  )
+}
+
+/**
+ * What a save is made of, and which parts this session has.
+ *
+ * A row per *slot* rather than a list of files, because the question people
+ * arrive at this panel with is "what am I missing?" — and a list of filenames
+ * only answers that if you already know what the complete set looks like. The
+ * filenames are still here, underneath, where they answer the other question:
+ * "I dropped that, why did nothing happen?"
+ */
+function FilesPanel({ index }: { index: SaveIndex }) {
+  const { fileName, fileBytes, playerFiles, localData, levelMeta } =
+    useSaveStore()
+  const s = index.stats
+  const writtenAt = saveClock(levelMeta?.savedAtTicks)
+  const ownerName = localData?.ownerUid
+    ? index.playerByUid.get(localData.ownerUid)?.name
+    : undefined
+  const overworld = localData?.fog.find((f) => f.map === 'overworld')
+
+  // Rejections first: they are the only rows that need somebody to do something.
+  const ledger = Object.values(playerFiles).sort(
+    (a, b) => LEDGER_ORDER[a.status] - LEDGER_ORDER[b.status],
+  )
+
+  return (
+    <section className="mb-10">
+      <SectionHeading
+        title="Files"
+        hint="only the level is required — everything else can be added at any time, in any order"
+      />
+      <Panel>
+        <div className="divide-y divide-[var(--color-line-faint)]">
+          <FileSlot
+            label="level"
+            hint="The world itself: pals, players, bases, guilds, containers."
+            loaded
+            detail={[fileName, fileBytes ? bytes(fileBytes) : undefined]
+              .filter(Boolean)
+              .join(' · ')}
+            action={
+              <AddButton title="Reads a different world. Nothing is written or destroyed.">
+                Replace
+              </AddButton>
+            }
+          />
+
+          <FileSlot
+            label="world metadata"
+            hint="LevelMeta.sav — when the save was written, and the in-game day."
+            loaded={levelMeta !== undefined}
+            detail={
+              levelMeta
+                ? [
+                    writtenAt ? `written ${writtenAt}` : undefined,
+                    levelMeta.inGameDay !== undefined
+                      ? `day ${levelMeta.inGameDay}`
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'no clock reading, no in-game day'
+            }
+            action={<AddButton>Add</AddButton>}
+          />
+
+          <FileSlot
+            label="player saves"
+            hint="Players/<uid>.sav — exact inventories, true positions and paldex progress, none of which the level file contains."
+            loaded={s.playerDetails > 0}
+            partial={s.playerDetails > 0 && s.playerDetails < s.playersInLevel}
+            detail={`${s.playerDetails} of ${s.playersInLevel}`}
+            /*
+             * The consequence, not just the count. This used to be its own panel
+             * above the overview; it says the same thing as this row's `0 of 4`
+             * and belongs to it.
+             */
+            note={missingPlayerNote(s)}
+            action={
+              <>
+                <AddButton>Add files</AddButton>
+                <AddButton directory title="Pick the whole Players folder">
+                  Add folder
+                </AddButton>
+              </>
+            }
+          />
+
+          <FileSlot
+            label="client data"
+            hint="LocalData.sav — fog of war, map pins and unlocks. One player's own client, not the server."
+            loaded={localData !== undefined}
+            detail={
+              localData
+                ? [
+                    ownerName ?? 'owner unknown',
+                    overworld
+                      ? `${(overworld.exploredFraction * 100).toFixed(1)}% explored`
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'no fog of war on the Map'
+            }
+            action={<AddButton>Add</AddButton>}
+          />
+        </div>
+      </Panel>
+
+      {ledger.length > 0 && (
+        <div className="mt-4">
+          <div className="label mb-2">files seen this session</div>
+          {/*
+            The reason goes on its own line rather than beside the name. On one
+            line a long refusal squeezed both of the things that identify the row:
+            the pill rendered as `REJECT…` and the filename as `stranger.j…`,
+            which is the one word in the row that has to survive.
+          */}
+          <ul className="grid gap-2 text-xs sm:grid-cols-2">
+            {ledger.map((f) => (
+              <li key={f.fileName} className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="shrink-0">
+                    <Pill tone={LEDGER_TONES[f.status]}>
+                      {/* A file can load and still be worth a second look —
+                          metadata older than the world it was dropped on. */}
+                      {f.status === 'loaded' && f.reason ? 'flagged' : f.status}
+                    </Pill>
+                  </span>
+                  <span className="num min-w-0 truncate">{f.fileName}</span>
+                </div>
+                {f.reason && (
+                  <p className="mt-1 text-[var(--color-muted)]">{f.reason}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * What is still missing from the `Players/` folder, and what its absence costs.
+ *
+ * Two clauses, either of which can drop out. With every player save loaded there
+ * is nothing to say at all; with *some* loaded, the unattributed-container count
+ * can already have reached zero while a player is still missing — which is the
+ * case that read "Without them, 0 containers stay unattributed" the first time
+ * this was driven with one of the fixture's two players.
+ */
+function missingPlayerNote(s: SaveIndex['stats']): string | undefined {
+  if (s.playerDetails >= s.playersInLevel) return undefined
+
+  const n = s.unattributedContainers
+  const containers =
+    n > 0
+      ? `${count(n)} container${n === 1 ? '' : 's'} stay${n === 1 ? 's' : ''} unattributed, and `
+      : ''
+  return `Until they are all here, ${containers}last-seen falls back to the server-uptime clock for whoever is missing.`
+}
+
+const LEDGER_ORDER: Record<PlayerFileState['status'], number> = {
+  rejected: 0,
+  queued: 1,
+  parsing: 2,
+  loaded: 3,
+}
+
+const LEDGER_TONES: Record<PlayerFileState['status'], PillTone> = {
+  rejected: 'danger',
+  queued: 'neutral',
+  parsing: 'neutral',
+  loaded: 'good',
+}
+
+function FileSlot({
+  label,
+  hint,
+  loaded,
+  /** Loaded, but not all of it — some player saves present, not all. */
+  partial = false,
+  detail,
+  note,
+  action,
+}: {
+  label: string
+  hint: string
+  loaded: boolean
+  partial?: boolean
+  detail: ReactNode
+  note?: ReactNode
+  action: ReactNode
+}) {
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-sm">{label}</span>
+        <Pill tone={partial ? 'warn' : loaded ? 'good' : 'neutral'}>
+          {partial ? 'partial' : loaded ? 'loaded' : 'not loaded'}
+        </Pill>
+        <span className="num min-w-0 truncate text-xs text-[var(--color-muted)]">
+          {detail}
+        </span>
+        <span className="ml-auto flex shrink-0 gap-2">{action}</span>
+      </div>
+      <p className="mt-1.5 text-xs text-[var(--color-muted)]">{hint}</p>
+      {note && (
+        <p className="mt-1.5 text-xs text-[var(--color-gold)]">{note}</p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * An "Add" button that owns its own hidden input.
+ *
+ * One per row rather than one shared picker driven by a "which slot?" state: the
+ * store classifies every file by content anyway — `useFilePicker` says why — so
+ * a per-slot picker is purely about putting the button where the gap is. Nothing
+ * routes on which one was clicked, and `directory` only widens what the dialog
+ * will let you select.
+ */
+function AddButton({
+  children,
+  directory = false,
+  title,
+}: {
+  children: ReactNode
+  directory?: boolean
+  title?: string
+}) {
+  const picker = useFilePicker({ directory })
+
+  return (
+    <>
+      <Button size="sm" onClick={picker.open} title={title}>
+        {children}
+      </Button>
+      {picker.input}
+    </>
   )
 }
 

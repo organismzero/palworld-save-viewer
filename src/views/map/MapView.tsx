@@ -25,6 +25,7 @@ import {
 import { cn } from '../../lib/utils.ts'
 import { count } from '../../lib/format.ts'
 import { downloadBlob, exportName } from '../../lib/export.ts'
+import { useFilePicker } from '../../app/filePicker.tsx'
 
 /**
  * Legend order — what a reader looks for, densest-signal first. Distinct from
@@ -511,14 +512,13 @@ export function MapView({ index }: { index: SaveIndex }) {
  * wider than "Built by players".
  */
 function LocalDataPrompt() {
-  const acceptFiles = useSaveStore((s) => s.acceptFiles)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const picker = useFilePicker({ multiple: false })
 
   return (
     <>
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={picker.open}
         aria-label="Add LocalData.sav to show fog of war"
         title="Fog of war comes from LocalData.sav, which the game keeps with the client rather than in the server save. Click to add it."
         className="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-xs opacity-35 transition-colors transition-opacity hover:bg-[var(--color-signal)]/[0.08] hover:opacity-100"
@@ -530,16 +530,7 @@ function LocalDataPrompt() {
           +
         </span>
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".sav,.json,application/json"
-        className="hidden"
-        onChange={(e) => {
-          const files = e.target.files
-          if (files) void acceptFiles(Array.from(files))
-        }}
-      />
+      {picker.input}
     </>
   )
 }

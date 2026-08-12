@@ -1,0 +1,274 @@
+{
+  "_comment": [
+    "Hand-written player save for Biscuit, the level-36 player in level.mini.json.",
+    "",
+    "Not a redaction of a real file, unlike level.mini.json: a real player save is",
+    "66-111 KB of RecordData maps that say nothing this needs to say. This is the",
+    "smallest tree readPlayerSave will accept, and every id in it is one that",
+    "level.mini.json actually contains, which is the whole point — it exists so the",
+    "incremental flows can be driven rather than only reasoned about:",
+    "",
+    "  - dropping this onto the loaded level merges it (0 of 2 player saves -> 1 of 2)",
+    "  - dropping it *before* the level exercises the pendingPlayerFiles hold",
+    "  - editing PlayerUId to any other GUID exercises the foreign-uid refusal",
+    "",
+    "PlayerUId and InstanceId are Biscuit's, from the level's",
+    "CharacterSaveParameterMap. CommonContainerId is the one item container in the",
+    "level that nothing else claims, so attributing it here moves a container from",
+    "unattributed to exact instead of colliding with a structure and raising an",
+    "ownership-conflict warning. PalStorageContainerId holds the two pals whose",
+    "OwnerPlayerUId is Biscuit's, so the majority vote and the player save agree.",
+    "",
+    "Timestamp is the level's own Timestamp to the tick, as a real pair has — both",
+    "are written by the same save operation. LastOnlineDateTime is earlier, so",
+    "last-seen resolves on the absolute clock instead of reading `online at save`.",
+    "",
+    "Keys the reader does not touch are omitted rather than stubbed. Anything in",
+    "RecordData outside KNOWN_RECORD_FIELDS raises a counted warning, so the fields",
+    "below are deliberately a subset of that set."
+  ],
+  "header": {
+    "magic": "GVAS",
+    "save_game_version": 3,
+    "package_file_version_ue4": 522,
+    "package_file_version_ue5": 1008,
+    "engine_version_major": 5,
+    "engine_version_minor": 1,
+    "engine_version_patch": 1,
+    "engine_version_changelist": 0,
+    "engine_version_branch": "++UE5+Release-5.1",
+    "custom_version_format": 3,
+    "save_game_class_name": "/Script/Pal.PalWorldPlayerSaveGame"
+  },
+  "properties": {
+    "Timestamp": {
+      "struct_type": "DateTime",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "value": 639214026450400000,
+      "type": "StructProperty"
+    },
+    "SaveData": {
+      "struct_type": "PalWorldPlayerSaveData",
+      "struct_id": "00000000-0000-0000-0000-000000000000",
+      "id": null,
+      "type": "StructProperty",
+      "value": {
+        "PlayerUId": {
+          "struct_type": "Guid",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "value": "0e285465-0538-a7f0-091b-f0d7da54f6e2",
+          "type": "StructProperty"
+        },
+        "IndividualId": {
+          "struct_type": "PalInstanceID",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "PlayerUId": {
+              "struct_type": "Guid",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": "0e285465-0538-a7f0-091b-f0d7da54f6e2",
+              "type": "StructProperty"
+            },
+            "InstanceId": {
+              "struct_type": "Guid",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": "4bd32b6b-42e4-07ba-02f9-c51d64d3120c",
+              "type": "StructProperty"
+            }
+          }
+        },
+        "PlayerPlatform": {
+          "id": null,
+          "value": {
+            "type": "EPalPlatformType",
+            "value": "EPalPlatformType::Steam"
+          },
+          "type": "EnumProperty"
+        },
+        "LastOnlineDateTime": {
+          "id": null,
+          "value": 639211541161540000,
+          "type": "Int64Property"
+        },
+        "TechnologyPoint": { "id": null, "value": 41, "type": "IntProperty" },
+        "bossTechnologyPoint": { "id": null, "value": 6, "type": "IntProperty" },
+        "LastTransform": {
+          "struct_type": "Transform",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "Translation": {
+              "struct_type": "Vector",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": { "x": -52341.5, "y": -166902.75, "z": 5211.0 },
+              "type": "StructProperty"
+            }
+          }
+        },
+        "PalStorageContainerId": {
+          "struct_type": "PalContainerId",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "ID": {
+              "struct_type": "Guid",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": "57bd7660-11f7-7319-d831-064a6338d33b",
+              "type": "StructProperty"
+            }
+          }
+        },
+        "OtomoCharacterContainerId": {
+          "struct_type": "PalContainerId",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "ID": {
+              "struct_type": "Guid",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "value": "00000000-0000-0000-0000-000000000000",
+              "type": "StructProperty"
+            }
+          }
+        },
+        "InventoryInfo": {
+          "struct_type": "PalPlayerInventoryInfo",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "CommonContainerId": {
+              "struct_type": "PalContainerId",
+              "struct_id": "00000000-0000-0000-0000-000000000000",
+              "id": null,
+              "type": "StructProperty",
+              "value": {
+                "ID": {
+                  "struct_type": "Guid",
+                  "struct_id": "00000000-0000-0000-0000-000000000000",
+                  "id": null,
+                  "value": "71ca1e7d-21f5-0028-0c92-f48ff8d3cd4a",
+                  "type": "StructProperty"
+                }
+              }
+            }
+          }
+        },
+        "UnlockedRecipeTechnologyNames": {
+          "array_type": "NameProperty",
+          "id": null,
+          "value": {
+            "values": [
+              "PalStatueBuff",
+              "Workbench",
+              "Handiwork_Bonfire",
+              "MonsterFarm"
+            ]
+          },
+          "type": "ArrayProperty"
+        },
+        "RecordData": {
+          "struct_type": "PalPlayerRecordData",
+          "struct_id": "00000000-0000-0000-0000-000000000000",
+          "id": null,
+          "type": "StructProperty",
+          "value": {
+            "PalCaptureCount": {
+              "key_type": "NameProperty",
+              "value_type": "IntProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [
+                { "key": "SheepBall", "value": 4 },
+                { "key": "PlantSlime", "value": 2 },
+                { "key": "CatBat", "value": 1 },
+                { "key": "WeaselDragon", "value": 1 }
+              ]
+            },
+            "PaldeckUnlockFlag": {
+              "key_type": "NameProperty",
+              "value_type": "BoolProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [
+                { "key": "SheepBall", "value": true },
+                { "key": "PlantSlime", "value": true },
+                { "key": "CatBat", "value": true },
+                { "key": "WeaselDragon", "value": true },
+                { "key": "DreamDemon", "value": false }
+              ]
+            },
+            "TribeCaptureCount": { "id": null, "value": 4, "type": "IntProperty" },
+            "NormalBossDefeatFlag": {
+              "key_type": "NameProperty",
+              "value_type": "BoolProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [
+                { "key": "BOSS_SheepBall", "value": true },
+                { "key": "BOSS_CatBat", "value": true },
+                { "key": "BOSS_WeaselDragon", "value": false }
+              ]
+            },
+            "TowerBossDefeatFlag": {
+              "key_type": "NameProperty",
+              "value_type": "BoolProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [{ "key": "GYM_ThunderDragonMan", "value": true }]
+            },
+            "RelicPossessNum": { "id": null, "value": 3, "type": "IntProperty" },
+            "NormalDungeonClearCount": {
+              "id": null,
+              "value": 2,
+              "type": "IntProperty"
+            },
+            "FixedDungeonClearCount": {
+              "id": null,
+              "value": 1,
+              "type": "IntProperty"
+            },
+            "CraftItemCount": {
+              "key_type": "NameProperty",
+              "value_type": "IntProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [
+                { "key": "Wood", "value": 120 },
+                { "key": "Stone", "value": 64 },
+                { "key": "Arrow", "value": 30 }
+              ]
+            },
+            "FishingCountMap": {
+              "key_type": "NameProperty",
+              "value_type": "IntProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [{ "key": "Fish_Trout", "value": 7 }]
+            },
+            "PalRankupCount": {
+              "key_type": "NameProperty",
+              "value_type": "IntProperty",
+              "id": null,
+              "type": "MapProperty",
+              "value": [{ "key": "SheepBall", "value": 2 }]
+            }
+          }
+        }
+      }
+    }
+  },
+  "trailer": "AAAAAA=="
+}

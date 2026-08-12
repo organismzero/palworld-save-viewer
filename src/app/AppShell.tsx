@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type DragEvent,
   type ReactNode,
 } from 'react'
 
@@ -45,6 +46,8 @@ import { parseHash } from './viewParams.ts'
 import { tabId } from '../lib/utils.ts'
 import { Button, TabBar } from '../components/controls.tsx'
 import { KeyHint, PromptBar } from '../components/primitives.tsx'
+import { filesFromDrop } from './dropEntries.ts'
+import { useFilePicker } from './filePicker.tsx'
 import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
 import { AboutDialog, ShortcutsDialog } from './Dialogs.tsx'
@@ -204,6 +207,92 @@ function useShortcuts() {
   }, [setView, setPalette, setShortcuts])
 }
 
+/** Whether a drag is carrying files rather than, say, a text selection. */
+function carriesFiles(dt: DataTransfer | null): boolean {
+  return dt ? Array.from(dt.types).includes('Files') : false
+}
+
+/**
+ * Drop handling for a save that is already open.
+ *
+ * The loaded app is a drop target too, not just the landing screen: `Level.sav`
+ * is the only file this app truly needs, and everything else — world metadata,
+ * one player save or a whole `Players/` folder, the client's own `LocalData` —
+ * is meant to be addable afterwards, in any order. `acceptFiles` has always
+ * merged additions onto the open world; until this there was simply no way to
+ * hand it anything once `DropZone` had unmounted.
+ *
+ * A depth *counter* rather than the boolean `DropZone` can afford. The shell has
+ * hundreds of descendants, and moving the pointer between two of them fires
+ * `dragleave` on the one being left before `dragenter` on the one being entered
+ * — so a boolean flickers the overlay off at every internal boundary the cursor
+ * crosses. Leaving the window fires the outermost `dragleave` and takes the
+ * count to zero, which is the case that has to keep working.
+ *
+ * The `types` check is what stops dragging a selection of text inside the app
+ * from raising an overlay offering to parse it.
+ */
+function useShellDrop() {
+  const [over, setOver] = useState(false)
+  const depth = useRef(0)
+
+  const handlers = {
+    onDragEnter: (e: DragEvent<HTMLElement>) => {
+      if (!carriesFiles(e.dataTransfer)) return
+      depth.current += 1
+      setOver(true)
+    },
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      if (!carriesFiles(e.dataTransfer)) return
+      // Both lines are load-bearing: without `preventDefault` the browser treats
+      // the shell as a non-target and shows the no-drop cursor over the entire
+      // app, and without `dropEffect` the pointer says "move" while the app is
+      // in fact copying nothing anywhere.
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    },
+    onDragLeave: () => {
+      depth.current = Math.max(0, depth.current - 1)
+      if (depth.current === 0) setOver(false)
+    },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      e.preventDefault()
+      depth.current = 0
+      setOver(false)
+      void filesFromDrop(e.dataTransfer).then((files) => {
+        if (files.length > 0) void useSaveStore.getState().acceptFiles(files)
+      })
+    },
+  }
+
+  return { over, handlers }
+}
+
+/**
+ * What a drag over the loaded app is offering to do.
+ *
+ * `pointer-events-none` so the drop lands on whatever is underneath and bubbles
+ * to the shell's own handler — an overlay that appears under the cursor and then
+ * swallows the `drop` event is a drop target that rejects every drop.
+ */
+function DropOverlay() {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-[rgb(3_9_13/0.72)] p-8 backdrop-blur-sm">
+      <div className="corner-ticks relative isolate max-w-md border border-dashed border-[var(--color-signal)] bg-[var(--color-signal)]/[0.06] px-10 py-9 text-center [--tick-color:var(--color-signal)]">
+        <div className="label">add to this save</div>
+        <div className="mt-3 text-lg">Drop to add these files</div>
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          <span className="num">LevelMeta.sav</span>, your{' '}
+          <span className="num">Players</span> folder or single player saves,
+          and <span className="num">LocalData.sav</span> all merge into the
+          world already open. Another <span className="num">Level.sav</span>{' '}
+          replaces it.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function AppShell({ index }: { index: SaveIndex }) {
   const view = useHashSync()
   useShortcuts()
@@ -211,9 +300,11 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const { fileName, reset } = useSaveStore()
   const setPalette = useUiStore((s) => s.setPalette)
   const setAbout = useUiStore((s) => s.setAbout)
+  const add = useFilePicker()
+  const drop = useShellDrop()
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col" {...drop.handlers}>
       <header className="flex h-[var(--header-height)] shrink-0 items-center gap-5 border-b border-[var(--color-line)] bg-[rgb(5_13_19/0.8)] px-4">
         <span className="hidden font-display text-lg font-[200] tracking-[0.12em] whitespace-nowrap uppercase sm:inline">
           Palworld Save Viewer
@@ -263,9 +354,24 @@ export function AppShell({ index }: { index: SaveIndex }) {
             About
           </Button>
 
+          {/*
+            A picker as well as the window-wide drop target, for the same reason
+            the landing screen has one: the file somebody wants next is usually a
+            specific one, and `Players/` is a folder of 32-character names that
+            nobody enjoys dragging out of.
+          */}
+          <Button
+            size="sm"
+            onClick={add.open}
+            title="Add LevelMeta.sav, player saves or LocalData.sav to this world"
+          >
+            Add files
+          </Button>
+
           <Button size="sm" onClick={reset}>
             Load another
           </Button>
+          {add.input}
         </div>
       </header>
 
@@ -297,6 +403,8 @@ export function AppShell({ index }: { index: SaveIndex }) {
       </main>
 
       <Prompts />
+
+      {drop.over && <DropOverlay />}
 
       <CommandPalette index={index} />
       <AboutDialog />

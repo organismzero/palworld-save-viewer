@@ -7,6 +7,11 @@ import type {
   LocalDataPayload,
   SaveIndex,
 } from '../domain/types.ts'
+import {
+  levelMetaPredatesWorld,
+  localDataBelongs,
+  resolvePresetOwner,
+} from '../domain/verify.ts'
 import { explainParseError } from '../parse/explain.ts'
 import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
 import type {
@@ -24,6 +29,15 @@ export interface PlayerFileState {
   uid?: Guid
   status: 'queued' | 'parsing' | 'loaded' | 'rejected'
   reason?: string
+  /**
+   * Which slot this file belongs to.
+   *
+   * The ledger has always held `LocalData` and `LevelMeta` rows despite being
+   * called `playerFiles`; now that the Files panel groups by slot, saying so is
+   * cheaper than inferring it from the name. Absent on rows written before a
+   * sniff could say — a `.sav` batch whose level is picked by size.
+   */
+  kind?: 'player' | 'local' | 'levelmeta'
 }
 
 export interface SaveState {
@@ -69,6 +83,17 @@ export interface SaveState {
   pendingPlayerFiles: File[]
   /** Same, for `LocalData` — reading it needs a world to attribute it to. */
   pendingLocalFile?: File
+  /**
+   * Same, for `LevelMeta`.
+   *
+   * Reading it needs no world — it describes the save file rather than its
+   * contents — but *keeping* it does: a level arriving afterwards is a different
+   * world as far as anything here can tell, and the reset that loads one clears
+   * `levelMeta` for the same reason it clears the fog. Holding the file instead
+   * means "metadata first, then the level" ends up with metadata, and that it
+   * gets checked against the world like every other addition.
+   */
+  pendingLevelMetaFile?: File
 
   acceptFiles: (files: File[]) => Promise<void>
   reset: () => void
@@ -153,9 +178,45 @@ function ledgerFrom(
         uid: s.filenameUid,
         status,
         reason: s.reason,
+        kind: slotOf(s.kind),
       } satisfies PlayerFileState,
     ]),
   )
+}
+
+/**
+ * Folds the worker's per-file verdicts back into the ledger.
+ *
+ * Shared by the JSON and `.sav` player paths, which report identically. `bytes`
+ * comes from whatever row is already there — the worker is handed buffers and
+ * never learns a file's size — and `kind` is asserted rather than carried,
+ * because a report only comes back for a file that was sent to a player reader.
+ */
+function mergeReports(
+  reports: readonly PlayerFileReport[],
+  existing: Record<string, PlayerFileState>,
+): Record<string, PlayerFileState> {
+  return Object.fromEntries(
+    reports.map((r) => [
+      r.fileName,
+      {
+        fileName: r.fileName,
+        bytes: existing[r.fileName]?.bytes ?? 0,
+        uid: r.uid,
+        status: r.ok ? ('loaded' as const) : ('rejected' as const),
+        reason: r.reason,
+        kind: 'player' as const,
+      } satisfies PlayerFileState,
+    ]),
+  )
+}
+
+/** The sniffer's kinds are about file shape; the ledger's are about slots. */
+function slotOf(kind: Sniffed['kind']): PlayerFileState['kind'] {
+  if (kind === 'local') return 'local'
+  if (kind === 'levelmeta') return 'levelmeta'
+  if (kind === 'player' || kind === 'sav') return 'player'
+  return undefined
 }
 
 /**
@@ -192,7 +253,12 @@ async function parsePlayers(files: File[]) {
       ...Object.fromEntries(
         files.map((f) => [
           f.name,
-          { fileName: f.name, bytes: f.size, status: 'parsing' as const },
+          {
+            fileName: f.name,
+            bytes: f.size,
+            status: 'parsing' as const,
+            kind: 'player' as const,
+          },
         ]),
       ),
     },
@@ -212,18 +278,7 @@ async function parsePlayers(files: File[]) {
     index: buildSaveIndex(msg.payload),
     playerFiles: {
       ...s.playerFiles,
-      ...Object.fromEntries(
-        msg.reports.map((r: PlayerFileReport) => [
-          r.fileName,
-          {
-            fileName: r.fileName,
-            bytes: s.playerFiles[r.fileName]?.bytes ?? 0,
-            uid: r.uid,
-            status: r.ok ? ('loaded' as const) : ('rejected' as const),
-            reason: r.reason,
-          },
-        ]),
-      ),
+      ...mergeReports(msg.reports, s.playerFiles),
     },
   }))
 }
@@ -310,18 +365,7 @@ async function parsePlayerSavs(players: Sniffed[], set: Setter) {
     index: buildSaveIndex(msg.payload),
     playerFiles: {
       ...s.playerFiles,
-      ...Object.fromEntries(
-        msg.reports.map((r: PlayerFileReport) => [
-          r.fileName,
-          {
-            fileName: r.fileName,
-            bytes: s.playerFiles[r.fileName]?.bytes ?? 0,
-            uid: r.uid,
-            status: r.ok ? ('loaded' as const) : ('rejected' as const),
-            reason: r.reason,
-          },
-        ]),
-      ),
+      ...mergeReports(msg.reports, s.playerFiles),
     },
   }))
 }
@@ -341,14 +385,7 @@ export function inferOwner(
   index: SaveIndex | undefined,
 ): Guid | undefined {
   if (!index) return undefined
-  const owners = new Set<Guid>()
-  for (const preset of local.presets) {
-    for (const id of preset.palIds) {
-      const owner = index.palById.get(id)?.ownerPlayerUid
-      if (owner) owners.add(owner)
-    }
-  }
-  return owners.size === 1 ? [...owners][0] : undefined
+  return resolvePresetOwner(local.presets, index.palById).ownerUid
 }
 
 /**
@@ -367,6 +404,7 @@ async function parseLocal(file: File, set: Setter) {
         fileName: file.name,
         bytes: file.size,
         status: 'parsing' as const,
+        kind: 'local' as const,
       },
     },
   }))
@@ -377,21 +415,59 @@ async function parseLocal(file: File, set: Setter) {
   ])
   if (msg.t !== 'localResult') return
 
-  set((s) => ({
-    // A rejected drop leaves any previously loaded client data alone.
-    localData: msg.payload
-      ? { ...msg.payload, ownerUid: inferOwner(msg.payload, s.index) }
-      : s.localData,
-    playerFiles: {
-      ...s.playerFiles,
-      [msg.report.fileName]: {
-        fileName: msg.report.fileName,
-        bytes: file.size,
-        status: msg.report.ok ? ('loaded' as const) : ('rejected' as const),
-        reason: msg.report.reason,
+  set((s) => {
+    const row = {
+      fileName: msg.report.fileName,
+      bytes: file.size,
+      kind: 'local' as const,
+    }
+
+    /**
+     * Does this client belong to the world that is open?
+     *
+     * The file names no world and no player, but its party presets hold pal
+     * instance ids that either resolve here or do not. None resolving means a
+     * different world — and accepting it would draw one world's fog over
+     * another world's terrain, which looks like a rendering bug rather than a
+     * mis-drop. A client with no presets gives nothing to check, so
+     * `localDataBelongs` withholds an opinion and the file is read.
+     */
+    const presets =
+      msg.payload && s.index
+        ? resolvePresetOwner(msg.payload.presets, s.index.palById)
+        : undefined
+    const belongs = presets ? localDataBelongs(presets) : undefined
+
+    if (msg.payload && belongs === false) {
+      return {
+        // Untouched: a refusal must not discard client data already loaded.
+        localData: s.localData,
+        playerFiles: {
+          ...s.playerFiles,
+          [msg.report.fileName]: {
+            ...row,
+            status: 'rejected' as const,
+            reason: `Not this world's client — none of its ${presets?.referenced} party pals are in this save.`,
+          },
+        },
+      }
+    }
+
+    return {
+      // A rejected drop leaves any previously loaded client data alone.
+      localData: msg.payload
+        ? { ...msg.payload, ownerUid: presets?.ownerUid }
+        : s.localData,
+      playerFiles: {
+        ...s.playerFiles,
+        [msg.report.fileName]: {
+          ...row,
+          status: msg.report.ok ? ('loaded' as const) : ('rejected' as const),
+          reason: msg.report.reason,
+        },
       },
-    },
-  }))
+    }
+  })
 }
 
 /**
@@ -408,14 +484,30 @@ async function parseLocal(file: File, set: Setter) {
  * itself and is just as true before the level finishes parsing. So there is no
  * pending slot and no drop-order dance.
  */
-async function applyLevelMeta(meta: Sniffed | undefined, set: Setter) {
-  if (!meta) return
+async function applyLevelMeta(
+  meta: Sniffed | undefined,
+  set: Setter,
+  get: () => SaveState,
+) {
+  // Drained here as well as delivered, which is what makes either order work.
+  const file = meta?.file ?? get().pendingLevelMetaFile
+  if (!file) return
 
-  const buf = await meta.file.arrayBuffer()
-  const msg = await request(
-    { t: 'parseLevelMeta', fileName: meta.file.name, buf },
-    [buf],
-  )
+  if (!get().index) {
+    if (meta) {
+      set((s) => ({
+        pendingLevelMetaFile: meta.file,
+        playerFiles: { ...s.playerFiles, ...ledgerFrom([meta], 'queued') },
+      }))
+    }
+    return
+  }
+
+  set({ pendingLevelMetaFile: undefined })
+  const buf = await file.arrayBuffer()
+  const msg = await request({ t: 'parseLevelMeta', fileName: file.name, buf }, [
+    buf,
+  ])
   if (msg.t !== 'levelMetaResult') return
 
   set((s) => ({
@@ -426,9 +518,24 @@ async function applyLevelMeta(meta: Sniffed | undefined, set: Setter) {
       ...s.playerFiles,
       [msg.report.fileName]: {
         fileName: msg.report.fileName,
-        bytes: meta.file.size,
+        bytes: file.size,
+        kind: 'levelmeta' as const,
         status: msg.report.ok ? ('loaded' as const) : ('rejected' as const),
-        reason: msg.report.reason,
+        /**
+         * Loaded, but said out loud when the clock does not add up.
+         *
+         * Nothing in this file identifies a world, so it cannot be refused on
+         * identity — see `levelMetaPredatesWorld`. What it can be is obviously
+         * older than the world it was dropped on, which means an earlier
+         * autosave folder, and the row says so rather than quietly relabelling
+         * when the save was written.
+         */
+        reason:
+          msg.payload && s.index
+            ? levelMetaPredatesWorld(msg.payload, s.index.pals)
+              ? 'Older than this world — from an earlier snapshot of it, or from another save.'
+              : undefined
+            : msg.report.reason,
       },
     },
   }))
@@ -481,6 +588,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       playerFiles: {},
       pendingPlayerFiles: [],
       pendingLocalFile: undefined,
+      pendingLevelMetaFile: undefined,
     })
   },
 
@@ -495,7 +603,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
     await ingestWorld(parts, set, get)
     // After `ingestWorld`, not before: that replaces the ingestion ledger
     // wholesale, so an entry written earlier would be dropped on the floor.
-    await applyLevelMeta(parts.levelMeta, set)
+    await applyLevelMeta(parts.levelMeta, set, get)
     await applyLocal(parts.local, set, get)
   },
 }))
@@ -507,7 +615,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
  * path this takes and whichever of its many exits it leaves by.
  */
 async function ingestWorld(
-  { level, players, rejected, ignored, savs, local }: Partitioned,
+  { level, players, rejected, ignored, savs, local, levelMeta }: Partitioned,
   set: Setter,
   get: () => SaveState,
 ) {
@@ -529,11 +637,44 @@ async function ingestWorld(
   }
 
   if (!level && players.length === 0) {
-    // A `LocalData` on its own is a complete, sensible drop — the caller
-    // handles it next — so it must not be reported as nothing.
-    if (local) return
-    // Nothing usable, so an ignored file is worth explaining after all: a drop
-    // that produces no visible change at all reads as a bug in the app.
+    // A `LocalData` or a `LevelMeta` on its own is a complete, sensible drop —
+    // the caller reads both after this — so neither may be reported as nothing.
+    // Without `levelMeta` here, adding world metadata to an open world planted
+    // "Nothing here looks like a Palworld save" in the store while succeeding,
+    // and dropping it *first* showed that message on the landing screen.
+    if (local || levelMeta) return
+
+    /**
+     * A mis-drop onto an open world must never cost the user that world.
+     *
+     * This branch used to set `status: 'error'` unconditionally, which was
+     * survivable while the only drop target was the landing screen — there was
+     * nothing to lose. Now that every gesture is an incremental one it was
+     * actively destructive: dropping a stray `notes.txt` onto a loaded save
+     * replaced the entire app with "Could not read that file", with the parsed
+     * index still sitting in the store and no way back to it. Caught by the
+     * last step of this feature's own walkthrough.
+     *
+     * So with a world open the rejection is *reported*, in the ledger the Files
+     * panel already reads, and nothing else changes. `error` is for the landing
+     * screen, where a message is the only feedback there is.
+     */
+    if (get().index) {
+      set((s) => ({
+        playerFiles: {
+          ...s.playerFiles,
+          ...ledgerFrom(rejected, 'rejected'),
+          // A `*_dps.sav` is normally kept silent — see `Partitioned.ignored` —
+          // but if it is all that arrived, silence is indistinguishable from the
+          // app having missed the drop.
+          ...(rejected.length === 0 ? ledgerFrom(ignored, 'rejected') : {}),
+        },
+      }))
+      return
+    }
+
+    // Nothing usable and nothing loaded, so an ignored file is worth explaining
+    // after all: a drop that produces no visible change at all reads as a bug.
     const unusable = rejected[0] ?? ignored[0]
     set({
       status: unusable ? 'error' : get().status,
@@ -561,9 +702,22 @@ async function ingestWorld(
     return
   }
 
+  /**
+   * Read before the reset below, not after.
+   *
+   * Files held from an earlier gesture are for *this* level — that is the whole
+   * point of holding them — but the reset that starts a new world cleared
+   * `pendingPlayerFiles` first and the drain at the bottom of this function then
+   * read the emptied list. So "drop your Players folder, then the level", the
+   * exact flow the hold exists for, silently parsed nothing and left every row
+   * queued forever.
+   */
+  const held = get().pendingPlayerFiles
+  const heldNames = new Set(held.map((f) => f.name))
+
   if (level) {
-    set({
-      status: 'loading',
+    set((s) => ({
+      status: 'loading' as const,
       fileName: level.file.name,
       fileBytes: level.file.size,
       error: undefined,
@@ -574,11 +728,18 @@ async function ingestWorld(
       localData: undefined,
       // This one is being parsed, whatever the last one was.
       restoredFrom: undefined,
-      playerFiles: ledgerFrom(players, 'queued'),
+      // A new world gets a new ledger, except for the rows it is about to
+      // parse: those files were dropped for this level.
+      playerFiles: {
+        ...Object.fromEntries(
+          Object.entries(s.playerFiles).filter(([name]) => heldNames.has(name)),
+        ),
+        ...ledgerFrom(players, 'queued'),
+      },
       pendingPlayerFiles: [],
-      phase: 'decode',
+      phase: 'decode' as const,
       progressLabel: 'Reading file',
-    })
+    }))
 
     try {
       const buf = await level.file.arrayBuffer()
@@ -601,8 +762,7 @@ async function ingestWorld(
   }
 
   // Anything held from an earlier gesture goes in with this batch.
-  const queued = get().pendingPlayerFiles
-  const batch = [...queued, ...players.map((p) => p.file)]
+  const batch = [...held, ...players.map((p) => p.file)]
   if (batch.length > 0) {
     set({ pendingPlayerFiles: [] })
     try {
