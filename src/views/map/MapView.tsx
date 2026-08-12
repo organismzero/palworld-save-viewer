@@ -186,7 +186,7 @@ export function MapView({ index }: { index: SaveIndex }) {
   }
 
   return (
-    <div className="relative h-[calc(100dvh-3.25rem)] w-full overflow-hidden">
+    <div className="relative h-full w-full overflow-hidden">
       <div
         ref={hostRef}
         className="absolute inset-0"

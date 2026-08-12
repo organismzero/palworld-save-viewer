@@ -15,6 +15,8 @@ import type { SaveIndex } from '../domain/types.ts'
 import { bytes, count, relativeTime } from '../lib/format.ts'
 import { useSaveStore } from '../store/saveStore.ts'
 import { cn } from '../lib/utils.ts'
+import { Button } from '../components/controls.tsx'
+import { Panel } from '../components/primitives.tsx'
 
 export function Diagnostics({ index }: { index: SaveIndex }) {
   const [open, setOpen] = useState(false)
@@ -55,8 +57,8 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
 
   return (
     <div ref={ref} className="relative">
-      <button
-        type="button"
+      <Button
+        size="sm"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={
@@ -67,26 +69,25 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
               : 'Save diagnostics — no warnings'
         }
         className={cn(
-          'flex items-center gap-1.5 rounded-[6px] border px-2 py-1 text-xs transition-colors',
-          attention
-            ? 'border-[oklch(0.80_0.15_85)]/50 text-[oklch(0.85_0.14_85)]'
-            : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-[var(--color-signal)]',
+          attention &&
+            'border-[var(--color-gold)]/50 text-[var(--color-gold)] enabled:hover:border-[var(--color-gold)]',
         )}
       >
         <span
           aria-hidden
           className="h-1.5 w-1.5 rounded-full"
           style={{
-            background: attention
-              ? 'oklch(0.80 0.15 85)'
-              : 'oklch(0.78 0.16 150)',
+            background: attention ? 'var(--color-gold)' : 'var(--color-hp)',
           }}
         />
         <span className="num">{badge}</span>
-      </button>
+      </Button>
 
       {open && (
-        <div className="raised-edge absolute top-full right-0 z-40 mt-2 w-80 rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+        <Panel
+          padded
+          className="absolute top-full right-0 z-40 mt-2 w-80 animate-[pw-panel-in_var(--dur-fast)_var(--ease-out)]"
+        >
           <div className="label mb-2">save diagnostics</div>
 
           <dl className="space-y-1 text-xs">
@@ -129,18 +130,18 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
 
           <div className="mt-3 border-t border-[var(--color-line-faint)] pt-3">
             {warnings.length === 0 ? (
-              <p className="text-xs text-[oklch(0.78_0.16_150)]">
+              <p className="text-xs text-[var(--color-hp)]">
                 Every cross-reference in this save resolved.
               </p>
             ) : (
               <ul className="space-y-1.5 text-xs">
                 {warnings.map((w) => (
                   <li key={w.kind + w.detail}>
-                    <span className="num text-[oklch(0.85_0.14_85)]">
+                    <span className="num text-[var(--color-gold)]">
                       {count(w.count)}×
                     </span>{' '}
                     {w.detail}
-                    <div className="num text-[10px] text-[var(--color-muted)]/70">
+                    <div className="num text-[11px] text-[var(--color-muted)]/70">
                       {w.kind}
                     </div>
                   </li>
@@ -164,7 +165,7 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
               </ul>
             </div>
           )}
-        </div>
+        </Panel>
       )}
     </div>
   )

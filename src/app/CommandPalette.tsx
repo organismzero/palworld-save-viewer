@@ -208,12 +208,12 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
       label="Search this save"
       shouldFilter={false}
       // cmdk renders into a portal; these classes style its overlay wrapper.
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[var(--color-scrim)] p-4 pt-[12vh] backdrop-blur-scrim"
       onClick={(e) => {
         if (e.target === e.currentTarget) setOpen(false)
       }}
     >
-      <div className="raised-edge w-full max-w-xl overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)]">
+      <div className="corner-ticks relative isolate w-full max-w-xl overflow-hidden border border-[var(--color-line)] bg-[rgb(4_10_15/0.94)] shadow-modal [--tick-size:12px]">
         <Command.Input
           value={query}
           onValueChange={setQuery}
@@ -222,7 +222,7 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
               ? 'Search pals, items, players, bases…'
               : 'Load a save to search it'
           }
-          className="w-full border-b border-[var(--color-line)] bg-transparent px-4 py-3 text-sm outline-none placeholder:text-[var(--color-muted)]"
+          className="w-full border-b border-[var(--color-line)] bg-[rgb(3_9_13/0.75)] px-4 py-3 text-sm shadow-[var(--edge-sunken)] outline-none placeholder:text-[var(--color-faint)]"
         />
         <Command.List className="max-h-[50vh] overflow-y-auto p-2">
           <Command.Empty className="label px-2 py-6 text-center">
@@ -233,17 +233,17 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
               key={group}
               heading={group}
               // The heading is rendered by cmdk, so it is reached through an
-              // arbitrary variant. Spelled out in utilities rather than the
-              // `.label` class: an arbitrary variant composes utilities, and
-              // cannot apply a custom class from a `@layer base` rule.
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-[var(--color-muted)] [&_[cmdk-group-heading]]:uppercase"
+              // arbitrary variant. Spelled out in utilities rather than reusing
+              // `.label`: an arbitrary variant composes utilities, and cannot
+              // apply a custom class from a `@layer base` rule.
+              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-[var(--tracking-label)] [&_[cmdk-group-heading]]:text-[var(--color-faint)] [&_[cmdk-group-heading]]:uppercase"
             >
               {items.map((r) => (
                 <Command.Item
                   key={r.key}
                   value={r.key}
                   onSelect={r.run}
-                  className="flex cursor-pointer items-baseline gap-3 rounded-[6px] px-2 py-1.5 text-sm data-[selected=true]:bg-[var(--color-raised)]"
+                  className="flex cursor-pointer items-baseline gap-3 rounded-control px-2 py-1.5 text-sm data-[selected=true]:bg-[image:var(--surface-row-selected)] data-[selected=true]:text-white"
                 >
                   <span className="truncate">{r.label}</span>
                   {r.hint && (

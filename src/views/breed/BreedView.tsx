@@ -115,7 +115,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
   const noBreedingData = data !== undefined && table === undefined
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem)]">
+    <div className="flex h-full">
       <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
         <div>
           <div className="label mb-2">whose pals</div>

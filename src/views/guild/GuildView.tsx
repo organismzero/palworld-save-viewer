@@ -98,7 +98,7 @@ export function GuildView({ index }: { index: SaveIndex }) {
 
   if (!guild) {
     return (
-      <div className="flex h-[calc(100dvh-3.25rem)] items-center justify-center p-8">
+      <div className="flex h-full items-center justify-center p-8">
         <p className="text-sm text-[var(--color-muted)]">
           This save contains no guilds.
         </p>
@@ -107,7 +107,7 @@ export function GuildView({ index }: { index: SaveIndex }) {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem)]">
+    <div className="flex h-full">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl p-8">
           <GuildHero

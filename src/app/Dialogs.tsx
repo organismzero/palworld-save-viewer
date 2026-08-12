@@ -20,7 +20,8 @@ import {
   setRememberPref,
 } from '../store/session.ts'
 import { useUiStore } from '../store/uiStore.ts'
-import { Modal } from '../components/controls.tsx'
+import { Button, Checkbox, Modal } from '../components/controls.tsx'
+import { KeyHint } from '../components/primitives.tsx'
 
 /* -------------------------------------------------------------------------
    Data sources and licence
@@ -109,8 +110,8 @@ function CacheButton({
   const [busy, setBusy] = useState(false)
   return (
     <div className="mt-3 flex items-center gap-3">
-      <button
-        type="button"
+      <Button
+        size="sm"
         disabled={busy}
         onClick={() => {
           setBusy(true)
@@ -118,10 +119,9 @@ function CacheButton({
             .then(onCleared)
             .finally(() => setBusy(false))
         }}
-        className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-xs transition-colors hover:border-[var(--color-signal)] disabled:opacity-50"
       >
         {busy ? 'Clearing…' : 'Clear cached game data'}
-      </button>
+      </Button>
       {cleared !== undefined && (
         <span className="label">
           freed {bytes(cleared)} · reload to refetch
@@ -179,12 +179,7 @@ export function ShortcutsDialog() {
             <dt className="text-sm">{s.what}</dt>
             <dd className="flex shrink-0 gap-1">
               {s.keys.map((k) => (
-                <kbd
-                  key={k}
-                  className="num rounded-[4px] border border-[var(--color-line)] px-1.5 py-0.5 text-[11px]"
-                >
-                  {k}
-                </kbd>
+                <KeyHint key={k}>{k}</KeyHint>
               ))}
             </dd>
           </div>
@@ -225,36 +220,35 @@ function SessionControls() {
 
   return (
     <>
-      <label className="flex cursor-pointer items-start gap-2 text-[var(--color-muted)]">
-        <input
-          type="checkbox"
-          checked={pref === 'on'}
-          onChange={(e) => toggle(e.target.checked)}
-          className="mt-1 accent-[var(--color-signal)]"
-        />
-        <span>
-          Keep the save I have open in this browser, so it comes back after a
-          reload. It is stored on this machine only and still never uploaded.
-          Only the most recent save is kept.{' '}
-          <span className="text-[var(--color-text)]">
-            Turning this off deletes what is stored.
+      <Checkbox
+        checked={pref === 'on'}
+        onChange={toggle}
+        className="items-start text-[var(--color-muted)]"
+        label={
+          <span>
+            Keep the save I have open in this browser, so it comes back after a
+            reload. It is stored on this machine only and still never uploaded.
+            Only the most recent save is kept.{' '}
+            <span className="text-[var(--color-text)]">
+              Turning this off deletes what is stored.
+            </span>
           </span>
-        </span>
-      </label>
+        }
+      />
 
       {descriptor && pref === 'on' && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
+          <Button
+            size="sm"
+            tone="danger"
             onClick={() => {
               void forgetSession().then(() =>
                 setDescriptor(sessionDescriptor()),
               )
             }}
-            className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-xs transition-colors hover:border-[var(--color-signal)]"
           >
             Forget this save
-          </button>
+          </Button>
           <span className="label">
             <span className="num">{descriptor.fileName}</span> ·{' '}
             {bytes(descriptor.fileBytes)} ·{' '}

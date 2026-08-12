@@ -14,6 +14,8 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
+import { Button } from '../components/controls.tsx'
+
 interface Props {
   children: ReactNode
   /** What broke, in the user's terms — "the map", "this save". */
@@ -53,24 +55,12 @@ export class ErrorBoundary extends Component<Props, State> {
           This is a bug in the viewer, not a problem with your save. The rest of
           the app still works — try another view, or reload to start over.
         </p>
-        <p className="num max-w-xl text-xs break-words text-[var(--color-el-fire)]">
+        <p className="num max-w-xl text-xs break-words text-[var(--color-danger)]">
           {error.message}
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={this.reset}
-            className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-sm transition-colors hover:border-[var(--color-signal)]"
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-sm transition-colors hover:border-[var(--color-signal)]"
-          >
-            Reload
-          </button>
+          <Button onClick={this.reset}>Try again</Button>
+          <Button onClick={() => window.location.reload()}>Reload</Button>
         </div>
       </div>
     )

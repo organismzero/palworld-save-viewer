@@ -207,7 +207,7 @@ export function BasesView({ index }: { index: SaveIndex }) {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem)]">
+    <div className="flex h-full">
       <SourceRail
         index={index}
         bases={bases}

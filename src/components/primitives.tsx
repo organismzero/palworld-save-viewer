@@ -89,6 +89,50 @@ export function PanelTitleBar({
   )
 }
 
+/**
+ * The wide, thin, letterspaced title the game sets in the corner of a
+ * full-screen menu. Low-contrast on purpose: it names the screen rather than
+ * shouting at you. Uppercase is applied in CSS, so the copy stays sentence case.
+ */
+export function ScreenTitle({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <h1
+      className={cn(
+        'font-display text-[38px] leading-none font-[200] tracking-title text-[rgb(238_246_249/0.82)] uppercase [text-shadow:0_2px_18px_rgb(0_0_0/0.6)] sm:text-title',
+        className,
+      )}
+    >
+      {children}
+    </h1>
+  )
+}
+
+/** The footer strip of key prompts every game screen ends with. */
+export function PromptBar({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-end gap-x-5 gap-y-1 px-4 py-2 text-sm',
+        className,
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
 export function SectionHeading({
   title,
   hint,

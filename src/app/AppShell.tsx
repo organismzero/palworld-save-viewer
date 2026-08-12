@@ -1,4 +1,11 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 
 import type { SaveIndex } from '../domain/types.ts'
 import { SaveSummary } from './SaveSummary.tsx'
@@ -35,7 +42,9 @@ import {
 } from '../store/session.ts'
 import { useUiStore, type ViewId } from '../store/uiStore.ts'
 import { parseHash } from './viewParams.ts'
-import { cn } from '../lib/utils.ts'
+import { tabId } from '../lib/utils.ts'
+import { Button, TabBar } from '../components/controls.tsx'
+import { KeyHint, PromptBar } from '../components/primitives.tsx'
 import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
 import { AboutDialog, ShortcutsDialog } from './Dialogs.tsx'
@@ -53,6 +62,10 @@ const VIEWS = [
   // place costs nothing and renumbers nothing.
   { id: 'breed', label: 'Breed' },
 ] as const satisfies readonly { id: ViewId; label: string }[]
+
+/** Ties the tab strip to the one panel it drives, for `aria-controls`. */
+const VIEW_TABS = 'view'
+const VIEW_PANEL = 'view-panel'
 
 /**
  * No router. The parsed index lives in memory and cannot survive a reload, so
@@ -200,44 +213,41 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const setAbout = useUiStore((s) => s.setAbout)
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="flex h-13 shrink-0 items-center gap-4 border-b border-[var(--color-line)] px-4">
-        <span className="font-display text-sm tracking-tight">
+    <div className="flex h-dvh flex-col">
+      <header className="flex h-[var(--header-height)] shrink-0 items-center gap-5 border-b border-[var(--color-line)] bg-[rgb(5_13_19/0.8)] px-4">
+        <span className="hidden font-display text-lg font-[200] tracking-[0.12em] whitespace-nowrap uppercase sm:inline">
           Palworld Save Viewer
         </span>
 
-        <nav aria-label="Views" className="flex gap-1">
-          {VIEWS.map((v, i) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => useUiStore.getState().setView(v.id)}
-              aria-current={view === v.id ? 'page' : undefined}
-              title={`${v.label} (${i + 1})`}
-              className={cn(
-                'rounded-[6px] px-3 py-1.5 text-sm transition-colors',
-                view === v.id
-                  ? 'bg-[var(--color-raised)] text-[var(--color-text)]'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]',
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </nav>
+        {/*
+          A real tablist, not a nav of links: `aria-controls` points at the one
+          panel below, which is labelled back by the active tab. Arrow keys move
+          focus without switching view — see `useTabKeys` — because every view is
+          a separate lazy chunk and one of them starts Pixi.
+        */}
+        <TabBar
+          name={VIEW_TABS}
+          panelId={VIEW_PANEL}
+          tabs={VIEWS.map((v, i) => ({
+            id: v.id,
+            label: v.label,
+            hint: i + 1,
+          }))}
+          value={view}
+          onChange={(id) => useUiStore.getState().setView(id as ViewId)}
+          className="max-w-3xl flex-1"
+        />
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            size="sm"
+            keyHint="⌘K"
             onClick={() => setPalette(true)}
             aria-label="Search this save"
-            className="hidden items-center gap-2 rounded-[6px] border border-[var(--color-line)] px-2.5 py-1 text-xs text-[var(--color-muted)] transition-colors hover:border-[var(--color-signal)] sm:flex"
+            className="hidden sm:inline-flex"
           >
             Search
-            <kbd className="num rounded-[3px] border border-[var(--color-line)] px-1 text-[10px]">
-              ⌘K
-            </kbd>
-          </button>
+          </Button>
 
           <span className="label hidden max-w-40 truncate lg:inline">
             {fileName}
@@ -245,29 +255,28 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
           <Diagnostics index={index} />
 
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => setAbout(true)}
-            aria-label="Data sources and licence"
             title="Data sources and licence"
-            className="rounded-[6px] border border-[var(--color-line)] px-2 py-1 text-xs text-[var(--color-muted)] transition-colors hover:border-[var(--color-signal)]"
           >
             About
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={reset}
-            className="rounded-[6px] border border-[var(--color-line)] px-2.5 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
-          >
+          <Button size="sm" onClick={reset}>
             Load another
-          </button>
+          </Button>
         </div>
       </header>
 
       <RememberOffer />
 
-      <main className="flex-1">
+      <main
+        id={VIEW_PANEL}
+        role="tabpanel"
+        aria-labelledby={tabId(VIEW_TABS, view)}
+        className="min-h-0 flex-1"
+      >
         {/* Keyed on the view so switching tabs clears a view's crash. */}
         <ErrorBoundary key={view} what={`the ${view} view`}>
           <Suspense
@@ -287,10 +296,44 @@ export function AppShell({ index }: { index: SaveIndex }) {
         </ErrorBoundary>
       </main>
 
+      <Prompts />
+
       <CommandPalette index={index} />
       <AboutDialog />
       <ShortcutsDialog />
     </div>
+  )
+}
+
+/**
+ * The footer prompt row the game ends every screen with.
+ *
+ * Only keys that do something get printed. The design system's own row offers
+ * `E Marker` and `R Snap to base`; this app never writes to a save and has no
+ * marker to place, and the two map keys belong to the map's own row rather than
+ * to every screen. `Esc` appears only while there is something for it to close.
+ */
+function Prompts() {
+  const anyOpen = useUiStore(
+    (s) => s.paletteOpen || s.aboutOpen || s.shortcutsOpen,
+  )
+
+  return (
+    <PromptBar className="shrink-0 border-t border-[var(--color-line-faint)] bg-[rgb(5_13_19/0.7)]">
+      <Prompt keys="⌘K">Search</Prompt>
+      <Prompt keys="1–6">Switch view</Prompt>
+      <Prompt keys="?">Shortcuts</Prompt>
+      {anyOpen && <Prompt keys="Esc">Close</Prompt>}
+    </PromptBar>
+  )
+}
+
+function Prompt({ keys, children }: { keys: string; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-2 text-[var(--color-muted)]">
+      <KeyHint>{keys}</KeyHint>
+      {children}
+    </span>
   )
 }
 
@@ -329,27 +372,19 @@ function RememberOffer() {
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-line)] bg-[var(--color-panel)] px-4 py-2 text-sm">
       <span>Keep this save in this browser?</span>
       <span className="text-[var(--color-muted)]">
         It stays on this machine and is never uploaded — it just means you do
         not have to find the file again after a reload.
       </span>
       <span className="ml-auto flex gap-2">
-        <button
-          type="button"
-          onClick={() => answer(true)}
-          className="rounded-[6px] border border-[var(--color-signal)]/60 px-3 py-1 text-xs transition-colors hover:border-[var(--color-signal)]"
-        >
+        <Button size="sm" tone="signal" onClick={() => answer(true)}>
           Keep it
-        </button>
-        <button
-          type="button"
-          onClick={() => answer(false)}
-          className="rounded-[6px] border border-[var(--color-line)] px-3 py-1 text-xs transition-colors hover:border-[var(--color-muted)]"
-        >
+        </Button>
+        <Button size="sm" onClick={() => answer(false)}>
           No thanks
-        </button>
+        </Button>
       </span>
     </div>
   )

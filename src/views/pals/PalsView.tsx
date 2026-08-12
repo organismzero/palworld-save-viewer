@@ -158,7 +158,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
     flags.named
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem)]">
+    <div className="flex h-full">
       {/* Filter rail */}
       <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
         <div>

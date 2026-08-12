@@ -119,7 +119,7 @@ Two bugs the throwaway render caught, both invisible to typecheck. The modal's c
 
 ### Stage 4 — the shell
 
-_Files:_ `src/App.tsx`, `src/app/AppShell.tsx`, `DropZone.tsx`, `Dialogs.tsx`, `CommandPalette.tsx`, `Diagnostics.tsx`, `ErrorBoundary.tsx`, `SaveSummary.tsx`
+**Landed.** _Files:_ `src/App.tsx`, `src/app/AppShell.tsx`, `DropZone.tsx`, `Dialogs.tsx`, `CommandPalette.tsx`, `Diagnostics.tsx`, `ErrorBoundary.tsx`, `SaveSummary.tsx`, `src/components/primitives.tsx`, and a one-line height change in each of the five views
 
 52px header on the dark bar, wordmark in Titillium 200 uppercase tracked, sheared tab strip on `TabBar` with the full tab/tabpanel wiring, and Search / About / Load another lifted onto `Button`. The keep-this-save bar moves onto `Button`s. A footer `PromptBar` appears with the global keys from decision 8 — new furniture, not a restyle.
 
@@ -130,6 +130,14 @@ Dialogs and the command palette move onto `Modal` and the sunken-input treatment
 The `h-[calc(100dvh-3.25rem)]` in five views is tied to the 52px header. It becomes a token here so the views stop hard-coding it and the footer bar's height is accounted for once.
 
 `SaveSummary.tsx` is the Summary view and belongs here rather than with the other views, because it sits in `src/app/` with the rest of the shell. Stage 2 already gave it its stat tiles, tables and panels; what is left is its header, the "Load another" button, the `rounded-[10px]` wrappers and a handful of raw oklch literals in the diagnostics list.
+
+Landed with three things worth recording.
+
+**The shell became a real fixed-height flex column** (`h-dvh`, `main` at `min-h-0 flex-1`), so the five views dropped `h-[calc(100dvh-3.25rem)]` for `h-full` — one line each, and the reason the keep-this-save bar no longer pushes the layout past the fold. That immediately exposed a bug: `SaveSummary` had always relied on the _document_ scrolling, so under a fixed shell it was clipped at the fold. It now scrolls itself, which is what every other view already did.
+
+**`ScreenTitle` and `PromptBar` joined `primitives.tsx`** rather than being written inline in the landing screen and the shell. `ScreenTitle` uppercases in CSS, so the copy stays sentence case.
+
+**The tab wiring was verified in the browser, not just typechecked**: the panel's `aria-labelledby` resolves to the selected tab, roving `tabindex` leaves exactly one tab in the page's tab order, and `ArrowRight` moves focus to the next tab while the selection and the hash both stay put until Enter. The `Esc` prompt appears in the footer only while something is open — confirmed by counting the keycaps in the row with the palette open and closed. (Watch out when checking that by hand: `ShortcutsDialog` is a permanently mounted `<dialog>`, so its ten keycaps are always in the DOM.)
 
 ### Stage 5 — Pals
 

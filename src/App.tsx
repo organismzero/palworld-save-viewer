@@ -4,6 +4,7 @@ import { DropZone } from './app/DropZone.tsx'
 import { ErrorBoundary } from './app/ErrorBoundary.tsx'
 import { useSaveStore } from './store/saveStore.ts'
 import { bytes } from './lib/format.ts'
+import { Button } from './components/controls.tsx'
 
 /**
  * Lazy so the empty state does not pay for the shell.
@@ -24,13 +25,15 @@ export function App() {
   if (status === 'loading') {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-3">
-        <div className="font-display text-xl">{fileName}</div>
+        <div className="font-display text-xl font-[200] tracking-[0.08em] uppercase">
+          {fileName}
+        </div>
         <div className="label" role="status" aria-live="polite">
           {progressLabel ?? 'Working'}
           {fileBytes ? ` · ${bytes(fileBytes)}` : ''}
         </div>
-        <div className="h-0.5 w-64 overflow-hidden bg-[var(--color-line)]">
-          <div className="h-full w-1/3 animate-pulse bg-[var(--color-signal)]" />
+        <div className="h-0.5 w-64 overflow-hidden bg-[var(--color-line)] shadow-[var(--edge-sunken)]">
+          <div className="h-full w-1/3 animate-pulse-dot bg-[var(--color-signal)]" />
         </div>
       </main>
     )
@@ -41,18 +44,12 @@ export function App() {
       <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8">
         <div className="label">could not read that file</div>
         <p
-          className="max-w-xl text-center text-[var(--color-el-fire)]"
+          className="max-w-xl text-center text-[var(--color-danger)]"
           role="alert"
         >
           {error}
         </p>
-        <button
-          type="button"
-          onClick={reset}
-          className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-sm hover:border-[var(--color-signal)]"
-        >
-          Try another file
-        </button>
+        <Button onClick={reset}>Try another file</Button>
       </main>
     )
   }

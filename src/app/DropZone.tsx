@@ -8,6 +8,9 @@ import {
   sessionDescriptor,
 } from '../store/session.ts'
 import { filesFromDrop } from './dropEntries.ts'
+import { Button } from '../components/controls.tsx'
+import { ScreenTitle } from '../components/primitives.tsx'
+import { cn } from '../lib/utils.ts'
 
 /**
  * Full-window drop target. Also accepts a click, because a surprising number
@@ -39,13 +42,11 @@ export function DropZone() {
         setDragging(false)
         void filesFromDrop(e.dataTransfer).then(accept)
       }}
-      className="flex min-h-dvh flex-col items-center justify-center gap-6 p-8"
+      className="flex min-h-dvh flex-col items-center justify-center gap-7 p-8"
     >
       <div className="text-center">
-        <h1 className="font-display text-4xl tracking-tight">
-          Palworld Save Viewer
-        </h1>
-        <p className="mt-2 text-sm text-[var(--color-muted)]">
+        <ScreenTitle>Palworld Save Viewer</ScreenTitle>
+        <p className="mt-3 text-sm text-[var(--color-muted)]">
           Everything is parsed in your browser. Your save never leaves this
           machine.
         </p>
@@ -54,11 +55,12 @@ export function DropZone() {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className={`raised-edge w-full max-w-xl rounded-[10px] border border-dashed px-8 py-14 transition-colors ${
+        className={cn(
+          'corner-ticks relative isolate w-full max-w-xl border border-dashed px-8 py-14 transition-colors',
           dragging
-            ? 'border-[var(--color-signal)] bg-[var(--color-surface)]'
-            : 'border-[var(--color-line)] hover:border-[var(--color-muted)]'
-        }`}
+            ? 'border-[var(--color-signal)] bg-[var(--color-signal)]/[0.06] [--tick-color:var(--color-signal)]'
+            : 'border-[var(--color-line-strong)] hover:border-[var(--color-muted)]',
+        )}
       >
         <div className="label">drop a save</div>
         <div className="mt-3 text-lg">
@@ -72,20 +74,10 @@ export function DropZone() {
       </button>
 
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 hover:border-[var(--color-signal)]"
-        >
-          Choose files
-        </button>
-        <button
-          type="button"
-          onClick={() => folderRef.current?.click()}
-          className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 hover:border-[var(--color-signal)]"
-        >
+        <Button onClick={() => inputRef.current?.click()}>Choose files</Button>
+        <Button onClick={() => folderRef.current?.click()}>
           Choose a folder
-        </button>
+        </Button>
         <ReopenButton />
       </div>
 
@@ -173,8 +165,8 @@ function ReopenButton() {
   if (!descriptor) return null
 
   return (
-    <button
-      type="button"
+    <Button
+      tone="signal"
       onClick={() => {
         void restoreSession().then((ok) => {
           if (ok) return
@@ -183,12 +175,11 @@ function ReopenButton() {
         })
       }}
       title="Reopens the copy kept in this browser. Nothing is re-read from disk."
-      className="rounded-[6px] border border-[var(--color-signal)]/60 px-3 py-1.5 transition-colors hover:border-[var(--color-signal)]"
     >
       Reopen <span className="num">{descriptor.fileName}</span>
-      <span className="ml-2 text-xs text-[var(--color-muted)]">
+      <span className="text-xs text-[var(--color-muted)]">
         {relativeTime(new Date(descriptor.savedAt))}
       </span>
-    </button>
+    </Button>
   )
 }
