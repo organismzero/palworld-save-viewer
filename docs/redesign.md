@@ -141,11 +141,15 @@ Landed with three things worth recording.
 
 ### Stage 5 — Pals
 
-_Files:_ `src/views/pals/PalsView.tsx`
+**Landed.** _Files:_ `src/views/pals/PalsView.tsx`
 
-Filter rail at `--rail-width` on `TextInput` / element pip toggles / `RangeControl` / `SelectControl` / `Checkbox`, with `ExportMenu` still at its foot. Card grid onto the system's `PalCard` shape — element wash from the bottom-left corner, monogram or icon top-right, IV bars, badge row — with HP as a bare number per decision 3. `CARD_HEIGHT` re-measured after the 11px floor lands. The virtualiser, params codec and hash sync are untouched.
+Filter rail at `--rail-width` on `TextInput` / element pip toggles / `RangeControl` / `SelectControl` / `Checkbox`, with `ExportMenu` still at its foot. Card grid onto the system's `PalCard` shape — element wash from the bottom-left corner, icon top-right, `Lv.` prefix on the name row, IV bars, badge row — with HP as a bare number per decision 3. The local `Field` and `Range` are gone in favour of the primitives. The virtualiser, params codec and hash sync are untouched.
 
-**Glass checkpoint.** This is the stage where decision 2 gets tested: ~40 blurred panels mounted and recycled while scrolling 1,400 cards. Measure before merging; if it drags, the pal card takes `solid` and everything else keeps its blur.
+**The glass checkpoint came out moot**, which is worth knowing before stage 8 worries about it: the design system's own `PalCard` is a _tinted button_, not a blurred `Panel` — translucent, hairline, raised edge, no `backdrop-filter` anywhere. A DOM sweep of the scroll container confirms 0 of 263 elements filter their backdrop. Decision 2's cost only ever lands on real `Panel`s, and the grid contains none.
+
+**`CARD_HEIGHT` and `CARD_MIN_WIDTH` were measured, not guessed.** Freed of grid stretch, the new card wants 96–131px depending on nickname and passive count, so 148 (a 136px box after the 12px gutter) fits the tallest with slack and puts about a seventh more cards on screen than the old 168. The minimum width went 210 → 230, set by the one row that cannot compress: 72px of IV bars, the IV total and two element pips.
+
+Two fixes the render forced. The owner was truncating to a single letter beside three badges, so it moved onto the species line — both are secondary metadata, and that line was empty for any pal without a nickname. And the column count was being recomputed in the grid's `onScroll`, so opening the 340px detail drawer took a third of the width away without firing a scroll event and squeezed every card until you happened to scroll; a `ResizeObserver` on the scroll container covers both that and a window resize.
 
 ### Stage 6 — Bases
 

@@ -25,15 +25,34 @@ import {
 import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
+  Field,
   IVBar,
   Panel,
   PassiveChip,
   Pill,
 } from '../../components/primitives.tsx'
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  RangeControl,
+  SelectControl,
+  TextInput,
+} from '../../components/controls.tsx'
 import { cn } from '../../lib/utils.ts'
 
-const CARD_HEIGHT = 168
-const CARD_MIN_WIDTH = 210
+/**
+ * Both re-measured against the card the redesign actually renders, rather than
+ * carried over: the content needs 96–131px depending on whether a pal has a
+ * nickname and how many passives it shows, so a 136px box (the 12px grid gutter
+ * comes out of `CARD_HEIGHT`) fits the tallest with a little slack and fits
+ * roughly a seventh more cards on a screen than the old 168.
+ *
+ * The minimum width is set by the one row that cannot compress: 72px of IV bars,
+ * the IV total, and up to two element pips.
+ */
+const CARD_HEIGHT = 148
+const CARD_MIN_WIDTH = 230
 
 export function PalsView({ index }: { index: SaveIndex }) {
   const { data, ensure } = useRefdataStore()
@@ -89,6 +108,26 @@ export function PalsView({ index }: { index: SaveIndex }) {
     patch({ selectedId: pal?.instanceId })
 
   const [columns, setColumns] = useState(4)
+
+  /**
+   * How many cards fit, recomputed with a `ResizeObserver`.
+   *
+   * This used to be recalculated in the grid's `onScroll`, which meant opening
+   * the detail drawer — 340px off this container's width, with no scroll event
+   * anywhere — left the grid on its old column count and squeezed every card
+   * until you happened to scroll. A window resize had the same problem.
+   */
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      setColumns(
+        Math.max(1, Math.floor((el.clientWidth - 32) / CARD_MIN_WIDTH)),
+      )
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const named = (p: Pal) =>
     data?.species[p.characterId.toLowerCase()]?.name ?? p.characterId
@@ -160,16 +199,13 @@ export function PalsView({ index }: { index: SaveIndex }) {
   return (
     <div className="flex h-full">
       {/* Filter rail */}
-      <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
-        <div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Filter pals by name, species or passive"
-            placeholder="Name, species, passive…"
-            className="w-full rounded-[6px] border border-[var(--color-line)] bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-[var(--color-muted)] focus:border-[var(--color-signal)]"
-          />
-        </div>
+      <aside className="w-[var(--rail-width)] shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
+        <TextInput
+          value={query}
+          onChange={setQuery}
+          aria-label="Filter pals by name, species or passive"
+          placeholder="Name, species, passive…"
+        />
 
         <div>
           <div className="label mb-2">element</div>
@@ -197,27 +233,26 @@ export function PalsView({ index }: { index: SaveIndex }) {
                     })
                   }
                   className={cn(
-                    'h-6 w-6 rounded-full border-2 transition-all',
-                    on ? 'scale-110' : 'border-transparent opacity-45',
+                    'h-[22px] w-[22px] rounded-full border transition-all',
+                    on
+                      ? 'border-[var(--color-signal)] shadow-[var(--glow-signal)]'
+                      : 'border-[var(--color-line)] opacity-40',
                   )}
-                  style={{
-                    background: el.oklch,
-                    borderColor: on ? 'var(--color-text)' : 'transparent',
-                  }}
+                  style={{ background: el.oklch }}
                 />
               )
             })}
           </div>
         </div>
 
-        <Range
+        <RangeControl
           label="minimum level"
           value={minLevel}
           min={1}
           max={60}
           onChange={setMinLevel}
         />
-        <Range
+        <RangeControl
           label="minimum IV total"
           value={minIv}
           min={0}
@@ -226,21 +261,18 @@ export function PalsView({ index }: { index: SaveIndex }) {
           onChange={setMinIv}
         />
 
-        <div>
-          <div className="label mb-2">owner</div>
-          <select
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
-            className="w-full rounded-[6px] border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-signal)]"
-          >
-            <option value="">Anyone</option>
-            {index.players.map((p) => (
-              <option key={p.playerUid} value={p.playerUid}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SelectControl
+          label="owner"
+          value={owner}
+          onChange={setOwner}
+          options={[
+            { value: '', label: 'Anyone' },
+            ...index.players.map((p) => ({
+              value: p.playerUid,
+              label: p.name,
+            })),
+          ]}
+        />
 
         <div className="space-y-1.5">
           {(
@@ -250,31 +282,20 @@ export function PalsView({ index }: { index: SaveIndex }) {
               ['named', 'Nicknamed only'],
             ] as const
           ).map(([key, label]) => (
-            <label
+            <Checkbox
               key={key}
-              className="flex cursor-pointer items-center gap-2 text-sm"
-            >
-              <input
-                type="checkbox"
-                checked={flags[key]}
-                onChange={(e) =>
-                  setFlags((f) => ({ ...f, [key]: e.target.checked }))
-                }
-                className="accent-[var(--color-signal)]"
-              />
-              {label}
-            </label>
+              checked={flags[key]}
+              onChange={(on) => setFlags((f) => ({ ...f, [key]: on }))}
+              label={label}
+              className="w-full"
+            />
           ))}
         </div>
 
         {dirty && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="w-full rounded-[6px] border border-[var(--color-line)] px-2 py-1.5 text-xs hover:border-[var(--color-signal)]"
-          >
+          <Button size="sm" onClick={clearAll} className="w-full">
             Clear all filters
-          </button>
+          </Button>
         )}
 
         {/*
@@ -304,44 +325,32 @@ export function PalsView({ index }: { index: SaveIndex }) {
             {count(filtered.length)} of {count(index.pals.length)} pals
           </span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="label">sort</span>
-            <select
+            <span className="label" aria-hidden>
+              sort
+            </span>
+            <SelectControl
+              aria-label="Sort pals"
               value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="rounded-[6px] border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1 text-xs outline-none"
-            >
-              <option value="iv">IV total</option>
-              <option value="level">Level</option>
-              <option value="rarity">Rarity</option>
-              <option value="caught">Recently caught</option>
-              <option value="name">Name</option>
-            </select>
+              onChange={(v) => setSort(v as SortKey)}
+              className="w-44"
+              options={[
+                { value: 'iv', label: 'IV total' },
+                { value: 'level', label: 'Level' },
+                { value: 'rarity', label: 'Rarity' },
+                { value: 'caught', label: 'Recently caught' },
+                { value: 'name', label: 'Name' },
+              ]}
+            />
           </div>
         </div>
 
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto p-4"
-          onScroll={() => {
-            const w = scrollRef.current?.clientWidth ?? 0
-            const next = Math.max(1, Math.floor((w - 32) / CARD_MIN_WIDTH))
-            if (next !== columns) setColumns(next)
-          }}
-        >
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {filtered.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3">
               <p className="text-sm text-[var(--color-muted)]">
                 No pals match these filters.
               </p>
-              {dirty && (
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="rounded-[6px] border border-[var(--color-line)] px-3 py-1.5 text-sm hover:border-[var(--color-signal)]"
-                >
-                  Clear filters
-                </button>
-              )}
+              {dirty && <Button onClick={clearAll}>Clear filters</Button>}
             </div>
           ) : (
             <div
@@ -403,6 +412,9 @@ function PalCard({
     ? index.playerByUid.get(pal.ownerPlayerUid)?.name
     : undefined
 
+  const name = palName(pal, info)
+  const species = info?.name ?? pal.characterId
+
   return (
     <button
       type="button"
@@ -411,76 +423,84 @@ function PalCard({
       style={{
         height: CARD_HEIGHT - 12,
         // A faint element wash from the corner is what makes a wall of a
-        // thousand cards read as a collection rather than a table.
-        backgroundImage: el
-          ? `radial-gradient(120% 100% at 0% 100%, color-mix(in oklch, ${el.oklch} 16%, transparent), transparent 70%)`
-          : undefined,
+        // thousand cards read as a collection rather than a table. Translucent
+        // but deliberately not blurred: the design system's own card is a
+        // tinted button, and a backdrop-filter per card would cost the
+        // virtualised grid a composited layer for every row on screen.
+        background: el
+          ? `radial-gradient(120% 100% at 0% 100%, color-mix(in oklch, ${el.oklch} 18%, transparent), transparent 70%), rgb(10 24 33 / 0.7)`
+          : 'rgb(10 24 33 / 0.7)',
       }}
-      className="raised-edge group relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-surface)] p-3 text-left transition-colors hover:border-[var(--color-signal)]/60"
+      className="raised-edge group relative flex gap-3 overflow-hidden rounded-panel border border-[var(--color-line)] p-3 text-left transition-colors hover:border-[var(--color-signal)]/60"
     >
-      <div className="flex items-start gap-2.5">
-        <GameIcon
-          path={info?.icon}
-          name={pal.characterId}
-          elementName={info?.element1}
-          size={44}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm leading-tight">
-            {palName(pal, info)}
-          </div>
-          <div className="num truncate text-[10px] text-[var(--color-muted)]">
-            {info?.name ?? pal.characterId}
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-baseline gap-1.5">
+          {/* Stamina orange, as the game prints a level. */}
+          <span className="num shrink-0 text-[11px] text-[var(--color-stamina)]">
+            Lv.{pal.level}
+          </span>
+          <span className="truncate text-sm">{name}</span>
         </div>
-        <div className="num shrink-0 text-xs">{pal.level}</div>
-      </div>
+        {/* The species is said once — for a pal with no nickname it *is* the
+            name — and the owner shares the line, because a badge row with
+            three pills on it has no room left to truncate a name into. */}
+        {(species !== name || owner) && (
+          <div className="num flex items-baseline gap-2 text-[11px] text-[var(--color-muted)]">
+            {species !== name && <span className="truncate">{species}</span>}
+            {owner && <span className="ml-auto truncate">{owner}</span>}
+          </div>
+        )}
 
-      <div className="flex items-center gap-2">
-        <IVBar
-          hp={pal.ivHp}
-          attack={pal.ivAttack}
-          defense={pal.ivDefense}
-          width={72}
-        />
-        <span className="num text-[10px] text-[var(--color-muted)]">
-          {ivTotal(pal)}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          <ElementBadge name={info?.element1} size={10} />
-          <ElementBadge name={info?.element2} size={10} />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1 overflow-hidden">
-        {pal.passives.slice(0, 2).map((asset) => (
-          <PassiveChip
-            key={asset}
-            name={data?.passives[asset.toLowerCase()]?.name ?? asset}
-            rank={data?.passives[asset.toLowerCase()]?.rank}
+        <div className="flex items-center gap-2">
+          <IVBar
+            hp={pal.ivHp}
+            attack={pal.ivAttack}
+            defense={pal.ivDefense}
+            width={72}
           />
-        ))}
-        {pal.passives.length > 2 && (
-          <span className="num text-[10px] text-[var(--color-muted)]">
-            +{pal.passives.length - 2}
+          <span className="num text-[11px] text-[var(--color-muted)]">
+            {ivTotal(pal)}
           </span>
-        )}
+          <span className="ml-auto flex items-center gap-1">
+            <ElementBadge name={info?.element1} size={10} />
+            <ElementBadge name={info?.element2} size={10} />
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-1 overflow-hidden">
+          {pal.passives.slice(0, 2).map((asset) => (
+            <PassiveChip
+              key={asset}
+              name={data?.passives[asset.toLowerCase()]?.name ?? asset}
+              rank={data?.passives[asset.toLowerCase()]?.rank}
+            />
+          ))}
+          {pal.passives.length > 2 && (
+            <span className="num text-[11px] text-[var(--color-muted)]">
+              +{pal.passives.length - 2}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-auto flex items-center gap-1.5">
+          {pal.isBoss && <Pill tone="warn">alpha</Pill>}
+          {pal.isRare && <Pill tone="signal">rare</Pill>}
+          {pal.rank > 0 && (
+            <Pill tone="warn" title={CONDENSER_RANK_HELP}>
+              ★{pal.rank}
+            </Pill>
+          )}
+        </div>
       </div>
 
-      <div className="mt-auto flex items-center gap-1.5">
-        {pal.isBoss && <Pill tone="warn">alpha</Pill>}
-        {pal.isRare && <Pill tone="signal">rare</Pill>}
-        {pal.rank > 0 && (
-          <Pill tone="warn" title={CONDENSER_RANK_HELP}>
-            ★{pal.rank}
-          </Pill>
-        )}
-        {owner && (
-          <span className="truncate text-[10px] text-[var(--color-muted)]">
-            {owner}
-          </span>
-        )}
-      </div>
+      {/* The art anchors the right edge, against the wash coming from the
+          bottom-left. Renders as a monogram for the 50 pals with no icon. */}
+      <GameIcon
+        path={info?.icon}
+        name={pal.characterId}
+        elementName={info?.element1}
+        size={48}
+      />
     </button>
   )
 }
@@ -506,7 +526,7 @@ function PalDetail({
   const percentile = cohort.length > 1 ? better / cohort.length : 0
 
   return (
-    <aside className="w-80 shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4">
+    <aside className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <GameIcon
@@ -515,21 +535,18 @@ function PalDetail({
             elementName={info?.element1}
             size={56}
           />
-          <div>
-            <div className="font-display text-xl leading-tight">
+          <div className="min-w-0">
+            <div className="truncate text-xl leading-tight">
               {palName(pal, info)}
             </div>
-            <div className="label mt-1">{info?.name ?? pal.characterId}</div>
+            <div className="label mt-1 truncate">
+              {info?.name ?? pal.characterId}
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="text-[var(--color-muted)] hover:text-[var(--color-text)]"
-        >
+        <IconButton label="Close" tone="ghost" size={24} onClick={onClose}>
           ×
-        </button>
+        </IconButton>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
@@ -539,33 +556,38 @@ function PalDetail({
         {pal.sickness && <Pill tone="warn">{pal.sickness}</Pill>}
       </div>
 
-      <Field label="level" value={String(pal.level)} />
-      <Field label="hp" value={pal.hp ? pal.hp.toFixed(0) : '—'} />
-      <Field
-        label="IV total"
-        value={`${ivTotal(pal)} / 300${
-          cohort.length > 1
-            ? ` · top ${Math.max(1, Math.round(percentile * 100))}%`
-            : ''
-        }`}
-      />
-      <Field
-        label="IVs"
-        value={`${pal.ivHp ?? '–'} / ${pal.ivAttack ?? '–'} / ${pal.ivDefense ?? '–'}`}
-      />
-      {pal.rank > 0 && (
+      <div className="mt-4">
+        <Field label="level" value={String(pal.level)} />
+        <Field label="hp" value={pal.hp ? pal.hp.toFixed(0) : '—'} />
         <Field
-          label="condensed"
-          value={`★${pal.rank}`}
-          title={CONDENSER_RANK_HELP}
+          label="IV total"
+          value={`${ivTotal(pal)} / 300${
+            cohort.length > 1
+              ? ` · top ${Math.max(1, Math.round(percentile * 100))}%`
+              : ''
+          }`}
         />
-      )}
-      <Field label="owner" value={owner?.name ?? 'unowned'} />
-      <Field label="caught" value={relativeTime(ticksToDate(pal.ownedTime))} />
-      <Field
-        label="position"
-        value={pal.pos ? formatMapPos(posToMap(pal.pos)) : '—'}
-      />
+        <Field
+          label="IVs"
+          value={`${pal.ivHp ?? '–'} / ${pal.ivAttack ?? '–'} / ${pal.ivDefense ?? '–'}`}
+        />
+        {pal.rank > 0 && (
+          <Field
+            label="condensed"
+            value={`★${pal.rank}`}
+            title={CONDENSER_RANK_HELP}
+          />
+        )}
+        <Field label="owner" value={owner?.name ?? 'unowned'} />
+        <Field
+          label="caught"
+          value={relativeTime(ticksToDate(pal.ownedTime))}
+        />
+        <Field
+          label="position"
+          value={pal.pos ? formatMapPos(posToMap(pal.pos)) : '—'}
+        />
+      </div>
 
       {pal.passives.length > 0 && (
         <>
@@ -618,60 +640,5 @@ function PalDetail({
         </>
       )}
     </aside>
-  )
-}
-
-function Field({
-  label,
-  value,
-  title,
-}: {
-  label: string
-  value: string
-  title?: string
-}) {
-  return (
-    <div
-      title={title}
-      className="mt-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] pb-1.5"
-    >
-      <span className="label">{label}</span>
-      <span className="num text-sm">{value}</span>
-    </div>
-  )
-}
-
-function Range({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step?: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="label">{label}</span>
-        <span className="num text-xs">{value}</span>
-      </div>
-      <input
-        type="range"
-        aria-label={label}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[var(--color-signal)]"
-      />
-    </div>
   )
 }
