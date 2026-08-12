@@ -206,7 +206,10 @@ describe('partition', () => {
     // so below the generic `.sav` branch it was classified as a raw save, passed
     // the "named player save" filter and reached the player reader — which
     // rejected it, putting a permanent, unactionable rejection in the ledger.
-    const uid = 'C2CDDA50000000000000000000000000'
+    // Made up, and it has to be: this line held a real player UID copied
+    // straight out of `data/Players/` until `leak.golden.test.ts` was run
+    // against it. Any 32 hex digits exercise the filename pattern equally well.
+    const uid = '0BADC0DE000000000000000000000000'
     const result = await partition([
       fakeFile('Level.sav', '', 861_566).file,
       fakeFile(`${uid}.sav`, '', 120_000).file,
