@@ -10,9 +10,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
+import {
+  buildIndexes,
+  mergePlayerDetails,
+} from '@/parse/worker/buildIndexes.ts'
 import { buildSaveIndex } from '@/domain/index.ts'
-import type { SaveIndex, SlimPayload } from '@/domain/types.ts'
+import type { SaveIndex, SaveWarning, SlimPayload } from '@/domain/types.ts'
 
 const FIXTURE = resolve(process.cwd(), 'test/fixtures/level.mini.json')
 
@@ -139,6 +142,39 @@ describe('readers over the mini fixture', () => {
       console.error('warnings:', index.stats.warnings)
     }
     expect(index.stats.warnings).toEqual([])
+  })
+})
+
+describe('warnings across a player-save merge', () => {
+  /**
+   * The regression: `checkReferences` runs in both `buildIndexes` and
+   * `mergePlayerDetails`, and the worker carries the level pass's warnings into
+   * the merge. Carrying the derived ones too meant a Players drop reported the
+   * same dangling reference twice — once from each pass, for the same structure
+   * — which is what the diagnostics list was showing on a real save.
+   */
+  it('does not report a derived warning once per pass', () => {
+    const raw = JSON.parse(readFileSync(FIXTURE, 'utf8'))
+    const payload = buildIndexes(raw, { source: 'json' })
+
+    // The fixture is clean, so plant one of each: a carried derived warning as
+    // the level pass would have produced it, and a carried read warning that
+    // nothing recomputes.
+    const carried: SaveWarning[] = [
+      {
+        kind: 'dangling-container',
+        detail: 'structure references an unknown item container',
+        count: 2,
+      },
+      { kind: 'unknown-record-field', detail: 'RecordData.Whatever', count: 3 },
+    ]
+
+    mergePlayerDetails(payload, [], carried)
+    const kinds = payload.stats.warnings.map((w) => w.kind)
+
+    expect(kinds.filter((k) => k === 'dangling-container')).toHaveLength(0)
+    // The read-pass warning survives: nothing in the merge could regenerate it.
+    expect(payload.stats.warnings).toContainEqual(carried[1])
   })
 })
 

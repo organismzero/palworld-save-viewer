@@ -507,7 +507,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
  * path this takes and whichever of its many exits it leaves by.
  */
 async function ingestWorld(
-  { level, players, rejected, savs, local }: Partitioned,
+  { level, players, rejected, ignored, savs, local }: Partitioned,
   set: Setter,
   get: () => SaveState,
 ) {
@@ -532,10 +532,13 @@ async function ingestWorld(
     // A `LocalData` on its own is a complete, sensible drop — the caller
     // handles it next — so it must not be reported as nothing.
     if (local) return
+    // Nothing usable, so an ignored file is worth explaining after all: a drop
+    // that produces no visible change at all reads as a bug in the app.
+    const unusable = rejected[0] ?? ignored[0]
     set({
-      status: rejected.length ? 'error' : get().status,
+      status: unusable ? 'error' : get().status,
       error:
-        rejected[0]?.reason ??
+        unusable?.reason ??
         'Nothing here looks like a Palworld save. Drop a converted Level.json.',
     })
     return

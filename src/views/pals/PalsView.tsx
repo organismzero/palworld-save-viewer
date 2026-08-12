@@ -375,6 +375,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
                         key={pal.instanceId}
                         pal={pal}
                         index={index}
+                        selected={pal.instanceId === params.selectedId}
                         onSelect={setSelected}
                       />
                     ))}
@@ -385,13 +386,14 @@ export function PalsView({ index }: { index: SaveIndex }) {
         </div>
       </div>
 
-      {selected && (
-        <PalDetail
-          pal={selected}
-          index={index}
-          onClose={() => setSelected(undefined)}
-        />
-      )}
+      {/* Always present, even with nothing picked. It used to mount on
+          selection, which took 340px off the grid and re-flowed every card at
+          the moment of clicking one — so the card you clicked moved. */}
+      <PalDetail
+        pal={selected}
+        index={index}
+        onClose={() => setSelected(undefined)}
+      />
     </div>
   )
 }
@@ -399,10 +401,12 @@ export function PalsView({ index }: { index: SaveIndex }) {
 function PalCard({
   pal,
   index,
+  selected,
   onSelect,
 }: {
   pal: Pal
   index: SaveIndex
+  selected: boolean
   onSelect: (p: Pal) => void
 }) {
   const { data } = useRefdataStore()
@@ -431,7 +435,13 @@ function PalCard({
           ? `radial-gradient(120% 100% at 0% 100%, color-mix(in oklch, ${el.oklch} 18%, transparent), transparent 70%), rgb(10 24 33 / 0.7)`
           : 'rgb(10 24 33 / 0.7)',
       }}
-      className="raised-edge group relative flex gap-3 overflow-hidden rounded-panel border border-[var(--color-line)] p-3 text-left transition-colors hover:border-[var(--color-signal)]/60"
+      aria-current={selected ? 'true' : undefined}
+      className={cn(
+        'raised-edge group relative flex gap-3 overflow-hidden rounded-panel border p-3 text-left transition-colors',
+        selected
+          ? 'corner-ticks border-[var(--color-signal)] shadow-[var(--glow-signal)] [--tick-color:var(--color-signal)] [--tick-size:12px]'
+          : 'border-[var(--color-line)] hover:border-[var(--color-signal)]/60',
+      )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-baseline gap-1.5">
@@ -481,49 +491,73 @@ function PalCard({
             </span>
           )}
         </div>
-
-        <div className="mt-auto flex items-center gap-1.5">
-          {pal.isBoss && <Pill tone="warn">alpha</Pill>}
-          {pal.isRare && <Pill tone="signal">rare</Pill>}
-          {pal.rank > 0 && (
-            <Pill tone="warn" title={CONDENSER_RANK_HELP}>
-              ★{pal.rank}
-            </Pill>
-          )}
-        </div>
       </div>
 
-      {/* The art anchors the right edge, against the wash coming from the
-          bottom-left. Renders as a monogram for the 50 pals with no icon. */}
-      <GameIcon
-        path={info?.icon}
-        name={pal.characterId}
-        elementName={info?.element1}
-        size={48}
-      />
+      {/*
+        The right rail is what this pal *is*: its art, and the properties that
+        are true of it. The left column is what it has — name, rolls, skills.
+        Keeping the two apart is what stops the passive chips and the alpha/rare
+        badges reading as one list, which matters more now that gold means "rare"
+        as well as "legendary passive".
+      */}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {/* Renders as a monogram for the 50 pals with no icon. */}
+        <GameIcon
+          path={info?.icon}
+          name={pal.characterId}
+          elementName={info?.element1}
+          size={48}
+        />
+        {pal.isBoss && <Pill tone="danger">alpha</Pill>}
+        {pal.isRare && <Pill tone="warn">rare</Pill>}
+        {pal.rank > 0 && <Pill title={CONDENSER_RANK_HELP}>★{pal.rank}</Pill>}
+      </div>
     </button>
   )
 }
 
+/**
+ * The detail drawer, which is on screen whether or not a pal is picked.
+ *
+ * Holding the width open is the point: mounting it on selection took 340px off
+ * the grid, re-flowed every card, and moved the card that had just been clicked
+ * out from under the cursor.
+ */
 function PalDetail({
   pal,
   index,
   onClose,
 }: {
-  pal: Pal
+  pal: Pal | undefined
   index: SaveIndex
   onClose: () => void
 }) {
   const { data } = useRefdataStore()
-  const info = data?.species[pal.characterId.toLowerCase()]
-  const owner = pal.ownerPlayerUid
+  const info = pal ? data?.species[pal.characterId.toLowerCase()] : undefined
+  const owner = pal?.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)
     : undefined
 
   // "Top 3% of your Kitsunebi" is far more useful than a bare number.
-  const cohort = index.palsByCharacterId.get(pal.characterId) ?? []
-  const better = cohort.filter((p) => ivTotal(p) > ivTotal(pal)).length
+  const cohort = pal ? (index.palsByCharacterId.get(pal.characterId) ?? []) : []
+  const better = pal
+    ? cohort.filter((p) => ivTotal(p) > ivTotal(pal)).length
+    : 0
   const percentile = cohort.length > 1 ? better / cohort.length : 0
+
+  const elements = [info?.element1, info?.element2].filter(
+    (e): e is string => element(e) !== undefined,
+  )
+
+  if (!pal) {
+    return (
+      <aside className="flex w-[var(--detail-width)] shrink-0 items-center justify-center border-l border-[var(--color-line)] p-6">
+        <p className="max-w-[220px] text-center text-sm text-[var(--color-muted)]">
+          Pick a pal to see its IVs, passives, work suitability and where it is.
+        </p>
+      </aside>
+    )
+  }
 
   return (
     <aside className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4">
@@ -550,13 +584,25 @@ function PalDetail({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {pal.isBoss && <Pill tone="warn">alpha</Pill>}
-        {pal.isRare && <Pill tone="signal">rare</Pill>}
+        {pal.isBoss && <Pill tone="danger">alpha</Pill>}
+        {pal.isRare && <Pill tone="warn">rare</Pill>}
         {pal.gender && <Pill>{pal.gender}</Pill>}
-        {pal.sickness && <Pill tone="warn">{pal.sickness}</Pill>}
+        {pal.sickness && <Pill tone="danger">{pal.sickness}</Pill>}
       </div>
 
       <div className="mt-4">
+        {elements.length > 0 && (
+          <Field
+            label={elements.length > 1 ? 'types' : 'type'}
+            value={
+              <span className="flex items-center justify-end gap-3">
+                {elements.map((e) => (
+                  <ElementBadge key={e} name={e} size={12} showLabel />
+                ))}
+              </span>
+            }
+          />
+        )}
         <Field label="level" value={String(pal.level)} />
         <Field label="hp" value={pal.hp ? pal.hp.toFixed(0) : '—'} />
         <Field

@@ -408,7 +408,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 // says, raw ids and all. `palTooltip` degrades to exactly that.
                 <span title={palTooltip(p)} className="flex items-center gap-2">
                   <MonogramTile name={p.characterId} size={26} />
-                  {p.isBoss && <Pill tone="warn">alpha</Pill>}
+                  {p.isBoss && <Pill tone="danger">alpha</Pill>}
                   {p.characterId}
                 </span>,
                 p.nickname ?? '—',

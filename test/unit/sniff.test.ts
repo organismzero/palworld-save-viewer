@@ -194,10 +194,43 @@ describe('partition', () => {
 
     expect(result.level?.file.name).toBe('Level.json')
     expect(result.players.map((p) => p.file.name)).toEqual(['A.json', 'B.json'])
-    expect(result.rejected.map((r) => r.file.name)).toEqual([
-      'B_dps.json',
-      'notes.txt',
+    // A DPS file is expected, understood and useless: it arrives with every
+    // folder drop, so it is ignored rather than rejected and never appears in
+    // the ledger of player saves it is not one of. An unrelated file is news.
+    expect(result.ignored.map((r) => r.file.name)).toEqual(['B_dps.json'])
+    expect(result.rejected.map((r) => r.file.name)).toEqual(['notes.txt'])
+  })
+
+  it('ignores the _dps.sav that comes with every real Players folder', async () => {
+    // The regression: `<uid>_dps.sav` matches the player-save filename pattern,
+    // so below the generic `.sav` branch it was classified as a raw save, passed
+    // the "named player save" filter and reached the player reader — which
+    // rejected it, putting a permanent, unactionable rejection in the ledger.
+    const uid = 'C2CDDA50000000000000000000000000'
+    const result = await partition([
+      fakeFile('Level.sav', '', 861_566).file,
+      fakeFile(`${uid}.sav`, '', 120_000).file,
+      fakeFile(`${uid}_dps.sav`, '', 244_000_000).file,
     ])
+
+    expect(result.savs.map((s) => s.file.name)).toEqual([
+      'Level.sav',
+      `${uid}.sav`,
+    ])
+    expect(result.ignored.map((r) => r.file.name)).toEqual([`${uid}_dps.sav`])
+    expect(result.rejected).toEqual([])
+  })
+
+  it('still explains a DPS file dropped on its own', async () => {
+    // Ignoring it silently is right in a folder drop and wrong here: a drop
+    // that changes nothing on screen reads as the app having failed.
+    const result = await partition([
+      fakeFile('B_dps.sav', '', 244_000_000).file,
+    ])
+
+    expect(result.level).toBeUndefined()
+    expect(result.players).toEqual([])
+    expect(result.ignored[0]?.reason).toBe('DPS storage file.')
   })
 
   it('keeps LevelMeta out of the raw-sav bucket entirely', async () => {

@@ -193,14 +193,15 @@ export function MapView({ index }: { index: SaveIndex }) {
    * The two keys this screen prints, and the only two it claims.
    *
    * `F` opens and closes the filter panel — which is what the layer list has
-   * always been, so the key needed wiring rather than a feature. `R` centres a
-   * base: the nearest one to where you are looking on the first press, then the
-   * next in world order on each press after, which is predictable in a way that
-   * "nearest to wherever I just moved you" is not. The guard on `isTyping` is
-   * the same one the global shortcuts use, or typing "for" in the search box
-   * would close the panel and jump the map.
+   * always been, so the key needed wiring rather than a feature. `R` re-centres
+   * whatever is selected, which is whatever the card in the corner is describing:
+   * a base, a player, a chest, a pal. It only appears in the prompt row when
+   * there is a selection to snap to, on the same rule the shell's `Esc` follows.
+   *
+   * The guard on `isTyping` is the one the global shortcuts use, or typing "for"
+   * in the map's search box would close the panel and throw the world across the
+   * island.
    */
-  const snapIndex = useRef<number | undefined>(undefined)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
@@ -220,47 +221,14 @@ export function MapView({ index }: { index: SaveIndex }) {
         setFilterOpen((open) => !open)
         return
       }
-      if (key !== 'r') return
-
-      const controller = controllerRef.current
-      const host = hostRef.current
-      if (!controller || !host) return
-      const bases = controller.entitiesOfKind('bases')
-      if (bases.length === 0) return
+      if (key !== 'r' || !selected) return
       e.preventDefault()
-
-      if (snapIndex.current === undefined) {
-        const box = host.getBoundingClientRect()
-        const at = controller.screenToMap(
-          box.left + box.width / 2,
-          box.top + box.height / 2,
-        )
-        let nearest = 0
-        let best = Infinity
-        bases.forEach((b, i) => {
-          const d = at ? (b.mx - at.mx) ** 2 + (b.my - at.my) ** 2 : i
-          if (d < best) {
-            best = d
-            nearest = i
-          }
-        })
-        snapIndex.current = nearest
-      } else {
-        snapIndex.current = (snapIndex.current + 1) % bases.length
-      }
-
-      const base = bases[snapIndex.current]
-      if (!base) return
-      controller.focus(base)
-      setSelected(base)
+      controllerRef.current?.focus(selected)
     }
 
-    // A rebuilt controller means a rebuilt entity list, so the cycle restarts
-    // from whatever is nearest rather than from a stale index.
-    snapIndex.current = undefined
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [mounted])
+  }, [selected])
 
   // Computed in the change handler rather than during render: the entity list
   // lives on the controller behind a ref, and reading a ref while rendering
@@ -460,9 +428,11 @@ export function MapView({ index }: { index: SaveIndex }) {
           <span className="flex items-center gap-1.5">
             <KeyHint>F</KeyHint>Filter
           </span>
-          <span className="flex items-center gap-1.5">
-            <KeyHint>R</KeyHint>Snap to base
-          </span>
+          {selected && (
+            <span className="flex items-center gap-1.5">
+              <KeyHint>R</KeyHint>Snap to selection
+            </span>
+          )}
         </PromptBar>
       </div>
 

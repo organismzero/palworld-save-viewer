@@ -144,6 +144,18 @@ export async function sniff(
     return { file, kind: 'levelmeta', filenameUid }
   }
 
+  // Third name check with the same order requirement, and the one that took
+  // longest to notice: a real `Players/` folder holds
+  // `<uid>_dps.sav`, whose name matches `UID_FILENAME` — so below the generic
+  // `.sav` branch it was classified as a raw save, passed the "named player
+  // save" filter, and reached the player reader, which rejected it. Every folder
+  // drop then listed a rejection nobody could act on. A `.sav` cannot be sniffed
+  // by content without decompressing it, which makes the name the only stop
+  // available here; a renamed one is still caught by content below.
+  if (looksLikeDpsName(name)) {
+    return { file, kind: 'dps', filenameUid, reason: 'DPS storage file.' }
+  }
+
   // Classified, not rejected: the container header says which compression it
   // uses, and that determines whether there is anything useful to say beyond
   // "no". The header read happens at the call site, not here — this function's
@@ -154,11 +166,6 @@ export async function sniff(
 
   if (!lower.endsWith('.json')) {
     return { file, kind: 'unknown', filenameUid, reason: 'Not a .json file.' }
-  }
-
-  // Stop 1: the name. Returns without touching a single byte.
-  if (looksLikeDpsName(name)) {
-    return { file, kind: 'dps', filenameUid, reason: 'DPS storage file.' }
   }
 
   // Stop 2: the size. A level save is legitimately huge, so this only bounds
@@ -209,6 +216,17 @@ export interface Partitioned {
   level?: Sniffed
   players: Sniffed[]
   rejected: Sniffed[]
+  /**
+   * Files that are expected, understood and of no use to this app — today only
+   * `*_dps.sav`, the DPS-storage file that sits in every `Players/` folder.
+   *
+   * Separate from `rejected` because a rejection is news and this is not: it
+   * arrives with every folder drop, it will never be readable, and listing it
+   * beside the player saves it is not one of only invites the question again.
+   * Still reported when a drop contains nothing else, or dropping one on its own
+   * would look like the app had ignored the file.
+   */
+  ignored: Sniffed[]
   /** Raw saves, kept apart so the caller can read their headers and explain. */
   savs: Sniffed[]
   /**
@@ -244,11 +262,11 @@ export async function partition(files: File[]): Promise<Partitioned> {
     levelMeta: metas[0],
     rejected: sniffed.filter(
       (s) =>
-        s.kind === 'dps' ||
         s.kind === 'unknown' ||
         levels.indexOf(s) > 0 ||
         locals.indexOf(s) > 0 ||
         metas.indexOf(s) > 0,
     ),
+    ignored: sniffed.filter((s) => s.kind === 'dps'),
   }
 }

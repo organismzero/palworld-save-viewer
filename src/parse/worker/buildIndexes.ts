@@ -126,9 +126,10 @@ export function mergePlayerDetails(
   payload: SlimPayload,
   details: PlayerDetail[],
   /**
-   * Warnings from passes that are *not* re-run here — the level read and the
-   * player-file reads. Ownership warnings are regenerated below, so they must
-   * not be carried in or they would multiply with every merge.
+   * Warnings from the passes that are *not* re-run here: the level read and the
+   * player-file reads. Anything this pass regenerates — ownership conflicts, and
+   * every kind in `DERIVED_KINDS` — is filtered out of it below, or it would be
+   * reported twice for the same underlying data.
    */
   carried: SaveWarning[],
 ): void {
@@ -191,7 +192,10 @@ export function mergePlayerDetails(
     dungeons: payload.dungeons.length,
     playerDetails: details.length,
     playersInLevel: players.length,
-    warnings: [...carried, ...warn.list()],
+    warnings: [
+      ...carried.filter((w) => !DERIVED_KINDS.has(w.kind)),
+      ...warn.list(),
+    ],
   }
 }
 
@@ -226,6 +230,20 @@ function emptyStats(): SlimPayload['stats'] {
  * change: if a patch moves where guild ids live, this lights up long before
  * anyone notices a half-empty screen.
  */
+/**
+ * The warning kinds `checkReferences` derives from the slim payload.
+ *
+ * They are recomputed on every merge, so a previous pass's copies must be
+ * dropped rather than carried — otherwise a Players drop leaves the diagnostics
+ * list saying "2× structure references an unknown item container" twice, once
+ * from the level read and once from the merge, for the same two structures.
+ */
+const DERIVED_KINDS: ReadonlySet<SaveWarning['kind']> = new Set([
+  'dangling-container',
+  'dangling-group',
+  'dangling-base',
+])
+
 function checkReferences(
   d: Pick<
     SlimPayload,

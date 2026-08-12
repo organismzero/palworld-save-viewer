@@ -30,7 +30,8 @@ import {
  */
 const PST_REF = 'main'
 /** Bumped when a projection changes; invalidates every cached entry. */
-const SLIM_VERSION = 5
+// 6: passive descriptions arrive with their {EffectValueN} placeholders filled.
+const SLIM_VERSION = 6
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -209,10 +210,58 @@ function slimPassives(raw: any): Record<string, PassiveInfo> {
     out[p.asset.toLowerCase()] = {
       name: p.name ?? p.asset,
       rank: typeof p.rank === 'number' ? p.rank : 0,
-      description: p.description,
+      description: resolveEffects(p),
     }
   }
   return out
+}
+
+/**
+ * Fills the `{EffectValue1}` placeholders upstream leaves in a description.
+ *
+ * The game substitutes these at display time from the skill's own effect
+ * values, which `skills.json` carries as `effect1`–`effect4`; without the
+ * substitution the UI printed the literal token — "{EffectValue1}% increase in
+ * Grass attack damage" — which is worse than saying nothing.
+ *
+ * Three rules, all of them from reading every one of the 77 descriptions that
+ * contain a placeholder rather than from guessing:
+ *
+ * 1. `{EffectValueN}` maps to `effectN`. Six descriptions repeat
+ *    `{EffectValue1}` for two or three separate effects, and in every one of
+ *    those the values are identical, so no repeat can print a wrong number.
+ * 2. **The value keeps its sign.** Eight of the ten negative cases read
+ *    correctly that way — "Defense -30%", "Max Stamina -25%" — because the
+ *    sentence itself says nothing about direction.
+ * 3. The other two say it twice. "Decrease the value of items when sold by
+ *    {EffectValue1}%" with −10 becomes "by -10%", which claims the opposite of
+ *    what it means, and Easygoing's "cooldown extension -15%" does the same.
+ *    Where a negative lands straight after a word that already means *less*,
+ *    the description is dropped rather than published as a contradiction.
+ *
+ * Anything left unresolved is dropped too: one passive (Tempest Fury) carries
+ * the text and no values at all, and a false zero is worse than silence.
+ */
+const ALREADY_NEGATIVE = /\b(?:by|extension|reduction|decrease[sd]?)\s+-/i
+
+function resolveEffects(p: any): string | undefined {
+  const text: unknown = p?.description
+  if (typeof text !== 'string' || text === '') return undefined
+  if (!text.includes('{')) return text
+
+  let unresolved = false
+  const filled = text.replace(/\{EffectValue([1-4])\}/g, (_, n: string) => {
+    const value = p[`effect${n}`]
+    if (typeof value !== 'number' || value === 0) {
+      unresolved = true
+      return ''
+    }
+    return String(value)
+  })
+
+  // A leftover brace means a token shape this has never seen.
+  if (unresolved || filled.includes('{')) return undefined
+  return ALREADY_NEGATIVE.test(filled) ? undefined : filled
 }
 
 function slimWork(raw: any): WorkType[] {

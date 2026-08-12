@@ -872,11 +872,6 @@ export class MapController {
     }
   }
 
-  /** Every entity on one layer, in the order the world lists them. */
-  entitiesOfKind(kind: LayerId): MapEntity[] {
-    return this.entities.filter((e) => e.kind === kind)
-  }
-
   search(query: string, limit = 8): MapEntity[] {
     const q = query.trim().toLowerCase()
     if (!q) return []

@@ -92,6 +92,17 @@ const KNOWN_RECORD_FIELDS = new Set([
   'RelicObtainForInstanceFlagByType',
   'bCaptureCompletionRelicFixupDone',
   'bFieldBossDefeatFlagResetDone',
+  // Newer-content progression, seen in real 2026 saves: oil rigs, treasure maps
+  // and camp conquests. The canary caught these, which is what it is for —
+  // acknowledging them here is what keeps the next unknown field visible instead
+  // of buried under five lines nobody acts on. All five are countable and would
+  // fit `PlayerRecord` alongside `bossesDefeated`; reading them is a feature,
+  // not this fix.
+  'OilrigClearCount',
+  'FoundTreasureCount',
+  'FoundTreasureMapPointMap',
+  'CampConqueredCount',
+  'InvokeNPCNetworkEventMap',
 ])
 
 function countTrue(n: Node): number {
