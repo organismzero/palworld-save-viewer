@@ -346,4 +346,57 @@
   .raised-edge {
     box-shadow: var(--edge-raised);
   }
+
+  /* The frame motif: four L-shaped marks that imply a border without drawing
+     one. Eight background layers on a single pseudo-element rather than the
+     four child spans the design system uses, for two reasons — child elements
+     land inside `divide-y` and every other child-selecting utility at each
+     Panel call site, and five extra DOM nodes per panel is real money in a grid
+     of a thousand cards.
+
+     `z-index: -1` puts the marks above the surface's own background and below
+     its content, which is the order the package's DOM version produces. It
+     needs `relative isolate` on the element; `Panel` sets both. Override the
+     colour per surface with `[--tick-color:…]` — selection uses signal cyan. */
+  .corner-ticks::after {
+    --tick: linear-gradient(var(--tick-color), var(--tick-color));
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      var(--tick), var(--tick), var(--tick), var(--tick), var(--tick),
+      var(--tick), var(--tick), var(--tick);
+    background-repeat: no-repeat;
+    background-size:
+      var(--tick-size) 1px,
+      1px var(--tick-size),
+      var(--tick-size) 1px,
+      1px var(--tick-size),
+      var(--tick-size) 1px,
+      1px var(--tick-size),
+      var(--tick-size) 1px,
+      1px var(--tick-size);
+    background-position:
+      left top,
+      left top,
+      right top,
+      right top,
+      left bottom,
+      left bottom,
+      right bottom,
+      right bottom;
+  }
+
+  /* The faint diagonal gloss across every game menu panel. Same pseudo-element
+     trick, same reason. */
+  .panel-sheen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--sheen-panel);
+  }
 }

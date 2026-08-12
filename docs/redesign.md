@@ -83,15 +83,19 @@ Then the line-token sweep from decision 11: 56 modifier strips, `/40` and `/30` 
 
 ### Stage 2 — the primitives
 
-_Files:_ `src/components/primitives.tsx`
+**Landed.** _Files:_ `src/components/primitives.tsx`, `src/index.css`, and two knock-on edits in `src/views/guild/GuildView.tsx` and `src/app/SaveSummary.tsx`
 
-Rewrite against `components/core/` and `components/data/`, keeping every export name and signature so no call site changes:
+Rewritten against `components/core/` and `components/data/`, keeping every export name and signature so no call site changed:
 
-`Panel` (+ `CornerTicks`, `PanelTitleBar`; additive props per decision 6; glass by default per decision 2) · `SectionHeading` · `StatTile` · `ElementBadge` · `IVBar` (square 3px bars, single signal cyan, `ivColor` deleted) · `PassiveChip` · `MonogramTile` · `RawId` · `Pill` (+ `danger` tone) · `OnlineDot` (`animate-ping` → the slow pulse, which is also cheaper) · `Table` (restyled as the system's `DataTable`: micro-label head, mono columns, optional row selection).
+`Panel` (+ `PanelTitleBar`; additive props per decision 6; glass by default per decision 2) · `SectionHeading` · `StatTile` · `ElementBadge` · `IVBar` (square 3px bars, single signal cyan, `ivColor` deleted) · `PassiveChip` · `MonogramTile` · `RawId` · `Pill` (+ `danger` tone) · `OnlineDot` (`animate-ping` → the slow pulse, which is also cheaper) · `Table` (restyled as the system's `DataTable`: micro-label head, mono columns, optional row selection).
 
 New here, because several views hand-roll them: `Meter`, `Field`, `KeyHint`.
 
-Visible immediately in Summary and Guild, which are almost entirely primitives.
+**`CornerTicks` is a CSS utility, not a component.** The package draws the four marks as four child spans, which does not survive contact with this codebase: children land inside the `divide-y` that six Panel call sites already pass, and five extra DOM nodes per panel is real money in a grid of a thousand cards. `.corner-ticks` in `index.css` draws all four from eight background layers on one pseudo-element at `z-index: -1`, which is the same paint order. `.panel-sheen` does the gloss the same way. Colour is overridable per surface with `[--tick-color:…]`, which is what selected `MenuButton`s will want in stage 3.
+
+Two knock-ons, both forced and both small. Adding `danger` to `PillTone` broke `GuildView`'s `RING_TONES`, which is an exhaustive `Record<PillTone, string>` — it gains a `danger` entry, and its other three tones move from raw oklch literals onto the tokens, which is what its own comment ("the same tones as `Pill`") already promised. And `StatTile` now carries its own hairline, so the two grids in `SaveSummary` that faked tile borders with `gap-px` over a line-coloured background become plain `gap-2` — otherwise every separator was 3px of stacked border.
+
+Also worth recording: **`SaveSummary.tsx` was missing from this plan entirely.** It is the Summary view but lives in `src/app/`, so it fell between the shell and the views. It is folded into stage 4, which already touches every other file in that directory. Stage 2 leaves it 90% right for free, since it is almost nothing but primitives.
 
 ### Stage 3 — the controls
 
@@ -109,7 +113,7 @@ Additive apart from `ExportMenu`, so this stage is cheap to review and unblocks 
 
 ### Stage 4 — the shell
 
-_Files:_ `src/App.tsx`, `src/app/AppShell.tsx`, `DropZone.tsx`, `Dialogs.tsx`, `CommandPalette.tsx`, `Diagnostics.tsx`, `ErrorBoundary.tsx`
+_Files:_ `src/App.tsx`, `src/app/AppShell.tsx`, `DropZone.tsx`, `Dialogs.tsx`, `CommandPalette.tsx`, `Diagnostics.tsx`, `ErrorBoundary.tsx`, `SaveSummary.tsx`
 
 52px header on the dark bar, wordmark in Titillium 200 uppercase tracked, sheared tab strip on `TabBar` with the full tab/tabpanel wiring, and Search / About / Load another lifted onto `Button`. The keep-this-save bar moves onto `Button`s. A footer `PromptBar` appears with the global keys from decision 8 — new furniture, not a restyle.
 
@@ -118,6 +122,8 @@ Landing screen: `ScreenTitle` for the wordmark, the drop target as a dashed fram
 Dialogs and the command palette move onto `Modal` and the sunken-input treatment; the diagnostics popover becomes a `Panel` with its amber/green badge reading exactly as it does today.
 
 The `h-[calc(100dvh-3.25rem)]` in five views is tied to the 52px header. It becomes a token here so the views stop hard-coding it and the footer bar's height is accounted for once.
+
+`SaveSummary.tsx` is the Summary view and belongs here rather than with the other views, because it sits in `src/app/` with the rest of the shell. Stage 2 already gave it its stat tiles, tables and panels; what is left is its header, the "Load another" button, the `rounded-[10px]` wrappers and a handful of raw oklch literals in the diagnostics list.
 
 ### Stage 5 — Pals
 

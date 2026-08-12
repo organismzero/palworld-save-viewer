@@ -133,7 +133,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
 
       <section className="mb-10">
         <SectionHeading title="Overview" />
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatTile label="pals" value={s.pals} accent />
           <StatTile label="species" value={s.species} />
           <StatTile label="players" value={s.players} />
@@ -184,7 +184,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               )
             }
           />
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {localData.fog.map((f) => (
               <StatTile
                 key={f.map}

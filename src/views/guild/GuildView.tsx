@@ -309,12 +309,13 @@ const ROLES: Record<number, { name: string; tone: PillTone; hint: string }> = {
 
 const roleOf = (role: number | undefined) => ROLES[role ?? 4] ?? ROLES[4]!
 
-/** The same four tones as `Pill`, as a ring for the member avatars. */
+/** The same tones as `Pill`, as a ring for the member avatars. */
 const RING_TONES: Record<PillTone, string> = {
   signal: 'border-[var(--color-signal)] text-[var(--color-signal)]',
-  warn: 'border-[oklch(0.80_0.15_85)]/70 text-[oklch(0.85_0.14_85)]',
-  good: 'border-[oklch(0.78_0.16_150)]/70 text-[oklch(0.78_0.16_150)]',
-  neutral: 'border-[var(--color-line)] text-[var(--color-muted)]',
+  warn: 'border-[var(--color-gold)]/70 text-[var(--color-gold)]',
+  good: 'border-[var(--color-hp)]/70 text-[var(--color-hp)]',
+  neutral: 'border-[var(--color-line-strong)] text-[var(--color-muted)]',
+  danger: 'border-[var(--color-danger)]/70 text-[var(--color-danger)]',
 }
 
 function MemberStrip({ index, guild }: { index: SaveIndex; guild: Guild }) {
