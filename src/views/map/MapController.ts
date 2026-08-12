@@ -183,8 +183,21 @@ const MAX_ZOOM = 14
  */
 export const DEFAULT_FOG_OPACITY = 0.98
 
+/**
+ * The canvas chrome, kept in step with the CSS tokens by hand.
+ *
+ * Pixi needs numbers, so these cannot read `var(--color-void)` — but they are
+ * the same values, and the map sits inside a framed panel that would otherwise
+ * visibly disagree with them. `--color-void`, `--color-line`-ish at full opacity
+ * over that ground, and `--color-signal` for the selection ring.
+ */
+const GROUND = 0x04090e
+const GRID = 0x14303d
+const GRID_EDGE = 0x1f4a5c
+const SELECTION = 0x61dcef
+
 /** Matches the Pixi clear colour, so fog reads as absence rather than paint. */
-const FOG_TINT = 0x0a0d12
+const FOG_TINT = GROUND
 
 /**
  * Largest island export, in pixels.
@@ -241,7 +254,7 @@ export class MapController {
 
   async mount(host: HTMLElement) {
     await this.app.init({
-      background: 0x0a0d12,
+      background: GROUND,
       antialias: true,
       resizeTo: host,
       preference: 'webgl',
@@ -622,9 +635,9 @@ export class MapController {
       g.moveTo(p, 0).lineTo(p, this.mapSize)
       g.moveTo(0, p).lineTo(this.mapSize, p)
     }
-    g.stroke({ color: 0x1e293b, width: 1 })
+    g.stroke({ color: GRID, width: 1 })
     g.rect(0, 0, this.mapSize, this.mapSize).stroke({
-      color: 0x334155,
+      color: GRID_EDGE,
       width: 2,
     })
     this.tileLayer.addChild(g)
@@ -780,7 +793,7 @@ export class MapController {
     const scale = this.world.scale.x
     this.ring
       .circle(marker.x, marker.y, (marker.baseSize ?? 8) * 1.8) // world units
-      .stroke({ color: 0x22d3ee, width: 2 / scale, alpha: 0.9 })
+      .stroke({ color: SELECTION, width: 2 / scale, alpha: 0.9 })
   }
 
   /* --- public API ----------------------------------------------------- */
@@ -857,6 +870,11 @@ export class MapController {
       this.world.scale.set(scale)
       this.rescaleMarkers()
     }
+  }
+
+  /** Every entity on one layer, in the order the world lists them. */
+  entitiesOfKind(kind: LayerId): MapEntity[] {
+    return this.entities.filter((e) => e.kind === kind)
   }
 
   search(query: string, limit = 8): MapEntity[] {

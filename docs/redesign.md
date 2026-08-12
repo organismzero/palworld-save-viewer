@@ -183,13 +183,15 @@ Charts keep their hand-rolled SVG and pick up the tokens. Their bars and the his
 
 ### Stage 8 — Map
 
-_Files:_ `src/views/map/MapView.tsx`, `src/views/map/MapController.ts`
+**Landed.** _Files:_ `src/views/map/MapView.tsx`, `src/views/map/MapController.ts`
 
-Search, layer filter, hover card and selection card all become glass `Panel`s — the one place the system's blur is unarguable. The map area gets the framed treatment with corner ticks, the coordinate readout top-left and the degraded-mode notice top-right. The layer list becomes a `Panel` titled **Filter** with `Checkbox` rows and counts.
+Search, layer filter, hover card, selection card and the loading and degraded notices are all glass `Panel`s — the one place the system's blur is unarguable, since the world genuinely is behind them. The map area itself becomes a framed screen: inset by 8px, hairline, four corner ticks. The layer list becomes a `Panel` titled **Filter** with `Checkbox` rows and counts, which is what it always was — the game's own name for that panel, and the reason `F` had somewhere to go.
 
-Two new keys per decision 9: `F` toggles that panel, `R` centres and zooms on the base nearest the viewport centre and cycles outward on repeat presses. Both land in the map's `PromptBar` row as `F Filter · R Snap to base`.
+Two new keys per decision 9. `F` opens and closes the filter panel. `R` centres a base: the nearest one to what you are looking at on the first press, then the next in world order on each press after. That rule is deliberate — "nearest to wherever I just moved you" ping-pongs between two bases, where "nearest, then next" is predictable and eventually visits all of them. Both are guarded by the same `isTyping` check the global shortcuts use, so typing "for" in the map's search box does not close the panel and jump the world; verified by typing into the box and watching nothing move.
 
-`MapController` holds its own numeric colour table for Pixi (`0x0a0d12` background, `0x1e293b`/`0x334155` grid, `0x22d3ee` selection, and a nine-element hex table duplicating `lib/color.ts`). Those move to the new ground, signal and select values, or the canvas and the chrome disagree. Contained change, no behavioural surface.
+The prompts and the coordinate readout share one dark bar on the frame's bottom edge. That is not decoration: they sit directly on map art, which is warm, bright and unpredictable, and bare text over it was unreadable at the first zoom I tried.
+
+`MapController` keeps its own numeric colour table because Pixi needs numbers, but the four chrome values are now named constants matching the tokens — `GROUND` at `--color-void`, the grid and its edge in the line family over that ground, `SELECTION` at signal cyan — with a comment saying they are kept in step by hand. The nine layer colours are left alone: they are a data palette chosen for distinguishability, not chrome. `entitiesOfKind` is the one new line of API, so the view can ask for the bases without duplicating the coordinate transform.
 
 ### Stage 9 — Breed
 
