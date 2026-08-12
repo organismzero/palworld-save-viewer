@@ -55,7 +55,7 @@ pnpm dev                                    # then drop test/fixtures/level.mini
 
 ## The stages
 
-Each stage is independently mergeable and leaves the app coherent. Stages 5–9 touch one view each and can be reordered or split.
+Each stage is independently mergeable and leaves the app coherent. Stages 5–9 touch one view each and can be reordered or split. **All eleven have landed.**
 
 ### Stage 0 — unblock the toolchain
 
@@ -205,6 +205,14 @@ The footnote and every "why there is no route" paragraph are verbatim. They are 
 
 ### Stage 10 — cleanup
 
-_Files:_ `src/index.css`, sweep across `src/`, `README.md`
+**Landed.** _Files:_ `src/index.css`, `src/components/primitives.tsx`, `ItemSlot.tsx`, `MapView.tsx`, `BasesView.tsx`, `README.md`
 
-Drop the `--color-surface` / `--font-sans` aliases and `.raised-edge` if `--edge-raised` has replaced it. Grep for stragglers: `rounded-[10px]`, `rounded-[6px]`, `rounded-[4px]`, raw `oklch(…)` literals in views that should be tokens, any surviving sub-11px DOM type. Update the README's design-system paragraph.
+The `--color-surface` and `--font-sans` aliases are gone, both with zero call sites left. `.raised-edge` stays: six surfaces use it and it is the idiomatic way to spend `--edge-raised` in this codebase.
+
+The straggler sweep found four things, two of them the same silent-no-op bug: a scripted replacement whose search string had already been rewritten by the stage 1 line-token sweep, applied without an assert. The empty inventory cell kept `rounded-[4px]` that way, and so did the map's fog affordance. `BasesView`'s item-search rows were still hovering `--color-raised` where every other row in the app hovers a signal tint.
+
+Final state, by grep: no `rounded-[Npx]` anywhere, no `text-[10px]` or `text-[9px]`, no raw `oklch()` outside `lib/color.ts` and `index.css`, and no back-compat aliases.
+
+**Degraded mode was driven, not assumed.** With `fetch` rejecting every jsDelivr and raw.githubusercontent request, the app still renders: raw asset ids as names, monogram tiles instead of art, no element pips, IV bars and badges intact. That exposed the one real bug of this stage — a raw passive id like `ElementResist_Fire_1_PAL` is wider than any card it sits on, and was being hard-cut mid-word. `Pill` now truncates with an ellipsis and `PassiveChip` carries the full id in its `title`. The ellipsis has to live on a child span, because `text-overflow` does nothing to a flex container's own text.
+
+`README.md` gains a "The look" section describing the language, where the tokens live and the split between `@theme` and `:root`, pointing here for the decisions.

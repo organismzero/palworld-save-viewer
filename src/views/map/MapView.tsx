@@ -551,7 +551,7 @@ function LocalDataPrompt() {
         onClick={() => inputRef.current?.click()}
         aria-label="Add LocalData.sav to show fog of war"
         title="Fog of war comes from LocalData.sav, which the game keeps with the client rather than in the server save. Click to add it."
-        className="flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-xs opacity-35 transition-colors transition-opacity hover:bg-[var(--color-raised)] hover:opacity-100"
+        className="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-xs opacity-35 transition-colors transition-opacity hover:bg-[var(--color-signal)]/[0.08] hover:opacity-100"
       >
         <span className="h-2 w-2 shrink-0 rounded-full border border-[var(--color-muted)]" />
         <span className="flex-1">Fog of war</span>

@@ -196,8 +196,9 @@ pnpm dev
 ```
 src/
   app/         shell, drop zone, command palette, dialogs, error boundaries
-  components/  the design system — icons, charts, item slots, primitives
+  components/  the design system — primitives, controls, icons, charts, slots
   domain/      the slim model, coordinate transform, per-view selectors
+  fonts/       the two self-hosted typefaces, with their OFL licences
   lib/         formatting, the element palette, class-name helpers
   parse/       GVAS readers, ownership inference, file sniffing
     sav/       container, Oodle, the binary GVAS reader and its rawdata blobs
@@ -209,6 +210,20 @@ src/
 
 A save is parsed in a worker that retains the ~170 MB raw tree; what crosses to
 the UI is a ~1.8 MB slim payload.
+
+### The look
+
+Palworld's own UI language: dark translucent glass over the world, hairline
+edges with corner tick marks, sheared tabs, one cyan signal colour and one
+selection blue, HUD meters and square inventory cells. Depth is a hairline, a
+1px inset highlight and four corner ticks — never a drop shadow — and radii run
+0–3px, so nothing here is a rounded card. Every number is monospaced with
+tabular figures; the nine element hues are data colours and never chrome.
+
+Tokens live in `src/index.css`, split between the `@theme` block that generates
+Tailwind utilities and a plain `:root` for everything Tailwind does not own.
+`docs/redesign.md` records how it was built and the fourteen decisions where the
+design system and this codebase disagreed.
 
 ### Testing
 

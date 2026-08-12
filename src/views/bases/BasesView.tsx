@@ -1131,7 +1131,7 @@ function ItemSearch({
                           e === hit.staticId ? undefined : hit.staticId,
                         )
                       }
-                      className="flex w-full items-baseline gap-3 px-3 py-2 text-left hover:bg-[var(--color-raised)]/60"
+                      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
                     >
                       <span className="truncate text-sm">{hit.name}</span>
                       <span className="num ml-auto shrink-0 text-xs">
@@ -1144,7 +1144,7 @@ function ItemSearch({
                     </button>
 
                     {expanded === hit.staticId && (
-                      <ul className="border-t border-[var(--color-line-faint)] bg-[var(--color-abyss)]/40">
+                      <ul className="border-t border-[var(--color-line-faint)] bg-[rgb(3_9_13/0.4)]">
                         {hit.places.map((place) => {
                           const c = index.containerById.get(place.containerId)
                           if (!c) return null
@@ -1159,7 +1159,7 @@ function ItemSearch({
                               <button
                                 type="button"
                                 onClick={() => onOpen(place.containerId)}
-                                className="flex w-full items-baseline gap-3 py-1.5 pr-3 pl-6 text-left hover:bg-[var(--color-raised)]/60"
+                                className="flex w-full items-baseline gap-3 py-1.5 pr-3 pl-6 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
                               >
                                 <span className="truncate text-xs">
                                   {where.label}

@@ -88,10 +88,6 @@
   --color-el-earth: oklch(0.74 0.13 300); /* #A78BFA — hue pushed off Dragon */
   --color-el-ice: oklch(0.82 0.12 205); /* #67E8F9 */
 
-  /* Back-compat alias, removed in the last stage of the redesign. `surface`
-     was the old opaque panel fill; every remaining call site means `deep`. */
-  --color-surface: var(--color-deep);
-
   /* ---- Type ------------------------------------------------------------ */
   /* Titillium Web carries every label, heading and body run; JetBrains Mono
      carries save data — GUIDs, coordinates, IVs, counts, times. Both are
@@ -99,7 +95,6 @@
   --font-display: 'Titillium Web', ui-sans-serif, system-ui, sans-serif;
   --font-ui: 'Titillium Web', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
-  --font-sans: var(--font-ui); /* back-compat alias, removed in stage 10 */
 
   /* A compact game-HUD ramp. Nothing in the product is set below 11px. */
   --text-2xs: 11px;

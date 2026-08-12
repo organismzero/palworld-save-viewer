@@ -381,11 +381,13 @@ export function Pill({
     <span
       title={title}
       className={cn(
-        'inline-flex items-center gap-1 rounded-control border px-1.5 py-0.5 font-mono text-[11px] leading-none tracking-[0.08em] uppercase',
+        'inline-flex max-w-full items-center gap-1 overflow-hidden rounded-control border px-1.5 py-0.5 font-mono text-[11px] leading-none tracking-[0.08em] uppercase',
         tones[tone],
       )}
     >
-      {children}
+      {/* The ellipsis has to live on a child: `text-overflow` does nothing to a
+          flex container's own text, only to a block container's. */}
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   )
 }
@@ -403,7 +405,10 @@ export function PassiveChip({ name, rank }: { name: string; rank?: number }) {
     legendary: 'warn',
   }
   return (
-    <Pill tone={tone[tier]}>
+    // `title` earns its keep in degraded mode: with no reference data the name
+    // is a raw asset id like `ElementResist_Fire_1_PAL`, wider than any card it
+    // sits on, so the chip truncates and the tooltip carries the whole thing.
+    <Pill tone={tone[tier]} title={name}>
       {tier === 'detrimental' && <span aria-hidden>▾</span>}
       {tier === 'legendary' && <span aria-hidden>▴</span>}
       {name}

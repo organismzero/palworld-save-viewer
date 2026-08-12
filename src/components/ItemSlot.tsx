@@ -66,7 +66,7 @@ export function ItemSlot({
     return (
       <div
         aria-hidden
-        className="rounded-[4px] border border-dashed border-[var(--color-line-faint)]"
+        className="rounded-slot border border-dashed border-[var(--color-line-faint)]"
         style={{ width: size, height: size }}
       />
     )
