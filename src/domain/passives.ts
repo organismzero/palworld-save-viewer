@@ -11,32 +11,35 @@
  * 46,355 of its pairs. The game's own exported tables contain no inheritance
  * probabilities either — no per-passive chance, no count, no reroll odds.
  *
- * {@link INHERIT_COUNT} is therefore community reverse engineering from a
- * sampled build, held in one named constant so that a better number is a
- * one-line change and every route re-ranks correctly behind it. Nothing else in
- * here is a guess — given that one array, the rest is arithmetic.
+ * The two distributions below are not guesses, though they are not in anything
+ * this app fetches either: they are `Combi_PassiveInheritNum` and
+ * `Combi_PassiveRandomAddNum`, two weight arrays in Palworld's own
+ * `BP_PalGameSetting`, each `[4, 3, 2, 1]` and each summing to ten. They reach
+ * here via `tylercamp/palcalc`'s `README-PALWORLD-MECHANICS.md`, which names the
+ * asset and the variables and credits the inheritance algorithm to /u/mgxts's
+ * disassembly. Held as named constants so a correction is a one-line change and
+ * every route re-ranks correctly behind it. Given those two arrays, the rest is
+ * arithmetic.
  *
  * ## The rule being modelled
  *
  * Five steps, in this order:
  *
  * 1. Both parents' passive lists are combined and deduplicated — one pool.
- * 2. Roll `x` from {@link INHERIT_COUNT} — how many to inherit from that pool.
- *    **An upper limit, not a requirement**: a pool smaller than the roll is
- *    inherited whole.
+ * 2. Roll how many to inherit, from {@link INHERIT_COUNT}. **An upper limit,
+ *    not a requirement**: a pool smaller than the roll is inherited whole.
  * 3. Take that many from the pool, uniformly at random.
- * 4. Roll `y` from the *same* distribution. The child gets `max(0, y - x)`
- *    random passives from the global table — measured against the number
- *    **rolled**, not the number actually inherited.
+ * 4. Roll how many random passives to add, from {@link RANDOM_ADD} — a
+ *    *separate* roll from a separate array, not a function of step 2's.
  * 5. Add them until that count is reached or the four-slot limit is hit.
  *
- * Step 4 is the one place two readings exist. An earlier version of this file
- * rolled the second count independently, which is a guess this code had no
- * evidence for; the coupled form above is what the wiki describes and is the
- * more specific account, so it is what is implemented. Neither is
- * decompilation-grade. The difference is entirely in the junk rate — a mean of
- * 0.54 extra passives per hatch rather than 1.0 — and junk is what drives the
- * "bigger pool is worse" result, so it is worth knowing which is in force.
+ * Step 4 is the one place the community disagrees, and the disagreement is
+ * worth recording because it is easy to "fix" this back the wrong way.
+ * `palworld.wiki.gg/wiki/Breeding` describes the second roll as *coupled* —
+ * roll again on the inherit distribution and add the difference — which would
+ * roughly halve the junk rate. The two named arrays below are the reason this
+ * file does not do that: they are distinct settings with distinct outcome
+ * ranges, and a coupled rule needs only one.
  *
  * Two consequences drive the whole planner:
  *
@@ -97,6 +100,19 @@ const MAX_POOL = MAX_SLOTS * 2
  * **Community reverse engineering, not game data.** See the module header.
  */
 export const INHERIT_COUNT: readonly number[] = [0, 0.4, 0.3, 0.2, 0.1]
+
+/**
+ * How many *random* passives are added on top, by probability.
+ *
+ * `Combi_PassiveRandomAddNum` in `BP_PalGameSetting` — the same `[4, 3, 2, 1]`
+ * weights as {@link INHERIT_COUNT}, but over 0–3 rather than 1–4, which is the
+ * whole reason both arrays exist. Indexed by count, so index 0 is the common
+ * case: most hatches add none.
+ *
+ * The mean is 1.0 per hatch, and that is why a route's odds decay generation
+ * over generation even when every parent is clean.
+ */
+export const RANDOM_ADD: readonly number[] = [0.4, 0.3, 0.2, 0.1]
 
 /* -------------------------------------------------------------------------
    The odds
@@ -238,23 +254,18 @@ function computeCombine(a: Profile, b: Profile): Outcome[] {
   }
 
   if (m === 0) {
-    // Two blank parents still get the second roll's fills, and nothing else.
-    // With nothing inherited the first roll is still made, so the difference
-    // `y - x` is what lands.
-    for (let x = 1; x < INHERIT_COUNT.length; x++) {
-      for (let y = 1; y < INHERIT_COUNT.length; y++) {
-        const filled = Math.min(Math.max(0, y - x), MAX_SLOTS)
-        add(0, filled, INHERIT_COUNT[x]! * INHERIT_COUNT[y]!)
-      }
+    // Two blank parents still get step 4's random fills, and nothing else.
+    for (let r = 0; r < RANDOM_ADD.length; r++) {
+      add(0, Math.min(r, MAX_SLOTS), RANDOM_ADD[r]!)
     }
     return finish(acc)
   }
 
-  for (let x = 1; x < INHERIT_COUNT.length; x++) {
-    const pn = INHERIT_COUNT[x]!
+  for (let n = 1; n < INHERIT_COUNT.length; n++) {
+    const pn = INHERIT_COUNT[n]!
     if (pn === 0) continue
-    // The first roll is a ceiling: a pool smaller than it is taken whole.
-    const t = Math.min(x, m)
+    // Step 2's roll is a ceiling: a pool smaller than it is taken whole.
+    const t = Math.min(n, m)
 
     for (let v = Math.max(0, t - junk); v <= Math.min(t, w); v++) {
       const u = t - v
@@ -267,13 +278,10 @@ function computeCombine(a: Profile, b: Profile): Outcome[] {
       const perSubset = pDraw / choose(w, v)
 
       for (const drawn of subsetsOfSize(wantedBits, v)) {
-        for (let y = 1; y < INHERIT_COUNT.length; y++) {
-          // `y - x`, not `y - t`: the wiki is explicit that the second roll is
-          // measured against the number *rolled*, not the number there were
-          // actually enough passives to inherit. The four-slot limit then
-          // truncates the fill rather than failing it.
-          const filled = Math.min(Math.max(0, y - x), MAX_SLOTS - t)
-          add(drawn, u + filled, perSubset * INHERIT_COUNT[y]!)
+        for (let r = 0; r < RANDOM_ADD.length; r++) {
+          // Step 5: the four-slot limit truncates the fill, it does not fail it.
+          const filled = Math.min(r, MAX_SLOTS - t)
+          add(drawn, u + filled, perSubset * RANDOM_ADD[r]!)
         }
       }
     }

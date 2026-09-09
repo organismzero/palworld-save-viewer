@@ -31,7 +31,7 @@ import {
 const PST_REF = 'main'
 /** Bumped when a projection changes; invalidates every cached entry. */
 // 6: passive descriptions arrive with their {EffectValueN} placeholders filled.
-const SLIM_VERSION = 6
+const SLIM_VERSION = 7
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -68,11 +68,35 @@ export interface SpeciesInfo {
   partnerSkill?: string
 }
 
+/**
+ * Where a passive can come from, for a pal.
+ *
+ * Upstream carries seven `add_*` booleans per passive. Across the 115 a player
+ * can actually see, the four pal-facing ones partition perfectly — 85 random,
+ * 1 Lucky, 7 World Tree, 5 mutation, and 17 with none of them at all — so one
+ * field says everything four booleans would, and says it in a form the view can
+ * render without re-deriving. (The armour, accessory and weapon flags are set on
+ * *no* displayable passive: those describe equipment modifiers, a different
+ * thing wearing the same word.)
+ *
+ * `exclusive` is the residue, and it is the interesting one: Legend, Lord of the
+ * Sea, the Emperors. Those come with the pal that has them and no amount of
+ * catching or hatching produces them on anything else.
+ */
+export type PassiveSource =
+  | 'random'
+  | 'lucky'
+  | 'worldtree'
+  | 'mutation'
+  | 'exclusive'
+
 export interface PassiveInfo {
   name: string
   /** −3…9 in real data; negatives are detrimental traits. */
   rank: number
   description?: string
+  /** How a pal can come to have it — the answer to "I cannot breed this". */
+  source: PassiveSource
 }
 
 export interface WorkType {
@@ -199,21 +223,43 @@ function slimCharacters(raw: any): Record<string, SpeciesInfo> {
 }
 
 /**
- * Only ~115 of the ~1,905 passives in `skills.json` are player-visible; the
- * rest are internal armour/weapon modifiers. Keeping the lot would be 2.8 MB
- * of noise, so this keeps every passive that a pal could actually carry.
+ * Only 115 of the 1,905 passives in `skills.json` are player-visible; the rest
+ * are internal armour and weapon modifiers. Keeping the lot is 2.8 MB of noise,
+ * so this keeps every passive a pal could actually carry and nothing else —
+ * which is what the comment said long before the `category` test below existed
+ * to make it true.
  */
 function slimPassives(raw: any): Record<string, PassiveInfo> {
   const out: Record<string, PassiveInfo> = {}
   for (const p of raw?.passives ?? []) {
     if (typeof p?.asset !== 'string') continue
+    // The filter this function has always claimed to apply and never did: 1,790
+    // of the 1,905 entries are internal armour and weapon modifiers that no pal
+    // can carry, and they were being cached and offered in the passive picker
+    // alongside the real ones. `SortDisplayable` is exactly the 115.
+    if (p.category !== 'EPalPassiveCategory::SortDisplayable') continue
     out[p.asset.toLowerCase()] = {
       name: p.name ?? p.asset,
       rank: typeof p.rank === 'number' ? p.rank : 0,
       description: resolveEffects(p),
+      source: passiveSource(p),
     }
   }
   return out
+}
+
+/**
+ * The first flag that is set wins, which is safe because across the displayable
+ * passives exactly one ever is. The order is therefore documentation rather
+ * than precedence — if upstream ever sets two, this quietly prefers the rarer
+ * source, which is the more useful thing to tell someone.
+ */
+function passiveSource(p: any): PassiveSource {
+  if (p.add_mutation_pal === true) return 'mutation'
+  if (p.add_world_tree_pal === true) return 'worldtree'
+  if (p.add_rare_pal === true) return 'lucky'
+  if (p.add_pal === true) return 'random'
+  return 'exclusive'
 }
 
 /**
