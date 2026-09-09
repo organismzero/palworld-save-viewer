@@ -130,7 +130,7 @@ function StepRow({
             rank={passives.rank(id)}
           />
         ))}
-        <RoomFor step={step} />
+        <RoomFor step={step} isTarget={isTarget} />
         {step.selfPair && (
           <Pill
             tone="warn"
@@ -277,10 +277,26 @@ function Progress({
  * asking anything of you, and a pill saying so on every row would bury the ones
  * that are.
  */
-function RoomFor({ step }: { step: BreedStep }) {
+function RoomFor({ step, isTarget }: { step: BreedStep; isTarget: boolean }) {
   if (step.carries === undefined || step.junk === undefined) return null
   const spare = MAX_SLOTS - step.carries.length
-  if (step.junk >= spare) return null
+
+  if (step.junk >= spare) {
+    // Nothing constrains the spares. On an intermediate that is not worth a
+    // pill — the ceiling is simply loose, and the search has priced whatever it
+    // ends up carrying. On the pal you are *keeping* it is worth saying out
+    // loud, because silence reads as "no information" rather than "does not
+    // matter", and a hatch with everything you asked for plus one you did not
+    // looks like a miss. It is not: nothing is bred from this one.
+    return isTarget && spare > 0 ? (
+      <Pill
+        tone="good"
+        title="Nothing is bred from this one, so passives you did not ask for cost you nothing. An egg carrying everything listed here is finished, whatever else came with it."
+      >
+        spares don’t matter
+      </Pill>
+    ) : null
+  }
 
   return step.junk === 0 ? (
     <Pill

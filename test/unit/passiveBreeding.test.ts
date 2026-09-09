@@ -541,6 +541,27 @@ describe('planWithPassives — when it cannot be done', () => {
     )
   })
 
+  it('leaves the pal you keep unconstrained', () => {
+    const table = LADDER()
+    // Spares matter on a pal you breed *from* and are free on the one you keep,
+    // because nothing draws from it. The last step is that pal, and its ceiling
+    // should be the loosest its slots allow — which is what lets the view say
+    // so, instead of leaving a hatch that overshot looking like a miss.
+    const stock = stockOf(table, [
+      pal('aa', 'Male', ['swift']),
+      pal('aa', 'Female', ['legend']),
+      pal('bb', 'Male'),
+      pal('bb', 'Female'),
+    ])
+    const p = plan(table, stock, 'mid', ['swift', 'legend'])
+    expect(p.status).toBe('plan')
+
+    const last = p.steps.at(-1)!
+    expect(last.carries).toEqual(['swift', 'legend'])
+    // Nothing downstream, so nothing to keep clean for.
+    expect(last.junk).toBe(MAX_SLOTS - last.carries!.length)
+  })
+
   it('stages the merge rather than pairing two loaded parents', () => {
     const table = LADDER()
     // Both wanted passives are on fully loaded pals. Pairing them directly is a
