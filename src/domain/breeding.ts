@@ -828,6 +828,37 @@ export interface BreedStep {
   pool?: number
   /** The most junk this egg may carry and still serve the route. */
   junk?: number
+
+  /**
+   * What the player is already holding towards this step.
+   *
+   * The plan describes eggs that do not exist yet, and until this there was no
+   * way to relate one to a pal that does. Filled only for steps that carry a
+   * passive requirement: "do you already own this species" is a question the
+   * search answers for itself, by seeding owned species as roots.
+   */
+  progress?: StepProgress
+}
+
+/** The closest pal the player holds to what a step is asking for. */
+export interface StepProgress {
+  pal: Pal
+  /** Of what this step needs, what this pal already has. */
+  has: string[]
+  /** Its other passives — what it would dilute the next draw with. */
+  junk: number
+  /** Carries everything the step needs, and no more junk than it allows. */
+  meets: boolean
+  /**
+   * Wanted passives it carries that this step did not even ask for.
+   *
+   * The "you are ahead" signal, and the more useful half. A pal like this
+   * cannot appear in a plan built from a *current* save — it would have been a
+   * zero-cost root and the search would have routed through it instead of
+   * planning the step at all — so seeing one means the save on screen is older
+   * than the palbox, and the rest of the plan is probably obsolete.
+   */
+  beyond: string[]
 }
 
 export interface Blocker {

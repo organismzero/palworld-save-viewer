@@ -1043,6 +1043,12 @@ function Footnote({
         does not consume the parents. Eggs already sitting in storage are items
         rather than pals, and are not counted.
       </p>
+      <p className="mt-2">
+        This plan is worked out from the save as you loaded it, and breeding
+        changes what you hold. A hatch that comes out better than the step asked
+        for can make later steps unnecessary — so save and reload after each
+        generation, and the route will shorten around what you actually got.
+      </p>
       {plan?.wanted && plan.wanted.length > 0 && (
         <p className="mt-2">
           A child’s passives are drawn from its parents’ combined list, and how

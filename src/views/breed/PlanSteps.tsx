@@ -62,6 +62,7 @@ export function PlanSteps({
               text={text}
               passives={passives}
               owner={owner}
+              isTarget={step.n === plan.steps.length}
             />
           ))}
         </div>
@@ -84,11 +85,14 @@ function StepRow({
   text,
   passives,
   owner,
+  isTarget,
 }: {
   step: BreedStep
   text: SpeciesText
   passives: PassiveText
   owner: OwnerText
+  /** The last step is the one that makes the thing you asked for. */
+  isTarget: boolean
 }) {
   return (
     <Panel padded className="py-2.5">
@@ -151,7 +155,86 @@ function StepRow({
           between the two parents.
         </div>
       )}
+      <Progress
+        step={step}
+        text={text}
+        passives={passives}
+        isTarget={isTarget}
+      />
     </Panel>
+  )
+}
+
+/**
+ * What you are already holding towards this step.
+ *
+ * The plan describes eggs that do not exist yet, and without this there is no
+ * way to relate one to a pal that does — so a hatch that overshot a step by two
+ * passives read exactly like a hatch that missed it, and the obsolete half of
+ * the plan stayed on screen looking authoritative.
+ *
+ * Silent until there is something to say. A step nobody has started is the
+ * ordinary case, and a line on every row would bury the two that matter.
+ */
+function Progress({
+  step,
+  text,
+  passives,
+  isTarget,
+}: {
+  step: BreedStep
+  text: SpeciesText
+  passives: PassiveText
+  isTarget: boolean
+}) {
+  const at = step.progress
+  if (!at) return null
+
+  const short = (id: string) => (
+    <PassiveChip key={id} name={passives.name(id)} rank={passives.rank(id)} />
+  )
+  const lacks = (step.carries ?? []).filter((id) => !at.has.includes(id))
+  const done = at.meets || at.beyond.length > 0
+  // Meeting the step means the search would have routed through this pal had it
+  // known — *unless* the step is the target itself, where already owning one is
+  // the ordinary case and the plan is deliberately showing how to breed
+  // another. Telling someone to reload there would be advice to no effect.
+  const stale = done && !isTarget
+
+  return (
+    <div
+      className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[11px] ${
+        stale ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'
+      }`}
+    >
+      <span>{done ? 'you already have' : 'closest so far'}:</span>
+      <span className="truncate">
+        {palName(at.pal, { name: text.name(step.species) })}
+      </span>
+      {[...at.has, ...at.beyond].map(short)}
+      {at.junk > 0 && (
+        <span className="num" title="Its other passives.">
+          +{at.junk}
+        </span>
+      )}
+      {stale ? (
+        <span>
+          —{' '}
+          {at.beyond.length > 0
+            ? 'more than this step needs'
+            : 'which is what this step is for'}
+          . Reload the save and the rest of the plan may be shorter.
+        </span>
+      ) : done ? (
+        <span>— this plan is for breeding another.</span>
+      ) : (
+        <span>
+          — still needs{' '}
+          {lacks.map((id) => passives.name(id)).join(' and ') || 'a cleaner roll'}
+          .
+        </span>
+      )}
+    </div>
   )
 }
 

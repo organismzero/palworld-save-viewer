@@ -342,6 +342,85 @@ describe('planWithPassives — when you already have one', () => {
   })
 })
 
+describe('planWithPassives — what you are already holding', () => {
+  /** Enough to force a two-step route to `mid` carrying both passives. */
+  const base = () => [
+    pal('aa', 'Male', ['swift']),
+    pal('aa', 'Female', ['legend']),
+    pal('bb', 'Male'),
+    pal('bb', 'Female'),
+  ]
+  const want = ['swift', 'legend']
+
+  it('says nothing about a step you have not started', () => {
+    const table = LADDER()
+    const p = plan(table, stockOf(table, base()), 'mid', want)
+    expect(p.steps.every((s) => s.progress === undefined)).toBe(true)
+  })
+
+  it('names the closest pal you hold, and what it still lacks', () => {
+    const table = LADDER()
+    const partial = pal('mid', 'Male', ['swift', 'junk'])
+    const p = plan(table, stockOf(table, [...base(), partial]), 'mid', want)
+
+    const step = p.steps.find((s) => s.progress !== undefined)
+    expect(step).toBeDefined()
+    expect(step!.progress!.pal.instanceId).toBe(partial.instanceId)
+    expect(step!.progress!.has).toEqual(['swift'])
+    expect(step!.progress!.junk).toBe(1)
+    expect(step!.progress!.meets).toBe(false)
+    expect(step!.progress!.beyond).toEqual([])
+  })
+
+  it('flags a pal carrying more than the step asked for', () => {
+    const table = LADDER()
+    // A pal the save records no gender for. The planner cannot pair it, so the
+    // step it would have satisfied is still in the route — which is exactly the
+    // shape of the reported case, where the plan on screen predates the pal.
+    const ahead = pal('mid', 'Male', ['swift', 'legend'], { gender: undefined })
+    const p = plan(table, stockOf(table, [...base(), ahead]), 'mid', want)
+
+    const overshot = p.steps.find((s) => s.progress?.beyond.length)
+    expect(overshot).toBeDefined()
+    expect(overshot!.progress!.pal.instanceId).toBe(ahead.instanceId)
+    expect([...overshot!.progress!.has, ...overshot!.progress!.beyond].sort()).toEqual(['legend', 'swift']) // prettier-ignore
+  })
+
+  it('prefers the pal that covers more of the step', () => {
+    const table = LADDER()
+    const one = pal('mid', 'Male', ['swift'])
+    const both = pal('mid', 'Female', ['swift', 'legend'])
+    const p = plan(table, stockOf(table, [...base(), one, both]), 'mid', want)
+    const step = p.steps.find((s) => s.progress !== undefined)
+    expect(step!.progress!.pal.instanceId).toBe(both.instanceId)
+  })
+
+  it('leaves a step with no passive requirement alone', () => {
+    const table = LADDER()
+    const p = plan(table, stockOf(table, [...base(), pal('mid', 'Female')]), 'mid', want) // prettier-ignore
+    for (const step of p.steps) {
+      if (step.carries === undefined) expect(step.progress).toBeUndefined()
+    }
+  })
+
+  it('names the same pal twice running', () => {
+    const table = LADDER()
+    // Same pal objects both times, so any difference is the ordering, not the
+    // fixture — two pals identical but for their instance id is exactly the
+    // case a wobbly tie-break would show up on.
+    const pals = [
+      ...base(),
+      pal('mid', 'Male', ['swift']),
+      pal('mid', 'Female', ['swift']),
+    ]
+    const ids = () =>
+      plan(table, stockOf(table, pals), 'mid', want).steps.map(
+        (s) => s.progress?.pal.instanceId,
+      )
+    expect(ids()).toEqual(ids())
+  })
+})
+
 /* -------------------------------------------------------------------------
    The honest failures
    ------------------------------------------------------------------------- */

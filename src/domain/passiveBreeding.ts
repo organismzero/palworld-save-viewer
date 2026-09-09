@@ -107,6 +107,7 @@ import {
   childOf,
   height,
   planFor,
+  type StepProgress,
   type BreedNode,
   type BreedPair,
   type BreedStep,
@@ -810,6 +811,7 @@ export function planWithPassives(
   // already sitting in the box still renders as "and here is how to breed
   // another" rather than as a plan with no steps in it.
   const tree = expandState(picked.goal.key, ctx, undefined, picked.goal.via)
+  annotateProgress(ctx.steps, stock, passive.wanted)
 
   return {
     ...annotated,
@@ -989,6 +991,69 @@ function adopt(node: BreedNode, ctx: Ctx): BreedNode {
     })
   }
   return { kind: 'bred', species: node.species, a, b, step: n }
+}
+
+/**
+ * What the player already holds towards each step.
+ *
+ * A post-pass rather than something the two step-building paths each do, so
+ * there is one definition of "closest" and no chance of them drifting.
+ *
+ * Only steps that ask for a passive are annotated. A step spliced in from the
+ * plain planner has no requirement to be close to, and "do you own this
+ * species" is a question the search settles by seeding owned species as roots.
+ */
+function annotateProgress(
+  steps: BreedStep[],
+  stock: Stock,
+  wanted: Wanted,
+): void {
+  for (const step of steps) {
+    if (step.carries === undefined) continue
+    const entry = stock.bySpecies.get(step.species)
+    if (!entry) continue
+
+    const need = new Set(step.carries)
+    let best: StepProgress | undefined
+    for (const pal of [...entry.male, ...entry.female, ...entry.unknown]) {
+      const profile = profileOf(pal, wanted)
+      const carried = idsIn(profile.mask, wanted)
+      const has = carried.filter((id) => need.has(id))
+      if (has.length === 0) continue
+
+      const candidate: StepProgress = {
+        pal,
+        has,
+        junk: profile.junk,
+        meets:
+          has.length === step.carries.length &&
+          profile.junk <= (step.junk ?? MAX_SLOTS),
+        beyond: carried.filter((id) => !need.has(id)),
+      }
+      if (best === undefined || better(candidate, best)) best = candidate
+    }
+    step.progress = best
+  }
+}
+
+/**
+ * Which of two held pals is the more encouraging thing to be told about.
+ *
+ * Meeting the step wins outright; after that it is how much of the step it
+ * covers, then how much *else* it carries — a pal three passives into a
+ * four-passive plan is the most useful thing on the screen even when the step
+ * only asked for two. Junk, IV and the instance id break the remaining ties, in
+ * that order, so the pal named does not change between two loads of one save.
+ */
+function better(a: StepProgress, b: StepProgress): boolean {
+  return (
+    (a.meets ? 1 : 0) - (b.meets ? 1 : 0) ||
+    a.has.length - b.has.length ||
+    a.beyond.length - b.beyond.length ||
+    b.junk - a.junk ||
+    ivTotal(a.pal) - ivTotal(b.pal) ||
+    b.pal.instanceId.localeCompare(a.pal.instanceId)
+  ) > 0
 }
 
 /** The wanted passives a mask stands for, in the order they were asked for. */
