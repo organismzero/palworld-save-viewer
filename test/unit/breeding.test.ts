@@ -948,6 +948,72 @@ describe('planFor — the honest failures', () => {
    Scale
    ------------------------------------------------------------------------- */
 
+describe('buildStock — pooling in parts', () => {
+  const world = () => {
+    const table = buildBreedingTable(data({ aa: [100], bb: [200], mid: [150] }))
+    const pals = [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female', ownerPlayerUid: MATE }),
+      // No owner at all: a base worker in shared storage.
+      pal('mid', { gender: 'Male', ownerPlayerUid: undefined }),
+    ]
+    return { table, pals }
+  }
+
+  it('takes nobody else by default', () => {
+    const { table, pals } = world()
+    const stock = stockOf(table, pals)
+    expect(stock.counted).toBe(1)
+    expect(stock.includedBase).toBe(false)
+    expect(stock.includedMembers.size).toBe(0)
+  })
+
+  it('takes the base workers without the guildmates', () => {
+    const { table, pals } = world()
+    const stock = stockOf(table, pals, { includeBase: true })
+    expect(stock.countedUnowned).toBe(1)
+    expect(stock.countedBorrowed).toBe(0)
+    expect(stock.includedBase).toBe(true)
+  })
+
+  it('takes one guildmate without the base workers', () => {
+    const { table, pals } = world()
+    const stock = stockOf(table, pals, { includeMembers: [MATE] })
+    expect(stock.countedBorrowed).toBe(1)
+    expect(stock.countedUnowned).toBe(0)
+    expect([...stock.includedMembers]).toEqual([MATE])
+  })
+
+  it('reports who could be pooled, whether or not they were', () => {
+    const { table, pals } = world()
+    const stock = stockOf(table, pals)
+    expect(stock.poolableBase).toBe(1)
+    expect([...stock.poolable]).toEqual([[MATE, 1]])
+  })
+
+  it('will not tick a member who has no pals here', () => {
+    const { table, pals } = world()
+    // Checked off the stock, not the params, so a selection the domain declined
+    // cannot render as a ticked box that does nothing.
+    const stock = stockOf(table, pals, { includeMembers: [OWNER] })
+    expect(stock.includedMembers.size).toBe(0)
+  })
+
+  it('still means everything when asked for the whole guild', () => {
+    const { table, pals } = world()
+    const all = stockOf(table, pals, POOL)
+    expect(all.counted).toBe(3)
+    expect(all.includedBase).toBe(true)
+    expect([...all.includedMembers]).toEqual([MATE])
+    // And the parts add up to the same thing.
+    const parts = stockOf(table, pals, {
+      includeBase: true,
+      includeMembers: [MATE],
+    })
+    expect(parts.counted).toBe(all.counted)
+  })
+})
+
 describe('reachFrom', () => {
   it('converges well inside the round guard on a full-size ladder', () => {
     // 304 species at real-looking rank spacing, from a two-species stock.

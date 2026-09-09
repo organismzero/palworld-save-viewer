@@ -249,8 +249,27 @@ export interface Stock {
    * map key is the kind of shortcut that later reads as a real player.
    */
   byOwner: Map<Guid, number>
-  /** Whether the guild's pals were pooled in at the caller's request. */
+  /**
+   * Whether *all* of the guild's pals were pooled in at the caller's request.
+   *
+   * The finer two below are what actually drove the pool; this stays because
+   * "everything" is a distinct intent from a list naming everyone, and because
+   * it is what older links say.
+   */
   includedGuild: boolean
+  /** Whether ownerless base workers were pooled in. */
+  includedBase: boolean
+  /** Guildmates whose palboxes were pooled in — only uids that had pals. */
+  includedMembers: Set<Guid>
+  /**
+   * Everyone whose pals *could* be pooled, and how many each has.
+   *
+   * Counted from the guild's pals rather than its roster, so a departed member
+   * whose pals still carry their uid gets a row instead of vanishing.
+   */
+  poolable: Map<Guid, number>
+  /** Ownerless pals in the guild that could be pooled. */
+  poolableBase: number
   /**
    * The guild whose pals *could* be pooled — present whether or not they were,
    * so the toggle can name it and its absence can explain itself.
@@ -295,7 +314,22 @@ export function buildStock(
   index: SaveIndex,
   table: BreedingTable | undefined,
   ownerUid: Guid | undefined,
-  opts: { assumeUnknownGender?: boolean; includeGuild?: boolean } = {},
+  opts: {
+    assumeUnknownGender?: boolean
+    /**
+     * Everything the guild has, base workers and every member's palbox.
+     *
+     * Kept as its own flag rather than expressed as "base plus all members"
+     * because it is what every link written before the finer controls existed
+     * says, and because "all of them, whoever they turn out to be" is a
+     * different intent from a list that happens to name everyone today.
+     */
+    includeGuild?: boolean
+    /** Ownerless pals carrying the guild's group id — the base workers. */
+    includeBase?: boolean
+    /** Specific guildmates' palboxes, by player uid. */
+    includeMembers?: Iterable<Guid>
+  } = {},
 ): Stock {
   const assumedUnknownGender = opts.assumeUnknownGender === true
   const bySpecies = new Map<string, StockSpecies>()
@@ -323,17 +357,47 @@ export function buildStock(
           palCount: index.palsByGuild.get(group.groupId)?.length ?? 0,
         }
       : undefined
+  const guildPals = guild
+    ? (index.palsByGuild.get(guild.groupId) ?? [])
+    : []
+
+  // Who *could* be pooled, counted from the pals themselves rather than from the
+  // guild's member list. A departed member's pals keep their owner uid, so a
+  // roster-driven list would quietly drop them — and the whole point of these
+  // controls is that nothing goes missing without being named.
+  const poolable = new Map<Guid, number>()
+  let poolableBase = 0
+  for (const pal of guildPals) {
+    if (ownerUid && pal.ownerPlayerUid === ownerUid) continue
+    if (!pal.ownerPlayerUid) poolableBase++
+    else poolable.set(pal.ownerPlayerUid, (poolable.get(pal.ownerPlayerUid) ?? 0) + 1) // prettier-ignore
+  }
+
   const includedGuild = opts.includeGuild === true && guild !== undefined
+  const includedBase =
+    guild !== undefined && (includedGuild || opts.includeBase === true)
+  // Only uids that actually have pals here. Asking for a member who has none —
+  // or who was never in this guild — resolves to nothing rather than to a
+  // checkbox that stays ticked and does nothing.
+  const asked = new Set(opts.includeMembers ?? [])
+  const includedMembers = new Set<Guid>(
+    guild === undefined
+      ? []
+      : [...poolable.keys()].filter((uid) => includedGuild || asked.has(uid)),
+  )
 
   // THE POLICY, in one place and deliberately so: "the guild's pals" is a choice
   // this app makes, not a fact the save states. Every pal carrying the guild's
-  // group_id counts, the ownerless ones included — those are base workers sitting
-  // in shared base storage that any member can walk up to, which makes them more
-  // available than a pal in a guildmate's palbox, not less. Narrowing this to
-  // "pals whose owner is a member" is a change to this expression and nothing else.
-  const pooled = includedGuild
-    ? (index.palsByGuild.get(guild.groupId) ?? [])
-    : []
+  // group_id *may* count, the ownerless ones included — those are base workers
+  // sitting in shared base storage that any member can walk up to, which makes
+  // them more available than a pal in a guildmate's palbox, not less. Which is
+  // exactly why the two are separately selectable: they are different amounts of
+  // asking, and one checkbox could not say so.
+  const pooled = guildPals.filter((pal) =>
+    !pal.ownerPlayerUid
+      ? includedBase
+      : includedMembers.has(pal.ownerPlayerUid),
+  )
 
   const seen = new Set<Guid>()
   const source: Pal[] = []
@@ -426,6 +490,10 @@ export function buildStock(
     countedUnowned,
     byOwner,
     includedGuild,
+    includedBase,
+    includedMembers,
+    poolable,
+    poolableBase,
     guild,
     skippedNoGender,
     skippedUnknownSpecies,

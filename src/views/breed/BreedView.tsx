@@ -32,7 +32,7 @@ import {
   type BreedingPlan,
   type Stock,
 } from '../../domain/breeding.ts'
-import type { Pal, Player, SaveIndex } from '../../domain/types.ts'
+import type { Guid, Pal, Player, SaveIndex } from '../../domain/types.ts'
 import { count } from '../../lib/format.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
@@ -104,13 +104,32 @@ export function BreedView({ index }: { index: SaveIndex }) {
     if (!raw || Object.keys(raw.pals).length === 0) return undefined
     return buildBreedingTable(raw)
   }, [data])
+  // `params.includeMembers` is a fresh array on every render, and the stock is
+  // keyed on identity by everything downstream — `reachFrom`'s memo and the
+  // passive search both. So it is re-derived from its own content, which is
+  // stable across renders that did not change the selection.
+  const memberKey = params.includeMembers.join(',')
+  const members = useMemo(
+    () => (memberKey === '' ? [] : (memberKey.split(',') as Guid[])),
+    [memberKey],
+  )
   const stock = useMemo(
     () =>
       buildStock(index, table, ownerUid, {
         assumeUnknownGender: params.assumeUnknownGender,
         includeGuild: params.includeGuild,
+        includeBase: params.includeBase,
+        includeMembers: members,
       }),
-    [index, table, ownerUid, params.assumeUnknownGender, params.includeGuild],
+    [
+      index,
+      table,
+      ownerUid,
+      params.assumeUnknownGender,
+      params.includeGuild,
+      params.includeBase,
+      members,
+    ],
   )
   const owner = useMemo(() => ownerText(index, ownerUid), [index, ownerUid])
   // The expensive one, and the reason for the memo split.
@@ -179,9 +198,11 @@ export function BreedView({ index }: { index: SaveIndex }) {
           <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
             {stock.includedGuild
               ? `All of ${guildLabel(stock)}’s pals are used, base workers included — not just this player’s.`
-              : stock.guild
-                ? 'Only this player’s pals are used. Guildmates’ pals are not counted.'
-                : 'Only this player’s pals are used. They are in no guild, so there is nothing else to pool.'}
+              : !stock.guild
+                ? 'Only this player’s pals are used. They are in no guild, so there is nothing else to pool.'
+                : stock.includedBase || stock.includedMembers.size > 0
+                  ? 'This player’s pals, plus the ones ticked below.'
+                  : 'Only this player’s pals are used. Tick anyone below to widen it.'}
           </p>
         </div>
 
@@ -193,11 +214,10 @@ export function BreedView({ index }: { index: SaveIndex }) {
           onToggleUnknown={() =>
             patch({ assumeUnknownGender: !params.assumeUnknownGender })
           }
-          onToggleGuild={() =>
-            // Clears a pinned route, as the player picker does: a different stock
-            // can make the pinned pair no longer one of the shortest.
-            patch({ includeGuild: !params.includeGuild, route: undefined })
-          }
+          // Every one of these clears a pinned route, as the player picker
+          // does: a different stock can make the pinned pair no longer one of
+          // the shortest.
+          onPool={(next) => patch({ ...next, route: undefined })}
         />
       </aside>
 
@@ -666,14 +686,14 @@ function StockPanel({
   reachable,
   total,
   onToggleUnknown,
-  onToggleGuild,
+  onPool,
 }: {
   stock: Stock
   owner: OwnerText
   reachable: number | undefined
   total: number | undefined
   onToggleUnknown: () => void
-  onToggleGuild: () => void
+  onPool: (next: Partial<BreedParams>) => void
 }) {
   return (
     <div className="space-y-3">
@@ -711,37 +731,8 @@ function StockPanel({
           />
         )}
       </Panel>
-      {/* `checked` is read off the stock, not off the params, so a flag the
-          domain refused to honour — no guild, or a bookkeeping Organization —
-          cannot render as ticked. */}
       {stock.guild && (
-        <Checkbox
-          checked={stock.includedGuild}
-          onChange={onToggleGuild}
-          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
-          label={
-            <span>
-              Pool all {count(stock.guild.palCount)} of {guildLabel(stock)}’s
-              pals, base workers included. Off by default — a pal a guildmate
-              holds is one you have to go and ask for.
-            </span>
-          }
-        />
-      )}
-      {stock.includedGuild && stock.byOwner.size > 1 && (
-        <div>
-          <div className="label mb-1.5">who is contributing</div>
-          <Panel className="px-3 py-1">
-            {[...stock.byOwner]
-              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-              .map(([uid, n]) => (
-                <Row key={uid} label={owner.name(uid)} value={count(n)} />
-              ))}
-            {stock.countedUnowned > 0 && (
-              <Row label="no owner" value={count(stock.countedUnowned)} />
-            )}
-          </Panel>
-        </div>
+        <PoolPicker stock={stock} owner={owner} onPool={onPool} />
       )}
       {stock.skippedNoGender > 0 && (
         <Checkbox
@@ -756,6 +747,136 @@ function StockPanel({
             </span>
           }
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Whose pals to breed from.
+ *
+ * One checkbox used to cover the whole guild, which conflated two different
+ * amounts of asking. A base worker in shared storage is one any member can walk
+ * up to and fetch; a pal in someone's palbox needs that person to put it in the
+ * pen. Those belong on separate lines, and the palboxes belong one line each,
+ * because "everyone except the one who is never online" is the selection people
+ * actually want.
+ *
+ * Every row is checked off the *stock* rather than the params, so a selection
+ * the domain declined — a member with no pals, a uid this world does not know —
+ * cannot render as ticked and do nothing.
+ *
+ * The member list is built from the pals, not from the guild roster: a departed
+ * member's pals keep their owner uid, and a row that quietly dropped them would
+ * lose stock without saying so.
+ */
+function PoolPicker({
+  stock,
+  owner,
+  onPool,
+}: {
+  stock: Stock
+  owner: OwnerText
+  onPool: (next: Partial<BreedParams>) => void
+}) {
+  const members = [...stock.poolable].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  )
+  const everyone = members.map(([uid]) => uid)
+  const allOn =
+    stock.includedGuild ||
+    (stock.includedBase && stock.includedMembers.size === members.length)
+
+  /** `gp` is the "everything" intent; the finer flags only speak without it. */
+  const set = (base: boolean, uids: Guid[]) =>
+    onPool({ includeGuild: false, includeBase: base, includeMembers: uids })
+
+  const toggleMember = (uid: Guid) => {
+    const on = new Set(
+      stock.includedGuild ? everyone : [...stock.includedMembers],
+    )
+    if (on.has(uid)) on.delete(uid)
+    else on.add(uid)
+    set(stock.includedBase, [...on])
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <span className="label">also breed from</span>
+        <span className="flex gap-2">
+          <Button
+            size="sm"
+            tone={allOn ? 'signal' : 'ghost'}
+            onClick={() => onPool({ includeGuild: true })}
+          >
+            all
+          </Button>
+          <Button
+            size="sm"
+            tone="ghost"
+            onClick={() => set(false, [])}
+            disabled={!stock.includedBase && stock.includedMembers.size === 0}
+          >
+            none
+          </Button>
+        </span>
+      </div>
+
+      {stock.poolableBase > 0 && (
+        <Checkbox
+          checked={stock.includedBase}
+          onChange={() =>
+            set(
+              !stock.includedBase,
+              stock.includedGuild ? everyone : [...stock.includedMembers],
+            )
+          }
+          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
+          label={
+            <span>
+              <span className="text-[var(--color-text)]">
+                {count(stock.poolableBase)} base{' '}
+                {stock.poolableBase === 1 ? 'pal' : 'pals'}
+              </span>{' '}
+              — nobody owns {stock.poolableBase === 1 ? 'it' : 'these'}, so any
+              member can fetch {stock.poolableBase === 1 ? 'it' : 'one'}.
+            </span>
+          }
+        />
+      )}
+
+      {members.map(([uid, n]) => (
+        <Checkbox
+          key={uid}
+          checked={stock.includedMembers.has(uid)}
+          onChange={() => toggleMember(uid)}
+          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
+          label={
+            <span>
+              <span className="text-[var(--color-text)]">
+                {owner.name(uid)}
+              </span>{' '}
+              — {count(n)} {n === 1 ? 'pal' : 'pals'}, which they have to put in
+              the pen {n === 1 ? 'itself' : 'themselves'}.
+            </span>
+          }
+        />
+      ))}
+
+      {members.length === 0 && stock.poolableBase === 0 && (
+        <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
+          Nobody else in {guildLabel(stock)} holds a pal, so there is nothing to
+          pool.
+        </p>
+      )}
+      {/* Kept visible so an old `gp=1` link explains itself rather than looking
+          like three boxes that ticked themselves. */}
+      {stock.includedGuild && members.length > 0 && (
+        <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
+          All of {guildLabel(stock)} is pooled, including anyone who joins later.
+          Unticking one narrows it to the rest.
+        </p>
       )}
     </div>
   )
@@ -869,20 +990,23 @@ function Footnote({
   return (
     <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
-        {stock.includedGuild ? (
+        {stock.countedOwn === stock.counted ? (
           <>
             Counted {count(stock.counted)} pals across{' '}
-            {count(stock.bySpecies.size)} species from all of{' '}
-            {guildLabel(stock)} — {count(stock.countedOwn)} this player’s,{' '}
-            {count(stock.countedBorrowed)} other members’, and{' '}
-            {count(stock.countedUnowned)} owned by nobody. A route through
-            someone else’s pal needs them to put it in the pen.
+            {count(stock.bySpecies.size)} species that this player owns. Nobody
+            else’s are counted.
           </>
         ) : (
           <>
             Counted {count(stock.counted)} pals across{' '}
-            {count(stock.bySpecies.size)} species that this player owns.
-            Guildmates’ pals are not counted.
+            {count(stock.bySpecies.size)} species —{' '}
+            {count(stock.countedOwn)} this player’s,{' '}
+            {count(stock.countedBorrowed)} from{' '}
+            {stock.includedGuild
+              ? `all of ${guildLabel(stock)}`
+              : `${count(stock.includedMembers.size)} pooled ${stock.includedMembers.size === 1 ? 'guildmate' : 'guildmates'}`}
+            , and {count(stock.countedUnowned)} owned by nobody. A route through
+            someone else’s pal needs them to put it in the pen.
           </>
         )}
         {stock.skippedNoGender > 0 && (
@@ -895,7 +1019,7 @@ function Footnote({
             .
           </>
         )}
-        {stock.includedGuild
+        {stock.includedBase
           ? stock.countedUnowned > 0 && (
               <>
                 {' '}

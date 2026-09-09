@@ -17,9 +17,10 @@ const B = 'bbbbbbbb'.padEnd(32, '0')
 /** Shares `A`'s first eight characters, so the prefix is ambiguous. */
 const A2 = `aaaaaaaa${'1'.padEnd(24, '1')}`
 
-function codecFor(uids: string[]) {
+function codecFor(uids: string[], palOwners: string[] = uids) {
   return breedCodec({
     playerByUid: new Map(uids.map((u) => [u, {}])),
+    palsByOwner: new Map(palOwners.map((u) => [u, []])),
   } as unknown as SaveIndex)
 }
 
@@ -39,9 +40,55 @@ describe('breedCodec', () => {
       route: { a: 'penguin', b: 'kelpie' },
       assumeUnknownGender: true,
       includeGuild: true,
+      includeBase: false,
+      includeMembers: [],
       passives: ['legend', 'swift'],
     }
     expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('round-trips a partial pool', () => {
+    const value = {
+      ...BREED_DEFAULTS,
+      includeGuild: false,
+      includeBase: true,
+      includeMembers: [B],
+    }
+    expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('keeps `gp` meaning everything, and stays quiet when it is set', () => {
+    // An old link says `gp=1` and must keep meaning the whole guild — including
+    // members who joined after it was written. So the finer params are not
+    // emitted alongside it, and are not consulted when it is present.
+    const all = codec.encode(
+      { ...BREED_DEFAULTS, includeGuild: true, includeBase: true, includeMembers: [B] }, // prettier-ignore
+      BREED_DEFAULTS,
+    )
+    expect(all.gp).toBe('1')
+    expect(all.gb).toBeUndefined()
+    expect(all.gm).toBeUndefined()
+  })
+
+  it('resolves a member who owns pals but has no player record', () => {
+    // A departed guildmate: their pals keep their owner uid long after the
+    // player record is gone, and those palboxes are exactly the ones worth
+    // pooling. Resolving against the player table alone dropped them, so a link
+    // naming one came back unticked and the stock quietly shrank.
+    const departed = codecFor([A], [A, B])
+    expect(
+      departed.decode(new URLSearchParams('gm=bbbbbbbb'), BREED_DEFAULTS)
+        .includeMembers,
+    ).toEqual([B])
+  })
+
+  it('drops a member uid this world does not know', () => {
+    // A link from another save must not pool the wrong person's palbox.
+    const decoded = codec.decode(
+      new URLSearchParams('gm=deadbeef'),
+      BREED_DEFAULTS,
+    )
+    expect(decoded.includeMembers).toEqual([])
   })
 
   it('sorts the passives, so one selection is one link', () => {

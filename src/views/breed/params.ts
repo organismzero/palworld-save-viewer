@@ -39,8 +39,18 @@ export interface BreedParams {
   route?: BreedPair
   /** Count pals whose gender the save does not record. */
   assumeUnknownGender: boolean
-  /** Pool the whole guild's pals, base workers included. */
+  /** Pool the whole guild's pals, base workers and every member alike. */
   includeGuild: boolean
+  /** Pool the ownerless base workers on their own. */
+  includeBase: boolean
+  /**
+   * Pool these guildmates' palboxes, by player uid.
+   *
+   * Ignored when `includeGuild` is set — "all of them" is a standing intent
+   * that should keep meaning all of them as the guild changes, not freeze into
+   * whoever was a member when the link was written.
+   */
+  includeMembers: Guid[]
   /**
    * Passives the route has to deliver, as lowercased asset ids.
    *
@@ -59,6 +69,8 @@ export const BREED_DEFAULTS: BreedParams = {
   route: undefined,
   assumeUnknownGender: false,
   includeGuild: false,
+  includeBase: false,
+  includeMembers: [],
   passives: [],
 }
 
@@ -76,6 +88,14 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       // `gp`, not a bare `g` — that reads like a guild id, and the Guild view
       // already spends one. Cheap insurance against a future `g=<shortId>`.
       if (v.includeGuild) out.gp = '1'
+      // `gp` still means everything, so a link written before these existed
+      // keeps meaning what it meant. The finer two only speak when it is off.
+      if (!v.includeGuild) {
+        if (v.includeBase) out.gb = '1'
+        if (v.includeMembers.length > 0) {
+          out.gm = encodeList(v.includeMembers.map(shortId))
+        }
+      }
       // Sorted by `encodeList`, so the same selection made in two different
       // orders produces the same link.
       if (v.passives.length > 0) out.pv = encodeList(v.passives)
@@ -96,6 +116,18 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         route: parseRoute(raw.get('r')),
         assumeUnknownGender: bool(raw, 'ug', d.assumeUnknownGender),
         includeGuild: bool(raw, 'gp', d.includeGuild),
+        includeBase: bool(raw, 'gb', d.includeBase),
+        // Resolved against everyone who *owns a pal*, not against the player
+        // table. A departed member's pals keep their owner uid long after their
+        // player record is gone, and those are exactly the palboxes worth
+        // pooling — resolving against `playerByUid` silently dropped them, so a
+        // link naming one came back unticked and the stock quietly shrank.
+        // An id that matches none, or matches two, still resolves to nothing
+        // rather than to a guess: a link from another save must not pool the
+        // wrong person's palbox.
+        includeMembers: list(raw, 'gm')
+          .map((short) => resolveShortId(short, owners(index)))
+          .filter((uid): uid is Guid => uid !== undefined),
         // Sorted to match `encodeList`, which sorts on the way out. Without
         // this the two disagree, and since the domain keeps only the first four
         // — a pal's slot count — a five-passive link would plan for one set now
@@ -109,6 +141,18 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       }
     },
   }
+}
+
+/**
+ * Every uid that owns a pal in this world, plus every uid with a player record.
+ *
+ * The union matters in both directions: a departed member owns pals but has no
+ * player record, and a member who owns none still has one.
+ */
+function owners(index: SaveIndex): Guid[] {
+  return [
+    ...new Set([...index.palsByOwner.keys(), ...index.playerByUid.keys()]),
+  ]
 }
 
 /**
