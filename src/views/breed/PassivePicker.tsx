@@ -138,6 +138,14 @@ export function PassivePicker({
                           {text.description(p.id)}
                         </span>
                       )}
+                      {/* Only where it changes the answer. "Turns up at random"
+                          is the unremarkable case and saying so on eighty-five
+                          rows would bury the five that matter. */}
+                      {held === 0 && text.origin(p.id) && (
+                        <span className="mt-1 block text-[11px] leading-relaxed text-[var(--color-gold)]">
+                          {text.origin(p.id)}
+                        </span>
+                      )}
                     </span>
                     {/* The whole reason the list shows what nobody has: an
                         impossible target is visible before it is picked. */}

@@ -97,6 +97,15 @@ export interface PassiveInfo {
   description?: string
   /** How a pal can come to have it — the answer to "I cannot breed this". */
   source: PassiveSource
+  /**
+   * Whether an implant exists that puts this passive on a pal outright, at a
+   * Pal Surgery Table — and whether it survives the operation.
+   *
+   * Sixty of the 115 have one, including every passive that cannot be bred at
+   * all, which makes this the most useful thing the app can say to someone the
+   * planner has just turned down.
+   */
+  implant?: 'reusable' | 'disposable' | 'both'
 }
 
 export interface WorkType {
@@ -246,6 +255,43 @@ function slimPassives(raw: any): Record<string, PassiveInfo> {
     }
   }
   return out
+}
+
+/**
+ * Which passives can be implanted, joined out of the item table.
+ *
+ * Implant items name the passive they apply in their own asset id —
+ * `PalPassiveSkillChange_<passive>` for the reusable ones and
+ * `PalPassiveSkillChange_Consumable_<passive>` for the single-use ones — so the
+ * relationship is already in the data and needs no list maintained by hand.
+ * Sixty of the 115 displayable passives resolve; four item ids do not resolve to
+ * anything and are left out, being upstream test rows and one stale id.
+ *
+ * This is the only cross-file join in the projection, which is why it happens
+ * here rather than inside either `slim*` function: neither can see the other's
+ * input.
+ */
+function withImplants(
+  passives: Record<string, PassiveInfo>,
+  rawItems: any,
+): Record<string, PassiveInfo> {
+  const REUSABLE = 'EPalItemTypeB::Essential_PassiveSkillChange'
+  const DISPOSABLE = 'EPalItemTypeB::ConsumePassiveSkillChange'
+  for (const item of rawItems?.items ?? []) {
+    const asset = item?.asset
+    if (typeof asset !== 'string') continue
+    const disposable = item.type_b === DISPOSABLE
+    if (!disposable && item.type_b !== REUSABLE) continue
+    const id = asset
+      .replace('PalPassiveSkillChange_Consumable_', '')
+      .replace('PalPassiveSkillChange_', '')
+      .toLowerCase()
+    const at = passives[id]
+    if (!at) continue
+    const kind = disposable ? 'disposable' : 'reusable'
+    at.implant = at.implant && at.implant !== kind ? 'both' : kind
+  }
+  return passives
 }
 
 /**
@@ -504,7 +550,7 @@ async function fetchAndSlim(): Promise<Refdata> {
     ])
   return {
     species: slimCharacters(characters),
-    passives: slimPassives(skills),
+    passives: withImplants(slimPassives(skills), items),
     work: slimWork(work),
     landmarks: slimLandmarks(travel),
     items: slimItems(items),

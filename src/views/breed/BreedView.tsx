@@ -483,6 +483,20 @@ function PassiveHeader({
             inheritance left empty. Once <em>one</em> pal has it, it is
             inheritable and this plan can carry it.
           </p>
+          {/* Where each one actually comes from, derived from upstream's own
+              flags rather than typed in. This is the difference between "go and
+              grind" and "grinding cannot work" — a mutation-only passive will
+              never appear on an ordinary hatch however many you sit through. */}
+          <ul className="space-y-1">
+            {missing.map((id) => (
+              <li key={id}>
+                <span className="text-[var(--color-gold)]">
+                  {passives.name(id)}
+                </span>
+                {passives.origin(id) ? <> — {passives.origin(id)}</> : null}
+              </li>
+            ))}
+          </ul>
           <p>
             Catching or trading for a carrier is the reliable way
             {/* Only worth suggesting when it is not already done — a hint that
