@@ -403,6 +403,46 @@ describe('planWithPassives — what you are already holding', () => {
     }
   })
 
+  it('does not call a pal good enough when it has a spare too many', () => {
+    const table = LADDER()
+    // The reported bug in miniature. This pal has everything the step asks for
+    // and one passive besides, which reads like being ahead and is not: the
+    // spare fills a slot the next generation needs. Treating it as good enough
+    // is what produced "reload the save" on a save that had just been reloaded.
+    const over = pal('mid', 'Male', ['swift', 'legend', 'junk'])
+    const p = plan(table, stockOf(table, [...base(), over]), 'mid', want)
+
+    const step = p.steps.find((s) => s.progress?.pal.instanceId === over.instanceId) // prettier-ignore
+    if (step) {
+      const at = step.progress!
+      if (at.junk > (step.junk ?? MAX_SLOTS)) expect(at.meets).toBe(false)
+      // Whatever it carries beyond the step is still reported — it is
+      // information, and only `meets` answers "is this good enough".
+      expect(at.has.length + at.beyond.length).toBeGreaterThan(0)
+    }
+    expect(p.status).toBe('plan')
+  })
+
+  it('never leaves a step a held pal already satisfies', () => {
+    const table = LADDER()
+    // The property the copy now rests on. `isDominated` prunes a bred state
+    // whenever a settled one has a superset mask, no more junk and no greater
+    // cost — which is exactly a pal that meets the step. So a non-target step
+    // and a held pal that satisfies it cannot coexist, and nothing may be
+    // inferred from a case the search settles by construction.
+    for (const held of [
+      pal('mid', 'Male', ['swift']),
+      pal('mid', 'Female', ['swift', 'legend']),
+      pal('mid', 'Male', ['swift', 'legend', 'junk']),
+    ]) {
+      const p = plan(table, stockOf(table, [...base(), held]), 'mid', want)
+      for (const step of p.steps) {
+        if (step.n === p.steps.length) continue // the target may be owned
+        expect(step.progress?.meets ?? false).toBe(false)
+      }
+    }
+  })
+
   it('names the same pal twice running', () => {
     const table = LADDER()
     // Same pal objects both times, so any difference is the ordering, not the

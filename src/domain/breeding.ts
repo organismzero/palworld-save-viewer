@@ -847,16 +847,26 @@ export interface StepProgress {
   has: string[]
   /** Its other passives — what it would dilute the next draw with. */
   junk: number
-  /** Carries everything the step needs, and no more junk than it allows. */
+  /**
+   * Carries everything the step needs, and no more junk than it allows.
+   *
+   * Cannot be true for a step that is not the plan's target: `isDominated` in
+   * `passiveBreeding.ts` prunes a bred state whenever a settled one has a
+   * superset mask, no more junk and no greater cost — which is exactly a held
+   * pal that meets the step. The search settles that case by construction, so
+   * there is nothing to infer from it. Pinned by a test rather than trusted.
+   */
   meets: boolean
   /**
    * Wanted passives it carries that this step did not even ask for.
    *
-   * The "you are ahead" signal, and the more useful half. A pal like this
-   * cannot appear in a plan built from a *current* save — it would have been a
-   * zero-cost root and the search would have routed through it instead of
-   * planning the step at all — so seeing one means the save on screen is older
-   * than the palbox, and the rest of the plan is probably obsolete.
+   * Informative, and nothing more. It is tempting to read as "you are ahead" —
+   * an earlier version did, and told people to reload a save they had just
+   * loaded — but carrying extra wanted passives says nothing about whether the
+   * pal can serve this step. One that has everything asked for *and* a passive
+   * too many cannot: the spare fills a slot the next generation needs, which is
+   * what {@link BreedStep.junk} exists to express. `meets` is the only field
+   * that answers "is this good enough", and it is computed against that ceiling.
    */
   beyond: string[]
 }

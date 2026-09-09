@@ -168,13 +168,32 @@ function StepRow({
 /**
  * What you are already holding towards this step.
  *
- * The plan describes eggs that do not exist yet, and without this there is no
- * way to relate one to a pal that does — so a hatch that overshot a step by two
- * passives read exactly like a hatch that missed it, and the obsolete half of
- * the plan stayed on screen looking authoritative.
+ * The plan describes eggs that do not exist yet, and without this there was no
+ * way to relate one to a pal that does — a hatch three passives into a
+ * four-passive plan read exactly like a hatch that missed.
  *
- * Silent until there is something to say. A step nobody has started is the
- * ordinary case, and a line on every row would bury the two that matter.
+ * ## Why this says nothing about the plan being out of date
+ *
+ * An earlier version read a pal carrying more than the step asked for as proof
+ * that the save was stale, and told people to reload. It was wrong twice over,
+ * and reliably wrong on a freshly loaded save.
+ *
+ * Carrying *extra wanted passives* is not the same as being good enough. A pal
+ * with everything the step needs and one passive too many cannot stand in for
+ * it: the spare fills a slot the next generation needs, which is the whole
+ * reason steps carry a junk ceiling. The planner has already weighed it — on the
+ * reported save, breeding a clean intermediate and pairing that was 10.8
+ * expected hatches against 16.7 for using the held pal directly.
+ *
+ * And a pal that genuinely *meets* a step cannot coexist with it, because
+ * `isDominated` in `domain/passiveBreeding.ts` prunes a bred state whenever a
+ * settled one has a superset mask, no more junk and no greater cost — exactly
+ * that pal. The search handles the case by construction, so there is nothing to
+ * infer from it and no advice to give.
+ *
+ * What is knowable is why the pal does not serve *this* step, so that is what
+ * this says. Silent until there is something to say: a step nobody has started
+ * is the ordinary case, and a line on every row would bury the ones that matter.
  */
 function Progress({
   step,
@@ -193,21 +212,14 @@ function Progress({
   const short = (id: string) => (
     <PassiveChip key={id} name={passives.name(id)} rank={passives.rank(id)} />
   )
+  const name = (id: string) => passives.name(id)
   const lacks = (step.carries ?? []).filter((id) => !at.has.includes(id))
-  const done = at.meets || at.beyond.length > 0
-  // Meeting the step means the search would have routed through this pal had it
-  // known — *unless* the step is the target itself, where already owning one is
-  // the ordinary case and the plan is deliberately showing how to breed
-  // another. Telling someone to reload there would be advice to no effect.
-  const stale = done && !isTarget
+  const spare = step.junk ?? MAX_SLOTS
+  const tooMany = at.junk > spare
 
   return (
-    <div
-      className={`mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[11px] ${
-        stale ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'
-      }`}
-    >
-      <span>{done ? 'you already have' : 'closest so far'}:</span>
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[11px] text-[var(--color-muted)]">
+      <span>{lacks.length === 0 ? 'you already have' : 'closest so far'}:</span>
       <span className="truncate">
         {palName(at.pal, { name: text.name(step.species) })}
       </span>
@@ -217,21 +229,33 @@ function Progress({
           +{at.junk}
         </span>
       )}
-      {stale ? (
-        <span>
-          —{' '}
-          {at.beyond.length > 0
-            ? 'more than this step needs'
-            : 'which is what this step is for'}
-          . Reload the save and the rest of the plan may be shorter.
-        </span>
-      ) : done ? (
+
+      {at.meets && isTarget ? (
         <span>— this plan is for breeding another.</span>
       ) : (
         <span>
-          — still needs{' '}
-          {lacks.map((id) => passives.name(id)).join(' and ') || 'a cleaner roll'}
-          .
+          {'— '}
+          {lacks.length > 0 && <>still needs {lacks.map(name).join(' and ')}</>}
+          {lacks.length > 0 && tooMany && ', and '}
+          {/* The reported case, and the answer to "why is the plan not
+              shorter?". The pal has everything asked for and one passive too
+              many, so it cannot stand in — the route breeds a cleaner one
+              instead, which is cheaper than living with the spare. */}
+          {tooMany && (
+            <>
+              this step needs one with{' '}
+              {spare === 0 ? 'nothing spare' : `no more than ${spare} spare`}, so
+              the route breeds a cleaner one
+            </>
+          )}
+          {/* Unreachable, per the dominance argument above, and pinned by a
+              test. Neutral rather than absent, because a blank line here would
+              be worse than a dull one. */}
+          {lacks.length === 0 && !tooMany && <>already enough for this step</>}
+          {'.'}
+          {at.beyond.length > 0 && (
+            <> It also has {at.beyond.map(name).join(' and ')}.</>
+          )}
         </span>
       )}
     </div>
