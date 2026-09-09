@@ -18,6 +18,7 @@ import type {
   BreedStep,
   BreedingPlan,
 } from '../../domain/breeding.ts'
+import { MAX_SLOTS } from '../../domain/passives.ts'
 import { palName } from '../../domain/palText.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import {
@@ -125,6 +126,7 @@ function StepRow({
             rank={passives.rank(id)}
           />
         ))}
+        <RoomFor step={step} />
         {step.selfPair && (
           <Pill
             tone="warn"
@@ -150,6 +152,42 @@ function StepRow({
         </div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * How much else this egg may come out carrying.
+ *
+ * The number the plan was always computing and never showing, which made the one
+ * moment it matters unreadable: you hatch something with the two passives you
+ * wanted *and* two you did not, and nothing on screen says whether that is a
+ * pass or a miss. It is usually a miss, and an expensive one — a pal's four
+ * slots are shared, so two spare passives on a parent dilute every draw beneath
+ * it. Against a four-passive target, pairing two clean carriers is one hatch in
+ * ten; doing it with two spares apiece is one in seven hundred.
+ *
+ * Silent where the constraint is not real: a step with slots to spare is not
+ * asking anything of you, and a pill saying so on every row would bury the ones
+ * that are.
+ */
+function RoomFor({ step }: { step: BreedStep }) {
+  if (step.carries === undefined || step.junk === undefined) return null
+  const spare = MAX_SLOTS - step.carries.length
+  if (step.junk >= spare) return null
+
+  return step.junk === 0 ? (
+    <Pill
+      tone="warn"
+      title="This egg has to come out carrying nothing but what is listed. Anything else fills a slot the next generation needs, and a pal that hatches with spares is worth throwing back rather than breeding on."
+    >
+      nothing else
+    </Pill>
+  ) : (
+    <Pill
+      title={`Up to ${step.junk} other ${step.junk === 1 ? 'passive is' : 'passives are'} tolerable here. More than that and the next generation cannot draw what it needs.`}
+    >
+      +{step.junk} at most
+    </Pill>
   )
 }
 

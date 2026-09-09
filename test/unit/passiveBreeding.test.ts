@@ -26,6 +26,7 @@ import {
   planWithPassives,
   reachWithPassives,
 } from '@/domain/passiveBreeding.ts'
+import { MAX_SLOTS } from '@/domain/passives.ts'
 import type { BreedingData } from '@/refdata/refdata.ts'
 import type { Gender, Pal, SaveIndex } from '@/domain/types.ts'
 
@@ -392,6 +393,33 @@ describe('planWithPassives — when it cannot be done', () => {
     const stock = stockOf(table, [pal('mid', 'Male', ['swift'])])
     const p = plan(table, stock, 'mid', ['swift'])
     expect(p.status).toBe('unreachable')
+  })
+
+  it('says how much room each egg has left', () => {
+    const table = LADDER()
+    // The number that tells you whether the pal you just hatched is a pass or a
+    // miss. Without it, two wanted passives and two spares looks like success
+    // and is usually worth throwing back.
+    const stock = stockOf(table, [
+      pal('aa', 'Male', ['w', 'x', 'j1', 'j2']),
+      pal('bb', 'Female', ['y', 'z', 'j3', 'j4']),
+    ])
+    const p = plan(table, stock, 'mid', ['w', 'x', 'y', 'z'])
+    expect(p.status).toBe('plan')
+
+    for (const step of p.steps) {
+      if (step.carries === undefined) continue
+      expect(step.junk).toBeDefined()
+      // A pal holds four passives, so what it carries and what it may spare
+      // cannot exceed that between them.
+      expect(step.carries.length + step.junk!).toBeLessThanOrEqual(MAX_SLOTS)
+    }
+
+    // A four-passive ask has to keep at least one intermediate spotless — there
+    // is no room for anything else by the time they are all on one pal.
+    expect(p.steps.some((s) => s.carries !== undefined && s.junk === 0)).toBe(
+      true,
+    )
   })
 
   it('stages the merge rather than pairing two loaded parents', () => {
