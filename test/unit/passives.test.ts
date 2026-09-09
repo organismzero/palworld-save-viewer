@@ -13,7 +13,6 @@ import { describe, expect, it } from 'vitest'
 import {
   INHERIT_COUNT,
   MAX_SLOTS,
-  RANDOM_ADD,
   carrierCounts,
   combine,
   expectedEggs,
@@ -49,20 +48,26 @@ function pal(passives: string[]): Pal {
   }
 }
 
-describe('the two constants', () => {
-  it('INHERIT_COUNT is a distribution over 1…MAX_SLOTS', () => {
+describe('INHERIT_COUNT', () => {
+  it('is a distribution over 1…MAX_SLOTS', () => {
     expect(INHERIT_COUNT).toHaveLength(MAX_SLOTS + 1)
     // Index 0 exists and is zero: a hatch always inherits at least one.
     expect(INHERIT_COUNT[0]).toBe(0)
     expect(INHERIT_COUNT.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10)
   })
 
-  it('RANDOM_ADD is a distribution over 0…3, averaging one per hatch', () => {
-    expect(RANDOM_ADD.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10)
-    const mean = RANDOM_ADD.reduce((a, p, r) => a + p * r, 0)
-    // The number behind every "why do the odds decay so fast" question: a clean
-    // pair still hands its child one junk passive on average.
-    expect(mean).toBeCloseTo(1, 10)
+  it('drives both rolls, which is why there is only one of it', () => {
+    // The second roll uses the same distribution as the first, and the child
+    // gets `max(0, y - x)` random passives. That coupling is why a clean pair
+    // usually stays clean — and it is the one place the community has two
+    // readings, so the mean it implies is pinned here deliberately.
+    let mean = 0
+    for (let x = 1; x < INHERIT_COUNT.length; x++) {
+      for (let y = 1; y < INHERIT_COUNT.length; y++) {
+        mean += INHERIT_COUNT[x]! * INHERIT_COUNT[y]! * Math.max(0, y - x)
+      }
+    }
+    expect(mean).toBeCloseTo(0.54, 10)
   })
 })
 
@@ -175,7 +180,8 @@ describe('combine', () => {
   it('adds junk to two blank parents anyway', () => {
     const out = combine(clean(0), clean(0))
     expect(out.every((o) => o.mask === 0)).toBe(true)
-    expect(out.find((o) => o.junk === 0)?.prob).toBeCloseTo(RANDOM_ADD[0]!, 10)
+    // P(y <= x) over two independent rolls of the same distribution.
+    expect(out.find((o) => o.junk === 0)?.prob).toBeCloseTo(0.65, 10)
   })
 
   it('is unordered, like the pair it describes', () => {
@@ -186,22 +192,27 @@ describe('combine', () => {
 })
 
 describe('pAtLeast', () => {
-  it('costs two and a half eggs to pass one passive down cleanly', () => {
-    // A lone carrier always passes it on (pInherit(1,1) === 1) — but only 40%
-    // of those hatches arrive without a random passive tagging along. That gap
-    // is the whole difference between "a route" and "a route you can build on".
-    expect(pAtLeast(clean(0b1), clean(0), 0b1, 0)).toBeCloseTo(0.4, 10)
+  it('passes one passive down cleanly about two hatches in three', () => {
+    // A lone carrier always passes it on (pInherit(1,1) === 1) — but only when
+    // the second roll does not exceed the first does it arrive without a random
+    // passive tagging along. That gap is the whole difference between "a route"
+    // and "a route you can build on".
+    expect(pAtLeast(clean(0b1), clean(0), 0b1, 0)).toBeCloseTo(0.65, 10)
     expect(pAtLeast(clean(0b1), clean(0), 0b1, 3)).toBeCloseTo(1, 10)
   })
 
-  it('merges two clean carriers at a quarter, cleanly', () => {
+  it('merges two clean carriers at about a half, cleanly', () => {
+    // Carrying both at all is P(x >= 2) = 0.6 and is unaffected by the second
+    // roll; keeping them clean is the part that moved when the coupling did.
     expect(pAtLeast(clean(0b01), clean(0b10), 0b11, 3)).toBeCloseTo(0.6, 10)
-    expect(pAtLeast(clean(0b01), clean(0b10), 0b11, 0)).toBeCloseTo(0.24, 10)
+    expect(pAtLeast(clean(0b01), clean(0b10), 0b11, 0)).toBeCloseTo(0.49, 10)
   })
 
   it('lands a perfect four at one hatch in ten', () => {
-    // Two clean two-passive parents. Every slot is spoken for, so step 4 has
-    // nowhere to put a random one and the clean result is free.
+    // Two clean two-passive parents. Unchanged by the second-roll coupling —
+    // only x = 4 can carry four, and at x = 4 there is no y that adds anything
+    // and no slot left to put it in. The community reports ~10–15%, which is
+    // the one place this model is externally calibrated, so it is pinned.
     const p = pAtLeast(clean(0b0011), clean(0b1100), 0b1111, 0)
     expect(p).toBeCloseTo(0.1, 10)
   })

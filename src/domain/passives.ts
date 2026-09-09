@@ -11,29 +11,42 @@
  * 46,355 of its pairs. The game's own exported tables contain no inheritance
  * probabilities either — no per-passive chance, no count, no reroll odds.
  *
- * {@link INHERIT_COUNT} and {@link RANDOM_ADD} are therefore community reverse
- * engineering from a sampled build, held in two named constants so that better
- * numbers are a one-line change and every route re-ranks correctly behind them.
- * Nothing else in here is a guess — given those two arrays, the rest is
- * arithmetic.
+ * {@link INHERIT_COUNT} is therefore community reverse engineering from a
+ * sampled build, held in one named constant so that a better number is a
+ * one-line change and every route re-ranks correctly behind it. Nothing else in
+ * here is a guess — given that one array, the rest is arithmetic.
  *
  * ## The rule being modelled
  *
  * Five steps, in this order:
  *
  * 1. Both parents' passive lists are combined and deduplicated — one pool.
- * 2. Roll `n`, how many to inherit from that pool. **An upper limit, not a
- *    requirement**: a pool smaller than the roll is inherited whole.
- * 3. Take `n` from the pool, uniformly at random.
- * 4. Roll `r`, how many random passives to add from the global table.
- * 5. Add them until `r` is reached or the four-slot limit is hit.
+ * 2. Roll `x` from {@link INHERIT_COUNT} — how many to inherit from that pool.
+ *    **An upper limit, not a requirement**: a pool smaller than the roll is
+ *    inherited whole.
+ * 3. Take that many from the pool, uniformly at random.
+ * 4. Roll `y` from the *same* distribution. The child gets `max(0, y - x)`
+ *    random passives from the global table — measured against the number
+ *    **rolled**, not the number actually inherited.
+ * 5. Add them until that count is reached or the four-slot limit is hit.
+ *
+ * Step 4 is the one place two readings exist. An earlier version of this file
+ * rolled the second count independently, which is a guess this code had no
+ * evidence for; the coupled form above is what the wiki describes and is the
+ * more specific account, so it is what is implemented. Neither is
+ * decompilation-grade. The difference is entirely in the junk rate — a mean of
+ * 0.54 extra passives per hatch rather than 1.0 — and junk is what drives the
+ * "bigger pool is worse" result, so it is worth knowing which is in force.
  *
  * Two consequences drive the whole planner:
  *
  * - A passive reaches the final egg only through an unbroken chain of parents
- *   carrying it. Step 4 can technically produce one, but at roughly 1 in 115
- *   that is a lottery ticket rather than a route, so it is modelled as never
- *   supplying a wanted passive.
+ *   carrying it. Step 4 can technically produce one, but the random-eligible
+ *   pool is the 85 passives flagged `add_pal` upstream, and the draw is
+ *   *weighted* — the game's `DT_PassiveSkill_Main` has a `LotteryWeight` column
+ *   that no public export carries. So even "1 in 85" is a uniform upper bound
+ *   rather than a probability, and it is modelled as never supplying a wanted
+ *   passive: a lottery ticket is not a route.
  * - **A bigger pool is worse.** Junk competes for the same slots, and step 4
  *   adds one junk passive per hatch on average whatever you do. Two clean
  *   parents beat two loaded ones, which is why the planner picks the *cleanest*
@@ -55,6 +68,11 @@
  * - Random fills are assumed never to be a passive you wanted.
  * - Special breeding cakes override step 2 and force all four parental passives
  *   down. Not modelled, so a player using them does better than shown.
+ * - A passive can be put on an existing pal outright, at the Pal Surgery Table,
+ *   for gold and an implant. Nothing here knows that, so the planner may advise
+ *   a long grind for something purchasable. Likewise the Pal Merchant and Black
+ *   Marketeer sell pals whose passives can be read before buying, and their
+ *   stock rerolls on reload — often a faster way to a carrier than breeding one.
  */
 
 import type { Pal } from './types.ts'
@@ -79,17 +97,6 @@ const MAX_POOL = MAX_SLOTS * 2
  * **Community reverse engineering, not game data.** See the module header.
  */
 export const INHERIT_COUNT: readonly number[] = [0, 0.4, 0.3, 0.2, 0.1]
-
-/**
- * How many *random* passives are added on top, by probability.
- *
- * Indexed by count, and index 0 is the common case — most hatches add none.
- * The mean is one per hatch, which is the whole reason a route's odds decay
- * generation over generation even when every parent is clean.
- *
- * Same provenance and the same caveat as {@link INHERIT_COUNT}.
- */
-export const RANDOM_ADD: readonly number[] = [0.4, 0.3, 0.2, 0.1]
 
 /* -------------------------------------------------------------------------
    The odds
@@ -231,18 +238,23 @@ function computeCombine(a: Profile, b: Profile): Outcome[] {
   }
 
   if (m === 0) {
-    // Two blank parents still get step 4's random fills, and nothing else.
-    for (let r = 0; r < RANDOM_ADD.length; r++) {
-      add(0, Math.min(r, MAX_SLOTS), RANDOM_ADD[r]!)
+    // Two blank parents still get the second roll's fills, and nothing else.
+    // With nothing inherited the first roll is still made, so the difference
+    // `y - x` is what lands.
+    for (let x = 1; x < INHERIT_COUNT.length; x++) {
+      for (let y = 1; y < INHERIT_COUNT.length; y++) {
+        const filled = Math.min(Math.max(0, y - x), MAX_SLOTS)
+        add(0, filled, INHERIT_COUNT[x]! * INHERIT_COUNT[y]!)
+      }
     }
     return finish(acc)
   }
 
-  for (let n = 1; n < INHERIT_COUNT.length; n++) {
-    const pn = INHERIT_COUNT[n]!
+  for (let x = 1; x < INHERIT_COUNT.length; x++) {
+    const pn = INHERIT_COUNT[x]!
     if (pn === 0) continue
-    // Step 2's roll is a ceiling: a pool smaller than it is taken whole.
-    const t = Math.min(n, m)
+    // The first roll is a ceiling: a pool smaller than it is taken whole.
+    const t = Math.min(x, m)
 
     for (let v = Math.max(0, t - junk); v <= Math.min(t, w); v++) {
       const u = t - v
@@ -255,10 +267,13 @@ function computeCombine(a: Profile, b: Profile): Outcome[] {
       const perSubset = pDraw / choose(w, v)
 
       for (const drawn of subsetsOfSize(wantedBits, v)) {
-        for (let r = 0; r < RANDOM_ADD.length; r++) {
-          // Step 5: the four-slot limit truncates the fill, it does not fail it.
-          const filled = Math.min(r, MAX_SLOTS - t)
-          add(drawn, u + filled, perSubset * RANDOM_ADD[r]!)
+        for (let y = 1; y < INHERIT_COUNT.length; y++) {
+          // `y - x`, not `y - t`: the wiki is explicit that the second roll is
+          // measured against the number *rolled*, not the number there were
+          // actually enough passives to inherit. The four-slot limit then
+          // truncates the fill rather than failing it.
+          const filled = Math.min(Math.max(0, y - x), MAX_SLOTS - t)
+          add(drawn, u + filled, perSubset * INHERIT_COUNT[y]!)
         }
       }
     }
