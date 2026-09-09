@@ -213,10 +213,13 @@ export interface State {
 export type StateKey = string
 
 export interface PassiveReach {
+  /** What the search actually planned for: the ask, minus `missing`. */
   wanted: Wanted
+  /** Everything the caller asked for, including what could not be searched. */
+  asked: Wanted
   /** Settled states, keyed by species, mask and junk. */
   states: Map<StateKey, State>
-  /** Wanted passives no pal in the pool carries. */
+  /** Asked-for passives no pal in the pool carries, so no route can deliver. */
   missing: string[]
   /** How many pals in the pool carry each wanted passive. */
   carriers: Map<string, number>
@@ -242,9 +245,17 @@ export function reachWithPassives(
   reach: Reach,
   ids: Iterable<string>,
 ): PassiveReach {
-  const wanted = wantedFrom(ids)
   const carriers = carrierCounts(allPals(stock))
-  const missing = wanted.ids.filter((id) => (carriers.get(id) ?? 0) === 0)
+  // Asked for, but carried by nothing that can go in a pen. Searching for these
+  // is not merely futile, it is *destructive*: a passive no state can ever hold
+  // makes the full mask unreachable, so one uncarried ask would throw away a
+  // perfectly good route for the three that are carried. They come out of the
+  // search and are reported instead, which is the honest division of labour —
+  // the planner routes what breeding can deliver, and the view says plainly
+  // what has to be caught, bought or traded for first.
+  const asked = wantedFrom(ids)
+  const missing = asked.ids.filter((id) => (carriers.get(id) ?? 0) === 0)
+  const wanted = wantedFrom(asked.ids.filter((id) => !missing.includes(id)))
 
   const names = [...table.rank.keys()]
   for (const id of stock.bySpecies.keys()) if (!table.rank.has(id)) names.push(id)
@@ -434,6 +445,7 @@ export function reachWithPassives(
 
   return {
     wanted,
+    asked,
     states: collect(names, settledList, eggs, viaA, viaB, roots, {
       eggs: altEggs,
       a: altA,
@@ -701,15 +713,19 @@ export function planWithPassives(
       (pal) => profileOf(pal, passive.wanted).mask === passive.wanted.all,
     ),
     wanted: passive.wanted.ids,
-    ignoredPassives: passive.wanted.ignored,
+    ignoredPassives: passive.asked.ignored,
     missingPassives: passive.missing,
     truncated: passive.truncated,
   }
 
-  // Nothing asked for, nothing to say: the species plan *is* the answer, down
-  // to its tied-route list. Returning it whole here rather than letting the
-  // search rediscover it is what makes the parity structural — the caller
-  // branches too, and this is the same guarantee held where it can be tested.
+  // Nothing left to plan for — either nothing was asked, or nothing asked for
+  // is carried by anything in the pool. Both answer with the species plan whole:
+  // in the first case that *is* the answer, down to its tied-route list, and in
+  // the second the route to the species is still perfectly good and the view
+  // says separately which passives have to be obtained before it is worth
+  // anything. Returning it here rather than letting the search rediscover it is
+  // what makes the no-passives parity structural — the caller branches too, and
+  // this is the same guarantee held where it can be tested.
   if (passive.wanted.ids.length === 0) return annotated
 
   // The species route itself is the problem, so let `diagnose` say why. A
@@ -737,12 +753,11 @@ export function planWithPassives(
     return {
       ...annotated,
       status: 'unreachable',
-      // Naming the passive nobody carries is the actionable message; "no route"
-      // is only true once that is ruled out.
-      reason:
-        passive.missing.length > 0
-          ? 'passive-not-in-stock'
-          : 'passive-unreachable',
+      // One reason, because there is only one thing left to say: everything
+      // still in the search is carried by something, and no route lands them
+      // together. Whatever was asked for and *not* carried never entered the
+      // search and is reported on its own, whether or not a route was found.
+      reason: 'passive-unreachable',
       steps: [],
       tree: undefined,
       generations: 0,

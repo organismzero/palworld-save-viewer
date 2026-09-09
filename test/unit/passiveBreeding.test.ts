@@ -346,13 +346,42 @@ describe('planWithPassives — when you already have one', () => {
    ------------------------------------------------------------------------- */
 
 describe('planWithPassives — when it cannot be done', () => {
-  it('names a passive nobody in the pool carries', () => {
+  it('plans for what is carried and reports what is not', () => {
+    const table = LADDER()
+    // The reported case in miniature: one wanted passive is in the pool, one is
+    // not. Refusing outright throws away a route that works — the whole point
+    // of asking for `swift` does not evaporate because `legend` is unobtainable.
+    const stock = stockOf(table, [
+      pal('aa', 'Male', ['swift']),
+      pal('bb', 'Female'),
+    ])
+    const p = plan(table, stock, 'mid', ['swift', 'legend'])
+    expect(p.status).toBe('plan')
+    expect(p.wanted).toEqual(['swift'])
+    expect(p.missingPassives).toEqual(['legend'])
+    expect(p.steps[0]!.carries).toEqual(['swift'])
+  })
+
+  it('adding an unobtainable passive does not spoil the plan', () => {
+    const table = LADDER()
+    const pals = [pal('aa', 'Male', ['swift']), pal('bb', 'Female')]
+    const one = plan(table, stockOf(table, pals), 'mid', ['swift'])
+    const two = plan(table, stockOf(table, pals), 'mid', ['swift', 'legend'])
+    // Byte for byte the same route; only the reporting differs.
+    expect(two.steps).toEqual(one.steps)
+    expect(two.expectedEggs).toBe(one.expectedEggs)
+  })
+
+  it('still gives the species route when nothing asked for is carried', () => {
     const table = LADDER()
     const stock = stockOf(table, [pal('aa', 'Male'), pal('bb', 'Female')])
-    const p = plan(table, stock, 'mid', ['swift'])
-    expect(p.status).toBe('unreachable')
-    expect(p.reason).toBe('passive-not-in-stock')
-    expect(p.missingPassives).toEqual(['swift'])
+    const p = plan(table, stock, 'mid', ['swift', 'legend'])
+    // How to breed a `mid` is still a good answer, and the view says separately
+    // that neither passive can ride along yet.
+    expect(p.status).toBe('plan')
+    expect(p.wanted).toEqual([])
+    expect(p.missingPassives).toEqual(['swift', 'legend'])
+    expect(p.steps.length).toBeGreaterThan(0)
   })
 
   it('will not pair a lone carrier with itself', () => {
@@ -401,17 +430,6 @@ describe('planWithPassives — when it cannot be done', () => {
     expect(p.steps.at(-1)!.carries).toEqual(['swift', 'legend'])
   })
 
-  it('says which of two asks is the impossible one', () => {
-    const table = LADDER()
-    const stock = stockOf(table, [
-      pal('aa', 'Male', ['swift']),
-      pal('bb', 'Female'),
-    ])
-    const p = plan(table, stock, 'mid', ['swift', 'legend'])
-    expect(p.reason).toBe('passive-not-in-stock')
-    expect(p.missingPassives).toEqual(['legend'])
-  })
-
   it('reports what it refused to plan for beyond four', () => {
     const table = LADDER()
     const stock = stockOf(table, [
@@ -436,11 +454,18 @@ describe('planWithPassives — the guild', () => {
       pal('bb', 'Female'),
       pal('aa', 'Male', ['swift'], { ownerPlayerUid: MATE }),
     ]
-    expect(plan(table, stockOf(table, pals), 'mid', ['swift']).status).toBe(
-      'unreachable',
-    )
+    // Alone: the species route stands, but nothing this player owns carries
+    // swift, so it is reported as missing rather than planned for.
+    const alone = plan(table, stockOf(table, pals), 'mid', ['swift'])
+    expect(alone.status).toBe('plan')
+    expect(alone.wanted).toEqual([])
+    expect(alone.missingPassives).toEqual(['swift'])
+
+    // Pooled: the guildmate's carrier is in the pool, so it becomes routable.
     const pooled = plan(table, stockOf(table, pals, POOL), 'mid', ['swift'])
     expect(pooled.status).toBe('plan')
+    expect(pooled.wanted).toEqual(['swift'])
+    expect(pooled.missingPassives).toEqual([])
     expect(pooled.borrowed.map((b) => b.ownerUid)).toEqual([MATE])
   })
 

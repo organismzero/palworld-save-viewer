@@ -434,6 +434,8 @@ function PassiveHeader({
 }) {
   const missing = plan.missingPassives ?? []
   const ignored = plan.ignoredPassives ?? []
+  /** What the search actually planned for, as against what was asked. */
+  const planned = plan.wanted ?? []
   if (!pending && !failed && missing.length === 0 && ignored.length === 0) {
     return null
   }
@@ -456,18 +458,41 @@ function PassiveHeader({
         </p>
       )}
       {missing.length > 0 && (
-        <p>
-          Nothing in this pool carries{' '}
-          <span className="text-[var(--color-gold)]">{names(missing)}</span>, so
-          no amount of breeding will produce{' '}
-          {missing.length === 1 ? 'it' : 'them'}. Catch or trade for one first
-          {/* Only worth suggesting when it is not already done — a hint that
-              names something already switched on reads as a broken page. */}
-          {!stock.includedGuild && stock.guild
-            ? ', or pool the guild’s pals in on the left'
-            : ''}
-          .
-        </p>
+        <>
+          <p>
+            <span className="text-[var(--color-gold)]">{names(missing)}</span>{' '}
+            {missing.length === 1 ? 'is' : 'are'} carried by nothing in this
+            pool, so {missing.length === 1 ? 'it' : 'they'} cannot be{' '}
+            <em>inherited</em> — a passive only ever comes down from a parent
+            that already has it. The plan below is for{' '}
+            {planned.length > 0 ? names(planned) : 'the species alone'}.
+          </p>
+          {/* The correction that matters. A hatch rolls random passives on top
+              of what it inherits, so "no amount of breeding will produce it" —
+              which this said — is simply false, and anyone who has hatched a
+              dozen eggs has seen it be false. What is true is that it is a
+              lottery rather than a route, which is why the planner will not
+              plan it. */}
+          <p>
+            A hatch can still turn one up on its own: every egg rolls a few
+            random passives on top of what it inherits, which is why pals arrive
+            carrying things neither parent had. It is a lottery rather than a
+            route — the odds are not in any published data — so the planner will
+            not pretend to route it. To fish for one, pair two pals carrying as
+            little as possible: random passives only land in the slots
+            inheritance left empty. Once <em>one</em> pal has it, it is
+            inheritable and this plan can carry it.
+          </p>
+          <p>
+            Catching or trading for a carrier is the reliable way
+            {/* Only worth suggesting when it is not already done — a hint that
+                names something already switched on reads as a broken page. */}
+            {!stock.includedGuild && stock.guild
+              ? ', and pooling the guild’s pals in on the left may already have one'
+              : ''}
+            .
+          </p>
+        </>
       )}
       {ignored.length > 0 && (
         <p>
@@ -581,26 +606,18 @@ function NoRoute({
       {/* The species route exists — only the passives are out of reach. Said
           separately from the reasons above because the action is different:
           nothing about the ladder needs to change, only what is carried along
-          it. `PassiveHeader` names the passives nobody holds; this says what
-          that means for the route. */}
-      {plan.reason === 'passive-not-in-stock' && (
-        <p className="text-[var(--color-muted)]">
-          {text.name(plan.target)} itself is perfectly reachable — it is the
-          passives that are not. A passive only ever comes from a parent that
-          already has it, so one nothing in this pool carries cannot be bred in
-          at any price.
-          <PoolHint stock={stock} />
-        </p>
-      )}
-
+          it. Passives nobody carries are not this message's business — they
+          never entered the search, and `PassiveHeader` names them whether a
+          route was found or not. */}
       {plan.reason === 'passive-unreachable' && (
         <p className="text-[var(--color-muted)]">
-          Every passive you asked for is carried by something in this pool, but
-          no route gets them all onto {text.name(plan.target)} inside{' '}
-          <span className="num">{MAX_EXPECTED_EGGS}</span> expected hatches —
-          which is where a plan stops being advice. Asking for fewer of them at
-          once, or catching a cleaner carrier, is the way in: every unrelated
-          passive on a parent competes for the child’s four slots.
+          {text.name(plan.target)} is reachable and something in this pool
+          carries every passive still being planned for — but no route lands
+          them all together inside{' '}
+          <span className="num">{MAX_EXPECTED_EGGS}</span> expected hatches,
+          which is where a plan stops being advice. Asking for fewer at once, or
+          finding a cleaner carrier, is the way in: every unrelated passive on a
+          parent competes for the child’s four slots.
           <PoolHint stock={stock} />
         </p>
       )}

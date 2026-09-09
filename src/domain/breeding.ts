@@ -774,9 +774,14 @@ export type PlanReason =
   | 'needs-unique-parents'
   | 'no-stock'
   | 'nothing-produces-it'
-  /** A passive you asked for is carried by nobody in the pool. */
-  | 'passive-not-in-stock'
-  /** Every wanted passive has a carrier, but no route lands them all. */
+  /**
+   * Every passive still being planned for has a carrier, but no route lands
+   * them all together inside the search's budget.
+   *
+   * Passives nothing in the pool carries are not a *route* failure — they never
+   * enter the search at all, and `missingPassives` reports them whether the rest
+   * found a route or not.
+   */
   | 'passive-unreachable'
 
 export interface BreedingPlan {
