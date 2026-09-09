@@ -20,17 +20,25 @@ import type {
 } from '../../domain/breeding.ts'
 import { palName } from '../../domain/palText.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
-import { IVBar, Panel, Pill } from '../../components/primitives.tsx'
+import {
+  IVBar,
+  Panel,
+  PassiveChip,
+  Pill,
+} from '../../components/primitives.tsx'
 import type { SpeciesText } from './speciesText.ts'
+import type { PassiveText } from './passiveText.ts'
 import { borrowSummary, type OwnerText } from './ownerText.ts'
 
 export function PlanSteps({
   plan,
   text,
+  passives,
   owner,
 }: {
   plan: BreedingPlan
   text: SpeciesText
+  passives: PassiveText
   owner: OwnerText
 }) {
   return (
@@ -39,11 +47,21 @@ export function PlanSteps({
         <div className="label mb-2">
           what to do — {plan.steps.length}{' '}
           {plan.steps.length === 1 ? 'egg' : 'eggs'}
+          {plan.expectedEggs !== undefined &&
+            plan.expectedEggs > plan.steps.length + 0.5 && (
+              <> · ≈{Math.round(plan.expectedEggs)} hatches</>
+            )}
           {plan.borrowed.length > 0 && <> · {borrowSummary(plan.borrowed)}</>}
         </div>
         <div className="space-y-2">
           {plan.steps.map((step) => (
-            <StepRow key={step.n} step={step} text={text} owner={owner} />
+            <StepRow
+              key={step.n}
+              step={step}
+              text={text}
+              passives={passives}
+              owner={owner}
+            />
           ))}
         </div>
       </section>
@@ -63,10 +81,12 @@ export function PlanSteps({
 function StepRow({
   step,
   text,
+  passives,
   owner,
 }: {
   step: BreedStep
   text: SpeciesText
+  passives: PassiveText
   owner: OwnerText
 }) {
   return (
@@ -75,9 +95,19 @@ function StepRow({
         <span className="num shrink-0 text-xs text-[var(--color-muted)]">
           {step.n}
         </span>
-        <ParentChip node={step.a} text={text} owner={owner} />
+        <ParentChip
+          node={step.a}
+          text={text}
+          passives={passives}
+          owner={owner}
+        />
         <span className="shrink-0 text-[var(--color-muted)]">×</span>
-        <ParentChip node={step.b} text={text} owner={owner} />
+        <ParentChip
+          node={step.b}
+          text={text}
+          passives={passives}
+          owner={owner}
+        />
         <span className="shrink-0 text-[var(--color-muted)]">→</span>
         <span className="flex shrink-0 items-center gap-2">
           <GameIcon
@@ -88,6 +118,13 @@ function StepRow({
           />
           <span className="text-sm">{text.name(step.species)}</span>
         </span>
+        {step.carries?.map((id) => (
+          <PassiveChip
+            key={id}
+            name={passives.name(id)}
+            rank={passives.rank(id)}
+          />
+        ))}
         {step.selfPair && (
           <Pill
             tone="warn"
@@ -97,6 +134,21 @@ function StepRow({
           </Pill>
         )}
       </div>
+      {/* Only where the hatch is not a formality. A step whose parents can
+          only produce what it needs is an ordinary egg and reads better without
+          a 100% beside it — but a step that carries nothing and still has to be
+          re-rolled for a *clean* result is not ordinary, and says so. */}
+      {step.chance !== undefined && step.chance < 0.995 && (
+        <div className="mt-1.5 pl-6 text-[11px] text-[var(--color-muted)]">
+          <span className="num">
+            {(step.chance! * 100).toFixed(step.chance! < 0.01 ? 2 : 0)}%
+          </span>{' '}
+          a hatch, so ≈
+          <span className="num">{Math.round(step.expectedEggs!)}</span> of them —
+          out of a pool of <span className="num">{step.pool}</span> passives
+          between the two parents.
+        </div>
+      )}
     </Panel>
   )
 }
@@ -112,10 +164,12 @@ function StepRow({
 function ParentChip({
   node,
   text,
+  passives,
   owner,
 }: {
   node: BreedNode
   text: SpeciesText
+  passives: PassiveText
   owner: OwnerText
 }) {
   if (node.kind === 'bred') {
@@ -181,6 +235,23 @@ function ParentChip({
             width={34}
           />
         </>
+      )}
+      {/* Why *this* pal and not the better one beside it. Without this the
+          advice to fetch a 30-IV Chikipi over a 300-IV one reads as a bug. */}
+      {node.carries?.map((id) => (
+        <PassiveChip
+          key={id}
+          name={passives.name(id)}
+          rank={passives.rank(id)}
+        />
+      ))}
+      {node.junk !== undefined && node.junk > 0 && (
+        <span
+          className="num shrink-0 text-[11px] text-[var(--color-muted)]"
+          title="Other passives on this pal. They compete for the child's slots, which is why a cleaner pal can be worth fetching."
+        >
+          +{node.junk}
+        </span>
       )}
       {node.count > 1 && (
         <span className="num shrink-0 text-[11px] text-[var(--color-muted)]">

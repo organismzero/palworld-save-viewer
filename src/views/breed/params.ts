@@ -19,6 +19,8 @@
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import {
   bool,
+  encodeList,
+  list,
   resolveShortId,
   shortId,
   str,
@@ -39,6 +41,15 @@ export interface BreedParams {
   assumeUnknownGender: boolean
   /** Pool the whole guild's pals, base workers included. */
   includeGuild: boolean
+  /**
+   * Passives the route has to deliver, as lowercased asset ids.
+   *
+   * Unvalidated here for the same reason the target is: reference data has not
+   * arrived when `decode` runs, so checking a name against `Refdata.passives`
+   * would reject every cold deep link. The domain caps the set at four — a pal's
+   * slot count — and reports what it dropped rather than trimming quietly.
+   */
+  passives: string[]
 }
 
 export const BREED_DEFAULTS: BreedParams = {
@@ -48,6 +59,7 @@ export const BREED_DEFAULTS: BreedParams = {
   route: undefined,
   assumeUnknownGender: false,
   includeGuild: false,
+  passives: [],
 }
 
 export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
@@ -64,6 +76,9 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       // `gp`, not a bare `g` — that reads like a guild id, and the Guild view
       // already spends one. Cheap insurance against a future `g=<shortId>`.
       if (v.includeGuild) out.gp = '1'
+      // Sorted by `encodeList`, so the same selection made in two different
+      // orders produces the same link.
+      if (v.passives.length > 0) out.pv = encodeList(v.passives)
       return out
     },
 
@@ -81,6 +96,16 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         route: parseRoute(raw.get('r')),
         assumeUnknownGender: bool(raw, 'ug', d.assumeUnknownGender),
         includeGuild: bool(raw, 'gp', d.includeGuild),
+        // Sorted to match `encodeList`, which sorts on the way out. Without
+        // this the two disagree, and since the domain keeps only the first four
+        // — a pal's slot count — a five-passive link would plan for one set now
+        // and a different set after a reload.
+        //
+        // Deduped here rather than only in `wantedFrom`: the domain ignores a
+        // repeat, but the picker renders one chip per entry, so `pv=a,a,a,a`
+        // would draw four identical chips on four duplicate React keys and then
+        // announce that the four-slot limit had been reached.
+        passives: [...new Set(list(raw, 'pv').map((p) => p.toLowerCase()))].sort(),
       }
     },
   }

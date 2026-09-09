@@ -32,7 +32,7 @@ import {
   type BreedingPlan,
   type Stock,
 } from '../../domain/breeding.ts'
-import type { Player, SaveIndex } from '../../domain/types.ts'
+import type { Pal, Player, SaveIndex } from '../../domain/types.ts'
 import { count } from '../../lib/format.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
@@ -53,13 +53,21 @@ import {
   SelectControl,
   TextInput,
 } from '../../components/controls.tsx'
+import {
+  MAX_EXPECTED_EGGS,
+  planWithPassives,
+} from '../../domain/passiveBreeding.ts'
+import { carrierCounts } from '../../domain/passives.ts'
 import { PlanSteps } from './PlanSteps.tsx'
+import { PassivePicker } from './PassivePicker.tsx'
+import { usePassiveSearch } from './usePassiveSearch.ts'
+import { passiveText, type PassiveText } from './passiveText.ts'
 import { speciesText, type SpeciesText } from './speciesText.ts'
 import { ownerText, type OwnerText } from './ownerText.ts'
 import { BREED_DEFAULTS, breedCodec, type BreedParams } from './params.ts'
 
 export function BreedView({ index }: { index: SaveIndex }) {
-  const { data, ensure } = useRefdataStore()
+  const { data, status, ensure } = useRefdataStore()
   useEffect(() => {
     void ensure()
   }, [ensure])
@@ -79,6 +87,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
     setParams((prev) => ({ ...prev, ...p }))
 
   const text = speciesText(data)
+  const passives = passiveText(data)
 
   // A default that keeps the view from opening blank, but stays out of the URL
   // — only a choice the user made is worth sending anyone.
@@ -109,13 +118,46 @@ export function BreedView({ index }: { index: SaveIndex }) {
     () => (table ? reachFrom(stock, table) : undefined),
     [table, stock],
   )
-  const plan = useMemo(
-    () =>
-      params.target
-        ? planFor(table, reach, stock, params.target, params.route)
-        : undefined,
-    [table, reach, stock, params.target, params.route],
-  )
+  // The search is keyed on the stock and the passive set, not on the target, so
+  // clicking through the species list still costs only the plan. It runs in a
+  // worker because it takes seconds at four passives — see `search.worker.ts`.
+  const search = usePassiveSearch(stock, data?.breeding, params.passives)
+
+  // Who in this pool carries what, for the picker's marks. Cheap, and needed
+  // whether or not a search has finished.
+  const carriers = useMemo(() => {
+    const pals: Pal[] = []
+    for (const entry of stock.bySpecies.values()) {
+      pals.push(...entry.male, ...entry.female, ...entry.unknown)
+    }
+    return carrierCounts(pals)
+  }, [stock])
+
+  const plan = useMemo(() => {
+    if (!params.target) return undefined
+    // Nothing asked for, or the answer is not in yet: the species plan is the
+    // honest thing to show, and it is what the passive planner would return
+    // anyway once it had nothing to add.
+    if (params.passives.length === 0 || !search.reach) {
+      return planFor(table, reach, stock, params.target, params.route)
+    }
+    return planWithPassives(
+      table,
+      reach,
+      search.reach,
+      stock,
+      params.target,
+      params.route,
+    )
+  }, [
+    table,
+    reach,
+    stock,
+    params.target,
+    params.route,
+    params.passives.length,
+    search.reach,
+  ])
 
   // Reference data loaded, but its breeding section did not. That fetch is the
   // one allowed to fail on its own, so this is a real state rather than a guard.
@@ -159,13 +201,32 @@ export function BreedView({ index }: { index: SaveIndex }) {
         />
       </aside>
 
-      <aside className="w-72 shrink-0 overflow-hidden border-r border-[var(--color-line)]">
-        <div className="p-4 pb-2">
+      {/* A flex column rather than the fixed `calc` the list used to size
+          itself with: the picker above it has no fixed height. */}
+      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-[var(--color-line)]">
+        <div className="space-y-4 p-4 pb-3">
           <TextInput
             label="what to breed"
             value={params.query}
             onChange={(v) => patch({ query: v })}
             placeholder="Search species"
+          />
+          <PassivePicker
+            selected={params.passives}
+            carriers={carriers}
+            text={passives}
+            // The store's own status, not the shape of `data`. A failed fetch
+            // never sets `data` at all — `loadRefdata` throws and the catch
+            // sets `status` — so testing it for emptiness reads `false` in
+            // exactly the case this is for, and the picker would offer a search
+            // box that answers "no passive matches that" to every real name.
+            // It is also the only test that separates degraded from still
+            // loading, where `data` is equally undefined. `MapView` reads
+            // `status` for its own degraded pill for both reasons.
+            degraded={status === 'degraded'}
+            // A different passive set can make the pinned pair no longer one of
+            // the shortest, exactly as changing the stock can.
+            onChange={(next) => patch({ passives: next, route: undefined })}
           />
         </div>
         <SpeciesList
@@ -196,7 +257,10 @@ export function BreedView({ index }: { index: SaveIndex }) {
             player={player}
             stock={stock}
             text={text}
+            passives={passives}
             owner={owner}
+            pending={search.pending}
+            failed={search.failed}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
           />
@@ -215,7 +279,10 @@ function PlanPane({
   player,
   stock,
   text,
+  passives,
   owner,
+  pending,
+  failed,
   routeIndex,
   onRoute,
 }: {
@@ -223,7 +290,10 @@ function PlanPane({
   player: Player | undefined
   stock: Stock
   text: SpeciesText
+  passives: PassiveText
   owner: OwnerText
+  pending: boolean
+  failed: boolean
   routeIndex: number
   onRoute: (i: number) => void
 }) {
@@ -263,6 +333,18 @@ function PlanPane({
                     {plan.borrowed.length} borrowed
                   </Pill>
                 )}
+                {/* Two different numbers, and conflating them is the mistake
+                    the footnote exists to prevent: the egg count is the route,
+                    the hatch count is the evening. */}
+                {plan.expectedEggs !== undefined &&
+                  plan.expectedEggs > plan.steps.length + 0.5 && (
+                    <Pill
+                      tone="warn"
+                      title="Hatches to expect, not eggs that have to go right. Most will not carry the passives you asked for."
+                    >
+                      ≈{Math.round(plan.expectedEggs)} hatches
+                    </Pill>
+                  )}
               </>
             )}
             {mine > 0 && <Pill tone="good">already have {count(mine)}</Pill>}
@@ -281,6 +363,14 @@ function PlanPane({
           </div>
         </div>
       </header>
+
+      <PassiveHeader
+        plan={plan}
+        stock={stock}
+        passives={passives}
+        pending={pending}
+        failed={failed}
+      />
 
       {plan.status === 'plan' ? (
         <>
@@ -304,14 +394,89 @@ function PlanPane({
               </div>
             </section>
           )}
-          <PlanSteps plan={plan} text={text} owner={owner} />
+          <PlanSteps
+            plan={plan}
+            text={text}
+            passives={passives}
+            owner={owner}
+          />
         </>
       ) : (
         <NoRoute plan={plan} stock={stock} text={text} />
       )}
 
-      <Footnote stock={stock} />
+      <Footnote stock={stock} plan={plan} />
     </div>
+  )
+}
+
+/**
+ * What the passive ask is doing to this plan.
+ *
+ * Three things worth saying and each of them only sometimes: that a search is
+ * running, that one failed, and that some of what was asked for is not in the
+ * pool at all. The last is the important one — a passive nobody holds is not a
+ * routing problem, it is a "go and catch one" problem, and the difference is
+ * the only actionable thing on the screen.
+ */
+function PassiveHeader({
+  plan,
+  stock,
+  passives,
+  pending,
+  failed,
+}: {
+  plan: BreedingPlan
+  stock: Stock
+  passives: PassiveText
+  pending: boolean
+  failed: boolean
+}) {
+  const missing = plan.missingPassives ?? []
+  const ignored = plan.ignoredPassives ?? []
+  if (!pending && !failed && missing.length === 0 && ignored.length === 0) {
+    return null
+  }
+
+  const names = (ids: string[]) =>
+    ids.map((id) => passives.name(id)).join(', ')
+
+  return (
+    <Panel padded className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-muted)]">
+      {pending && (
+        <p>
+          Working out a route that carries those passives. Four of them can take
+          a few seconds — the plan below is the species route until it lands.
+        </p>
+      )}
+      {failed && (
+        <p>
+          The passive search could not run, so this is the species route only.
+          Everything else on the page is unaffected.
+        </p>
+      )}
+      {missing.length > 0 && (
+        <p>
+          Nothing in this pool carries{' '}
+          <span className="text-[var(--color-gold)]">{names(missing)}</span>, so
+          no amount of breeding will produce{' '}
+          {missing.length === 1 ? 'it' : 'them'}. Catch or trade for one first
+          {/* Only worth suggesting when it is not already done — a hint that
+              names something already switched on reads as a broken page. */}
+          {!stock.includedGuild && stock.guild
+            ? ', or pool the guild’s pals in on the left'
+            : ''}
+          .
+        </p>
+      )}
+      {ignored.length > 0 && (
+        <p>
+          A pal has four passive slots, so{' '}
+          <span className="text-[var(--color-gold)]">{names(ignored)}</span>{' '}
+          {ignored.length === 1 ? 'was' : 'were'} left out of the plan.
+        </p>
+      )}
+    </Panel>
   )
 }
 
@@ -409,6 +574,33 @@ function NoRoute({
         <p className="text-[var(--color-muted)]">
           Nothing this player can reach pairs into {text.name(plan.target)}.
           Catching a species further along the ladder is the way in.
+          <PoolHint stock={stock} />
+        </p>
+      )}
+
+      {/* The species route exists — only the passives are out of reach. Said
+          separately from the reasons above because the action is different:
+          nothing about the ladder needs to change, only what is carried along
+          it. `PassiveHeader` names the passives nobody holds; this says what
+          that means for the route. */}
+      {plan.reason === 'passive-not-in-stock' && (
+        <p className="text-[var(--color-muted)]">
+          {text.name(plan.target)} itself is perfectly reachable — it is the
+          passives that are not. A passive only ever comes from a parent that
+          already has it, so one nothing in this pool carries cannot be bred in
+          at any price.
+          <PoolHint stock={stock} />
+        </p>
+      )}
+
+      {plan.reason === 'passive-unreachable' && (
+        <p className="text-[var(--color-muted)]">
+          Every passive you asked for is carried by something in this pool, but
+          no route gets them all onto {text.name(plan.target)} inside{' '}
+          <span className="num">{MAX_EXPECTED_EGGS}</span> expected hatches —
+          which is where a plan stops being advice. Asking for fewer of them at
+          once, or catching a cleaner carrier, is the way in: every unrelated
+          passive on a parent competes for the child’s four slots.
           <PoolHint stock={stock} />
         </p>
       )}
@@ -590,7 +782,11 @@ function SpeciesList({
   }, [table, reach, query, data, index.pals])
 
   return (
-    <div className="h-[calc(100%-5.5rem)] overflow-y-auto px-2 pb-4">
+    // `flex-1` inside the rail's flex column, not a hardcoded `calc` of the
+    // header's height: the passive picker above this grows and shrinks with the
+    // selection, so there is no fixed number to subtract. `min-h-0` is what lets
+    // a flex child actually scroll rather than stretch its parent.
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
       {rows.map((r) => (
         <ListRow
           key={r.id}
@@ -632,7 +828,13 @@ function SpeciesList({
  * two-generation route as two eggs rather than as "at least two, probably more",
  * or a pooled route as one they can walk tonight.
  */
-function Footnote({ stock }: { stock: Stock }) {
+function Footnote({
+  stock,
+  plan,
+}: {
+  stock: Stock
+  plan?: BreedingPlan
+}) {
   return (
     <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
@@ -686,6 +888,26 @@ function Footnote({ stock }: { stock: Stock }) {
         does not consume the parents. Eggs already sitting in storage are items
         rather than pals, and are not counted.
       </p>
+      {plan?.wanted && plan.wanted.length > 0 && (
+        <p className="mt-2">
+          A child’s passives are drawn from its parents’ combined list, and how
+          many it takes is a roll. Those odds are not in the save, and not in the
+          game’s own exported tables either — they are community reverse
+          engineering, so read “≈{Math.round(plan.expectedEggs ?? 0)} hatches” as
+          an order of magnitude rather than a promise. It is the pessimistic end:
+          the two parents’ other passives are assumed not to overlap, a random
+          fill is never counted as one you wanted, and breeding cakes are not
+          modelled at all — each of which makes the real thing a little kinder
+          than the number.
+          {plan.truncated && (
+            <>
+              {' '}
+              This search also hit its budget, so a better route may exist that
+              it did not reach.
+            </>
+          )}
+        </p>
+      )}
     </section>
   )
 }

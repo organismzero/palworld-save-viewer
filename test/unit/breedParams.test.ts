@@ -39,8 +39,53 @@ describe('breedCodec', () => {
       route: { a: 'penguin', b: 'kelpie' },
       assumeUnknownGender: true,
       includeGuild: true,
+      passives: ['legend', 'swift'],
     }
     expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('sorts the passives, so one selection is one link', () => {
+    // Two players who picked the same two passives in opposite orders should be
+    // able to compare links, not wonder why they differ.
+    expect(
+      codec.encode(
+        { ...BREED_DEFAULTS, passives: ['swift', 'legend'] },
+        BREED_DEFAULTS,
+      ).pv,
+    ).toBe('legend,swift')
+  })
+
+  it('decodes passives in the order it encodes them', () => {
+    // The domain keeps only the first four — a pal has four slots — so if
+    // decode and encode disagreed on the order, a five-passive link would plan
+    // for one set now and a different set after a reload.
+    const decoded = codec.decode(
+      new URLSearchParams('pv=swift,legend,musclehead'),
+      BREED_DEFAULTS,
+    ).passives
+    expect(decoded).toEqual(['legend', 'musclehead', 'swift'])
+    expect(
+      codec.encode({ ...BREED_DEFAULTS, passives: decoded }, BREED_DEFAULTS).pv,
+    ).toBe('legend,musclehead,swift')
+  })
+
+  it('dedupes passives, so one chip is one passive', () => {
+    // The domain ignores a repeat, but the picker draws one chip per entry —
+    // four identical chips on four duplicate React keys, announcing that the
+    // four-slot limit had been reached.
+    expect(
+      codec.decode(new URLSearchParams('pv=legend,Legend,LEGEND'), BREED_DEFAULTS)
+        .passives,
+    ).toEqual(['legend'])
+  })
+
+  it('lowercases passives and survives an unknown one', () => {
+    // Validated late, like the target: reference data has not loaded when a
+    // cold deep link is decoded.
+    expect(
+      codec.decode(new URLSearchParams('pv=Legend,notathing'), BREED_DEFAULTS)
+        .passives,
+    ).toEqual(['legend', 'notathing'])
   })
 
   it('reads the guild flag as 1', () => {

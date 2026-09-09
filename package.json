@@ -40,7 +40,8 @@
     "typecheck": "tsc -b --noEmit",
     "fixture": "tsx scripts/make-fixture.ts",
     "gen:sav-tables": "tsx scripts/gen-sav-tables.ts",
-    "verify:breeding": "tsx scripts/verify-breeding.ts"
+    "verify:breeding": "tsx scripts/verify-breeding.ts",
+    "bench:passives": "tsx scripts/bench-passives.ts"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.12",

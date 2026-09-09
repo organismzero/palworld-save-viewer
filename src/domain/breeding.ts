@@ -732,6 +732,10 @@ export type BreedNode =
       gender?: Gender
       /** How many of this species the player holds, in any gender. */
       count: number
+      /** Wanted passives this specific pal is here to contribute. */
+      carries?: string[]
+      /** Its other passives — what it dilutes the pool with. */
+      junk?: number
     }
   | { kind: 'bred'; species: string; a: BreedNode; b: BreedNode; step: number }
 
@@ -746,6 +750,16 @@ export interface BreedStep {
   generation: number
   /** Same species on both sides: hatch until you have a male and a female. */
   selfPair: boolean
+
+  /** Wanted passives this egg has to come out carrying. */
+  carries?: string[]
+  /** Chance one hatch is good enough, and the hatches that implies. */
+  chance?: number
+  expectedEggs?: number
+  /** Distinct passives in the two parents' combined pool — the dilution. */
+  pool?: number
+  /** The most junk this egg may carry and still serve the route. */
+  junk?: number
 }
 
 export interface Blocker {
@@ -760,6 +774,10 @@ export type PlanReason =
   | 'needs-unique-parents'
   | 'no-stock'
   | 'nothing-produces-it'
+  /** A passive you asked for is carried by nobody in the pool. */
+  | 'passive-not-in-stock'
+  /** Every wanted passive has a carrier, but no route lands them all. */
+  | 'passive-unreachable'
 
 export interface BreedingPlan {
   target: string
@@ -783,6 +801,25 @@ export interface BreedingPlan {
   borrowed: BorrowedPal[]
   /** Why each candidate route fails, when nothing works. */
   blockers: Blocker[]
+
+  /* The passive-aware planner fills these in; `planFor` never does, so the
+     species-only plan is byte-for-byte what it always was. See
+     `domain/passiveBreeding.ts`. */
+
+  /** Passives this route is planned around, lowercased. */
+  wanted?: string[]
+  /** Asked for and dropped, because a pal holds only four. */
+  ignoredPassives?: string[]
+  /** Wanted passives no pal in the pool carries, so no route can deliver them. */
+  missingPassives?: string[]
+  /**
+   * Hatches to expect in total, where `steps.length` is the number of eggs the
+   * route needs to go right. The two are wildly different numbers once passives
+   * are involved, which is exactly why both are shown.
+   */
+  expectedEggs?: number
+  /** The search hit its budget, so a better route may exist unfound. */
+  truncated?: boolean
 }
 
 /**
@@ -906,7 +943,7 @@ export function planFor(
  * same-species root pair legitimately contributes two, since you need a male and a
  * female, but one pal used in two steps is still one favour to ask.
  */
-function borrowedIn(steps: BreedStep[], ownerUid: Guid): BorrowedPal[] {
+export function borrowedIn(steps: BreedStep[], ownerUid: Guid): BorrowedPal[] {
   const out = new Map<Guid, BorrowedPal>()
   for (const step of steps) {
     for (const side of [step.a, step.b]) {
@@ -928,7 +965,7 @@ function borrowedIn(steps: BreedStep[], ownerUid: Guid): BorrowedPal[] {
 }
 
 /** Generations is the tree's height — how many rounds of hatching deep it goes. */
-function height(node: BreedNode): number {
+export function height(node: BreedNode): number {
   return node.kind === 'owned'
     ? 0
     : 1 + Math.max(height(node.a), height(node.b))
