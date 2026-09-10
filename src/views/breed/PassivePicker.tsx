@@ -24,24 +24,29 @@ import { useMemo, useState } from 'react'
 
 import { count } from '../../lib/format.ts'
 import { Panel, PassiveChip, SectionHeading } from '../../components/primitives.tsx'
-import { IconButton, TextInput } from '../../components/controls.tsx'
+import { Checkbox, IconButton, TextInput } from '../../components/controls.tsx'
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import type { PassiveText } from './passiveText.ts'
 
 export function PassivePicker({
   selected,
+  noSpares,
   carriers,
   text,
   degraded,
   onChange,
+  onNoSpares,
 }: {
   selected: string[]
+  /** Require the result to carry those and nothing besides. */
+  noSpares: boolean
   /** Lowercased passive id → pals in the current pool holding it. */
   carriers: Map<string, number>
   text: PassiveText
   /** Reference data never arrived, so there are no names to offer. */
   degraded: boolean
   onChange: (next: string[]) => void
+  onNoSpares: (next: boolean) => void
 }) {
   const [query, setQuery] = useState('')
   const full = selected.length >= MAX_SLOTS
@@ -86,6 +91,24 @@ export function PassivePicker({
             </span>
           ))}
         </div>
+      )}
+
+      {/* Only where it can mean something. With nothing picked there is nothing
+          to be exact about, and with four picked the pal has no slot left for a
+          spare — a box asserting otherwise would be decoration. */}
+      {selected.length > 0 && selected.length < MAX_SLOTS && (
+        <Checkbox
+          checked={noSpares}
+          onChange={() => onNoSpares(!noSpares)}
+          className="items-start text-[11px] leading-relaxed text-[var(--color-muted)]"
+          label={
+            <span>
+              <span className="text-[var(--color-text)]">and nothing else</span>{' '}
+              — leaves a slot free for a passive breeding cannot give you, at the
+              cost of a longer route.
+            </span>
+          }
+        />
       )}
 
       {degraded ? (

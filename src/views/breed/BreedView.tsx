@@ -167,6 +167,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
       stock,
       params.target,
       params.route,
+      params.noSpares,
     )
   }, [
     table,
@@ -175,6 +176,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
     params.target,
     params.route,
     params.passives.length,
+    params.noSpares,
     search.reach,
   ])
 
@@ -233,6 +235,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
           />
           <PassivePicker
             selected={params.passives}
+            noSpares={params.noSpares}
             carriers={carriers}
             text={passives}
             // The store's own status, not the shape of `data`. A failed fetch
@@ -247,6 +250,9 @@ export function BreedView({ index }: { index: SaveIndex }) {
             // A different passive set can make the pinned pair no longer one of
             // the shortest, exactly as changing the stock can.
             onChange={(next) => patch({ passives: next, route: undefined })}
+            // And so can a different requirement: it selects a different goal
+            // state, which has its own cheapest route.
+            onNoSpares={(next) => patch({ noSpares: next, route: undefined })}
           />
         </div>
         <SpeciesList
@@ -283,6 +289,9 @@ export function BreedView({ index }: { index: SaveIndex }) {
             failed={search.failed}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
+            onDropNoSpares={() =>
+              patch({ noSpares: false, route: undefined })
+            }
           />
         )}
       </div>
@@ -305,6 +314,7 @@ function PlanPane({
   failed,
   routeIndex,
   onRoute,
+  onDropNoSpares,
 }: {
   plan: BreedingPlan
   player: Player | undefined
@@ -316,6 +326,7 @@ function PlanPane({
   failed: boolean
   routeIndex: number
   onRoute: (i: number) => void
+  onDropNoSpares: () => void
 }) {
   // Split, because with the guild pooled in `ownedTarget` is guild-wide, and
   // "already have 3" would otherwise mean a guildmate has three of them.
@@ -422,7 +433,12 @@ function PlanPane({
           />
         </>
       ) : (
-        <NoRoute plan={plan} stock={stock} text={text} />
+        <NoRoute
+          plan={plan}
+          stock={stock}
+          text={text}
+          onDropNoSpares={onDropNoSpares}
+        />
       )}
 
       <Footnote stock={stock} plan={plan} />
@@ -550,10 +566,12 @@ function NoRoute({
   plan,
   stock,
   text,
+  onDropNoSpares,
 }: {
   plan: BreedingPlan
   stock: Stock
   text: SpeciesText
+  onDropNoSpares: () => void
 }) {
   if (plan.status === 'no-data') {
     return (
@@ -644,16 +662,38 @@ function NoRoute({
           never entered the search, and `PassiveHeader` names them whether a
           route was found or not. */}
       {plan.reason === 'passive-unreachable' && (
-        <p className="text-[var(--color-muted)]">
-          {text.name(plan.target)} is reachable and something in this pool
-          carries every passive still being planned for — but no route lands
-          them all together inside{' '}
-          <span className="num">{MAX_EXPECTED_EGGS}</span> expected hatches,
-          which is where a plan stops being advice. Asking for fewer at once, or
-          finding a cleaner carrier, is the way in: every unrelated passive on a
-          parent competes for the child’s four slots.
-          <PoolHint stock={stock} />
-        </p>
+        <>
+          <p className="text-[var(--color-muted)]">
+            {text.name(plan.target)} is reachable and something in this pool
+            carries every passive still being planned for — but no route{' '}
+            {plan.noSpares
+              ? 'lands them all on one pal with nothing else alongside'
+              : 'lands them all together'}{' '}
+            inside <span className="num">{MAX_EXPECTED_EGGS}</span> expected
+            hatches, which is where a plan stops being advice. Asking for fewer
+            at once, or finding a cleaner carrier, is the way in: every unrelated
+            passive on a parent competes for the child’s four slots.
+            {!plan.noSpares && <PoolHint stock={stock} />}
+          </p>
+          {/* The trade, priced. Demanding a clean result costs two to seven
+              times as much, and whether a free slot is worth that is not a
+              decision this can make for anyone — so it shows the number and
+              offers the switch rather than choosing. */}
+          {plan.relaxed && (
+            <p className="text-[var(--color-muted)]">
+              Dropping “and nothing else” gets there in{' '}
+              <span className="num">{plan.relaxed.eggs}</span>{' '}
+              {plan.relaxed.eggs === 1 ? 'egg' : 'eggs'} and about{' '}
+              <span className="num">
+                {Math.round(plan.relaxed.expectedEggs)}
+              </span>{' '}
+              hatches, finishing with a slot already spoken for.{' '}
+              <Button size="sm" tone="signal" onClick={onDropNoSpares}>
+                plan it without
+              </Button>
+            </p>
+          )}
+        </>
       )}
     </Panel>
   )

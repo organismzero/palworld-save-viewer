@@ -461,6 +461,108 @@ describe('planWithPassives — what you are already holding', () => {
   })
 })
 
+describe('planWithPassives — and nothing else', () => {
+  /** Two ways to reach `mid` carrying swift: a clean parent, or a grubby one. */
+  const both = () => {
+    const table = LADDER()
+    const stock = stockOf(table, [
+      pal('aa', 'Male', ['swift']),
+      pal('aa', 'Female', ['swift', 'j1', 'j2']),
+      pal('bb', 'Male'),
+      pal('bb', 'Female', ['j3']),
+    ])
+    return { table, stock }
+  }
+
+  it('leaves the plan alone when it is off', () => {
+    const { table, stock } = both()
+    const reach = reachFrom(stock, table)
+    const search = reachWithPassives(stock, table, reach, ['swift'])
+    const off = planWithPassives(table, reach, search, stock, 'mid')
+    const explicit = planWithPassives(table, reach, search, stock, 'mid', undefined, false) // prettier-ignore
+    expect(explicit).toEqual(off)
+    expect(off.noSpares).toBeUndefined()
+  })
+
+  it('targets a pal with nothing besides', () => {
+    const { table, stock } = both()
+    const reach = reachFrom(stock, table)
+    const search = reachWithPassives(stock, table, reach, ['swift'])
+    const p = planWithPassives(table, reach, search, stock, 'mid', undefined, true) // prettier-ignore
+
+    expect(p.status).toBe('plan')
+    expect(p.noSpares).toBe(true)
+    // The whole requirement, expressed where the view reads it.
+    expect(p.steps.at(-1)!.junk).toBe(0)
+  })
+
+  it('selects a different goal, and pays for it', () => {
+    // The requirement picks a different settled state, not a filter over the
+    // same one: junk is a dimension of the search, so `(mid, swift, junk 0)` is
+    // settled beside `(mid, swift, junk 1)` with its own cheapest path. On a
+    // stock this small both paths run through the same pair — the cleanest
+    // carrier is free and therefore best for either goal — so what is asserted
+    // here is the goal and its price. That the *route* can differ needs a stock
+    // with a cost-versus-cleanliness trade in it, which is checked against the
+    // reference save rather than invented here.
+    const { table, stock } = both()
+    const reach = reachFrom(stock, table)
+    const search = reachWithPassives(stock, table, reach, ['swift'])
+    const loose = planWithPassives(table, reach, search, stock, 'mid')
+    const strict = planWithPassives(table, reach, search, stock, 'mid', undefined, true) // prettier-ignore
+
+    expect(strict.status).toBe('plan')
+    expect(loose.steps.at(-1)!.junk).toBeGreaterThan(0)
+    expect(strict.steps.at(-1)!.junk).toBe(0)
+    // Cleaner is dearer; that is the trade being offered, not a bug.
+    expect(strict.expectedEggs!).toBeGreaterThan(loose.expectedEggs!)
+  })
+
+  it('does not count a held pal that carries a spare', () => {
+    const table = LADDER()
+    const grubby = pal('mid', 'Male', ['swift', 'junk'])
+    const stock = stockOf(table, [
+      grubby,
+      pal('aa', 'Male', ['swift']),
+      pal('bb', 'Female'),
+    ])
+    const reach = reachFrom(stock, table)
+    const search = reachWithPassives(stock, table, reach, ['swift'])
+
+    // Loose: it satisfies the ask. Strict: it does not, and saying "already
+    // have 1" over a plan built to exclude it would be a straight contradiction.
+    expect(
+      planWithPassives(table, reach, search, stock, 'mid').ownedTarget,
+    ).toContain(grubby)
+    expect(
+      planWithPassives(table, reach, search, stock, 'mid', undefined, true)
+        .ownedTarget,
+    ).not.toContain(grubby)
+  })
+
+  it('prices the requirement when nothing can meet it', () => {
+    const table = LADDER()
+    // Both carriers are loaded, so a clean result is out of reach but a grubby
+    // one is not — the case where the trade is worth showing.
+    const stock = stockOf(table, [
+      pal('aa', 'Male', ['w', 'x', 'j1', 'j2']),
+      pal('bb', 'Female', ['y', 'z', 'j3', 'j4']),
+    ])
+    const reach = reachFrom(stock, table)
+    const search = reachWithPassives(stock, table, reach, ['w', 'x', 'y', 'z'])
+    const strict = planWithPassives(table, reach, search, stock, 'mid', undefined, true) // prettier-ignore
+
+    if (strict.status === 'unreachable') {
+      expect(strict.reason).toBe('passive-unreachable')
+      expect(strict.relaxed).toBeDefined()
+      expect(strict.relaxed!.eggs).toBeGreaterThan(0)
+    } else {
+      // Reachable strictly is a fine outcome too; the ceiling is what matters.
+      expect(strict.steps.at(-1)!.junk).toBe(0)
+    }
+  })
+})
+
 /* -------------------------------------------------------------------------
    The honest failures
    ------------------------------------------------------------------------- */

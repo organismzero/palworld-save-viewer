@@ -43,8 +43,23 @@ describe('breedCodec', () => {
       includeBase: false,
       includeMembers: [],
       passives: ['legend', 'swift'],
+      noSpares: true,
     }
     expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('will not carry “nothing else” with nothing to be exact about', () => {
+    // A bare `pvo=1` would tick a box that constrains nothing, so it does not
+    // travel on its own.
+    expect(
+      codec.encode({ ...BREED_DEFAULTS, noSpares: true }, BREED_DEFAULTS).pvo,
+    ).toBeUndefined()
+    expect(
+      codec.encode(
+        { ...BREED_DEFAULTS, noSpares: true, passives: ['legend'] },
+        BREED_DEFAULTS,
+      ).pvo,
+    ).toBe('1')
   })
 
   it('round-trips a partial pool', () => {

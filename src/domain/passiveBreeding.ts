@@ -700,6 +700,17 @@ export function planWithPassives(
   stock: Stock,
   target: string,
   prefer?: BreedPair,
+  /**
+   * Require the target to carry the wanted passives and nothing else.
+   *
+   * Not a filter on the finished plan — a different requirement picks a
+   * different settled state, and that state has its own cheapest route. Junk has
+   * been a dimension of the search since it was written, so
+   * `(target, all-wanted, junk 0)` is settled alongside its untidier sibling and
+   * generally arrived by way of cleaner parents, a spare on a parent being
+   * exactly what puts a spare in the child.
+   */
+  noSpares = false,
 ): BreedingPlan {
   const id = target.toLowerCase()
   const species = planFor(table, reach, stock, id, prefer)
@@ -710,9 +721,16 @@ export function planWithPassives(
     // Narrowed to the pals that already satisfy the whole ask. `planFor`'s
     // version counts every pal of the species, which with passives named would
     // put "already have 3" above a plan for three that carry none of them.
-    ownedTarget: species.ownedTarget.filter(
-      (pal) => profileOf(pal, passive.wanted).mask === passive.wanted.all,
-    ),
+    ownedTarget: species.ownedTarget.filter((pal) => {
+      const profile = profileOf(pal, passive.wanted)
+      // The junk test matters as much as the mask one: without it the header
+      // would say "already have 1" of a pal that does not meet the very
+      // requirement the plan below is built around.
+      return (
+        profile.mask === passive.wanted.all && (!noSpares || profile.junk === 0)
+      )
+    }),
+    noSpares: noSpares || undefined,
     wanted: passive.wanted.ids,
     ignoredPassives: passive.asked.ignored,
     missingPassives: passive.missing,
@@ -743,6 +761,7 @@ export function planWithPassives(
   for (const [key, state] of passive.states) {
     if (state.species !== id) continue
     if (state.profile.mask !== passive.wanted.all) continue
+    if (noSpares && state.profile.junk !== 0) continue
     const route = state.via
       ? { eggs: state.eggs, via: state.via }
       : state.alt
@@ -753,6 +772,12 @@ export function planWithPassives(
   if (goals.length === 0) {
     return {
       ...annotated,
+      // What the same target costs without the requirement, so the trade is on
+      // screen. Only on failure, and only one extra plan against a search that
+      // is already finished — 10-35 ms, against a search measured in seconds.
+      relaxed: noSpares
+        ? relaxedCost(table, reach, passive, stock, id, prefer)
+        : undefined,
       status: 'unreachable',
       // One reason, because there is only one thing left to say: everything
       // still in the search is carried by something, and no route lands them
@@ -1054,6 +1079,29 @@ function better(a: StepProgress, b: StepProgress): boolean {
     ivTotal(a.pal) - ivTotal(b.pal) ||
     b.pal.instanceId.localeCompare(a.pal.instanceId)
   ) > 0
+}
+
+/**
+ * What the target costs with the no-spares requirement dropped.
+ *
+ * Deliberately a summary and not a plan: the view needs enough to describe the
+ * trade and a way to take it, and carrying a second whole `BreedingPlan` around
+ * inside the first would invite rendering the wrong one.
+ */
+function relaxedCost(
+  table: BreedingTable,
+  reach: Reach,
+  passive: PassiveReach,
+  stock: Stock,
+  target: string,
+  prefer: BreedPair | undefined,
+): { eggs: number; expectedEggs: number } | undefined {
+  const loose = planWithPassives(table, reach, passive, stock, target, prefer)
+  if (loose.status !== 'plan') return undefined
+  return {
+    eggs: loose.steps.length,
+    expectedEggs: loose.expectedEggs ?? loose.steps.length,
+  }
 }
 
 /** The wanted passives a mask stands for, in the order they were asked for. */

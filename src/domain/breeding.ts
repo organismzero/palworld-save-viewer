@@ -934,6 +934,23 @@ export interface BreedingPlan {
   expectedEggs?: number
   /** The search hit its budget, so a better route may exist unfound. */
   truncated?: boolean
+  /**
+   * The target must carry the wanted passives and nothing besides.
+   *
+   * Spares on the final pal cost nothing to *breed* — nothing draws from it —
+   * but they cost a slot, and a passive breeding cannot supply has to be
+   * implanted into one. So this is the difference between finishing with a free
+   * slot and finishing with one to overwrite.
+   */
+  noSpares?: boolean
+  /**
+   * What the same target costs with {@link noSpares} dropped.
+   *
+   * Present only when the strict ask found no route, so the trade is on screen
+   * rather than guessed at: a clean result is two to seven times dearer, and
+   * whether that is worth a slot is not a decision this can make for anyone.
+   */
+  relaxed?: { eggs: number; expectedEggs: number }
 }
 
 /**

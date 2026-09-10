@@ -60,6 +60,13 @@ export interface BreedParams {
    * slot count — and reports what it dropped rather than trimming quietly.
    */
   passives: string[]
+  /**
+   * Require the target to carry those passives and nothing else.
+   *
+   * Spares cost nothing to breed, and cost a slot afterwards — which is what a
+   * passive breeding cannot supply has to be implanted into.
+   */
+  noSpares: boolean
 }
 
 export const BREED_DEFAULTS: BreedParams = {
@@ -72,6 +79,7 @@ export const BREED_DEFAULTS: BreedParams = {
   includeBase: false,
   includeMembers: [],
   passives: [],
+  noSpares: false,
 }
 
 export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
@@ -99,6 +107,9 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       // Sorted by `encodeList`, so the same selection made in two different
       // orders produces the same link.
       if (v.passives.length > 0) out.pv = encodeList(v.passives)
+      // Meaningless without something to be exact about, so it does not travel
+      // on its own — a bare `pvo=1` in a link would tick a box that does nothing.
+      if (v.noSpares && v.passives.length > 0) out.pvo = '1'
       return out
     },
 
@@ -138,6 +149,7 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         // would draw four identical chips on four duplicate React keys and then
         // announce that the four-slot limit had been reached.
         passives: [...new Set(list(raw, 'pv').map((p) => p.toLowerCase()))].sort(),
+        noSpares: bool(raw, 'pvo', d.noSpares),
       }
     },
   }
