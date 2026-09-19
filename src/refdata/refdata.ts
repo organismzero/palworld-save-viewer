@@ -31,7 +31,8 @@ import {
 const PST_REF = 'main'
 /** Bumped when a projection changes; invalidates every cached entry. */
 // 6: passive descriptions arrive with their {EffectValueN} placeholders filled.
-const SLIM_VERSION = 7
+// 8: species stats and mount kind, passive effects, active skills — for Builds.
+const SLIM_VERSION = 8
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -66,7 +67,43 @@ export interface SpeciesInfo {
   /** Work suitability levels above zero, keyed by work id. */
   work?: Record<string, number>
   partnerSkill?: string
+  /** Base stats, as the game's own table states them. */
+  stats?: SpeciesStats
+  /** What riding it (or carrying it) does for getting around, if anything. */
+  mount?: MountKind
 }
+
+/**
+ * A species' base stats, straight from `characters.json`'s `stats`.
+ *
+ * `attack` is `shot_attack` — the stat a pal's skills scale on, and the one the
+ * save's `Talent_Shot` IV feeds. `melee_attack` is kept beside it because the
+ * two are not the same number and the difference is the game's, not ours.
+ */
+export interface SpeciesStats {
+  hp: number
+  attack: number
+  melee: number
+  defense: number
+  /** Work speed, where 100 is ordinary. */
+  craftSpeed: number
+  /** How much it eats; lower is cheaper to keep at a base. */
+  food: number
+  runSpeed: number
+  rideSpeed: number
+}
+
+/**
+ * How a pal helps you travel, read from its partner-skill text.
+ *
+ * The data has no mount flag, but the partner-skill description says it in a
+ * handful of fixed phrasings, and across the 304 breedable species they split
+ * without overlap: 29 "Can be ridden as a flying mount" (or "while flying"), 9
+ * "…to travel on water", 83 ridden on the ground ("Can be ridden", "while
+ * mounted"), and 7 that are never ridden but change the equipped glider while in
+ * the party. The remaining 183 say none of these and get nothing.
+ */
+export type MountKind = 'flying' | 'water' | 'ground' | 'glider'
 
 /**
  * Where a passive can come from, for a pal.
@@ -84,11 +121,7 @@ export interface SpeciesInfo {
  * catching or hatching produces them on anything else.
  */
 export type PassiveSource =
-  | 'random'
-  | 'lucky'
-  | 'worldtree'
-  | 'mutation'
-  | 'exclusive'
+  'random' | 'lucky' | 'worldtree' | 'mutation' | 'exclusive'
 
 export interface PassiveInfo {
   name: string
@@ -106,6 +139,42 @@ export interface PassiveInfo {
    * planner has just turned down.
    */
   implant?: 'reusable' | 'disposable' | 'both'
+  /** What it actually does, as the game applies it. */
+  effects?: PassiveEffect[]
+}
+
+/**
+ * One effect of a passive: `efftypeN`, `effectN` and `target_typeN` together.
+ *
+ * `target` is what decides whether a passive does anything at a base or only in
+ * the party, and it is the game's own field rather than anything inferred from
+ * the wording: `trainer` effects reach the player, so they only count while the
+ * pal is out with them, and `base` effects act on buildings.
+ *
+ * Where the type and the description disagree, the type is kept. Otherworldly
+ * Cells lists `ElementBoost_Electricity` against text that says Lightning damage
+ * *reduction*; the type is what the game applies, and the description is only
+ * what a tooltip says.
+ */
+export interface PassiveEffect {
+  /** The enum tail, e.g. `ShotAttack`, `ElementBoost_Fire`, `CraftSpeed`. */
+  type: string
+  /**
+   * A percentage for most types; a rank count for `WorkSuitabilityAddRank_*`;
+   * 0 for the on/off ones such as `Nocturnal`.
+   */
+  value: number
+  target: 'self' | 'trainer' | 'both' | 'base'
+}
+
+/** An active skill: what a pal can have equipped in a fight. */
+export interface ActiveSkillInfo {
+  name: string
+  /** Internal element name, e.g. `Leaf`, as species use. */
+  element?: string
+  power: number
+  /** Seconds. */
+  cooldown: number
 }
 
 export interface WorkType {
@@ -202,6 +271,8 @@ export interface Refdata {
   /** Ascending by level, so a binary search or a direct index both work. */
   expTable: ExpLevel[]
   breeding: BreedingData
+  /** Active skills, keyed by lowercased asset id — the tail of `EPalWazaID::…`. */
+  skills: Record<string, ActiveSkillInfo>
 }
 
 function slimCharacters(raw: any): Record<string, SpeciesInfo> {
@@ -226,9 +297,36 @@ function slimCharacters(raw: any): Record<string, SpeciesInfo> {
       icon: p.icon,
       work,
       partnerSkill: p.partner_skill,
+      stats: slimStats(p.stats),
+      mount: mountKind(p.description),
     }
   }
   return out
+}
+
+function slimStats(raw: any): SpeciesStats | undefined {
+  if (typeof raw?.shot_attack !== 'number') return undefined
+  const n = (v: unknown) => (typeof v === 'number' ? v : 0)
+  return {
+    hp: n(raw.hp),
+    attack: n(raw.shot_attack),
+    melee: n(raw.melee_attack),
+    defense: n(raw.defense),
+    craftSpeed: n(raw.craft_speed),
+    food: n(raw.food_amount),
+    runSpeed: n(raw.run_speed),
+    rideSpeed: n(raw.ride_sprint_speed),
+  }
+}
+
+/** See `MountKind` for where each phrasing comes from and how many match. */
+function mountKind(text: unknown): MountKind | undefined {
+  if (typeof text !== 'string') return undefined
+  if (/flying mount|while flying/i.test(text)) return 'flying'
+  if (/travel on water|over water/i.test(text)) return 'water'
+  if (/can be ridden|while mounted/i.test(text)) return 'ground'
+  if (/equipped glider/i.test(text)) return 'glider'
+  return undefined
 }
 
 /**
@@ -252,6 +350,52 @@ function slimPassives(raw: any): Record<string, PassiveInfo> {
       rank: typeof p.rank === 'number' ? p.rank : 0,
       description: resolveEffects(p),
       source: passiveSource(p),
+      effects: passiveEffects(p),
+    }
+  }
+  return out
+}
+
+const EFFECT_TARGET: Record<string, PassiveEffect['target']> = {
+  ToSelf: 'self',
+  ToTrainer: 'trainer',
+  ToSelfAndTrainer: 'both',
+  ToBuildObject: 'base',
+}
+
+/**
+ * The up-to-four effect slots, empty ones dropped.
+ *
+ * A slot is empty when its type is `::no`. A zero value is *not* empty: fourteen
+ * displayable passives carry a switch rather than an amount — `Nocturnal`
+ * (works through the night), knockback immunity, World Tree decay immunity —
+ * and every one of them stores it as a typed slot with a value of 0.
+ */
+function passiveEffects(p: any): PassiveEffect[] {
+  const out: PassiveEffect[] = []
+  for (let i = 1; i <= 4; i++) {
+    const type = enumTail(p[`efftype${i}`])
+    const value = p[`effect${i}`]
+    if (!type || type === 'no' || typeof value !== 'number') continue
+    out.push({
+      type,
+      value,
+      target: EFFECT_TARGET[enumTail(p[`target_type${i}`]) ?? ''] ?? 'self',
+    })
+  }
+  return out
+}
+
+/** Active skills, for the Builds view's "hits hardest with" list. */
+function slimSkills(raw: any): Record<string, ActiveSkillInfo> {
+  const out: Record<string, ActiveSkillInfo> = {}
+  for (const k of raw?.skills ?? []) {
+    if (typeof k?.asset !== 'string' || typeof k.power !== 'number') continue
+    out[k.asset.toLowerCase()] = {
+      name: k.name ?? k.asset,
+      element: enumTail(k.element),
+      power: k.power,
+      cooldown: typeof k.cooldown === 'number' ? k.cooldown : 0,
     }
   }
   return out
@@ -557,6 +701,7 @@ async function fetchAndSlim(): Promise<Refdata> {
     structures: slimStructures(world),
     expTable: slimExpTable(exp),
     breeding: slimBreeding(breeding),
+    skills: slimSkills(skills),
   }
 }
 

@@ -78,6 +78,7 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
       go('guild', 'Guild', 'players and roster'),
       go('summary', 'Summary', 'diagnostics'),
       go('breed', 'Breed', 'breeding paths'),
+      go('builds', 'Builds', 'party and base pals by purpose'),
     ]
     out.push(...views.filter((v) => !q || v.label.toLowerCase().includes(q)))
 

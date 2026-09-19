@@ -14,7 +14,7 @@ everything is parsed in your browser. Your save never leaves your machine.
 
 ## What it does
 
-Six views, switchable with the tabs or the number keys:
+Seven views, switchable with the tabs or the number keys:
 
 - **Map** — the whole island, rendered with Pixi. Players, bases, player-built
   structures, world objects, loot chests, pals and fast-travel points as
@@ -43,6 +43,14 @@ Six views, switchable with the tabs or the number keys:
   fewer pals wins. Gender is checked against the pals actually held, alternate
   routes of the same length are offered, and when there is no path it says which
   specific parent is out of reach rather than only "no route".
+- **Builds** — which pals to carry and which to station, by purpose: a
+  breeding base, a work base for chosen jobs, a fight against any pal, or
+  travel. Split into party, base and breeding farm, because a passive that acts
+  on you only counts in the party and one that acts on a building only counts at
+  a base — and that split comes from the game's own passive data, as does every
+  ranking here. Each list pairs the best species there are with the best of your
+  own pals, and a species you lack links to Breed with the right passives
+  already picked.
 
 Press <kbd>⌘K</kbd> to search pals, items, players and bases from anywhere.
 

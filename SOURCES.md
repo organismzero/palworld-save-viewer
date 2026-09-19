@@ -48,16 +48,16 @@ At runtime the app fetches reference data and art from
 caches it in your browser's IndexedDB. Exactly eight data files are fetched,
 projected down to the fields the app uses before caching:
 
-| File                      | Used for                                   |
-| ------------------------- | ------------------------------------------ |
-| `characters.json`         | pal names, elements, rarity, work, icons   |
-| `skills.json`             | passive names, ranks and descriptions      |
-| `work_suitability.json`   | work-type display names                    |
-| `fast_travel_points.json` | landmarks, and naming bases by nearest one |
-| `items.json`              | item names, icons, rarity, weight, stacks  |
-| `world.json`              | structure names and icons                  |
-| `pal_exp_table.json`      | the levelling curve behind player XP bars  |
-| `breedingdata.json`       | combi ranks and the unique breeding combos |
+| File                      | Used for                                                         |
+| ------------------------- | ---------------------------------------------------------------- |
+| `characters.json`         | pal names, elements, rarity, work, icons, base stats, mount kind |
+| `skills.json`             | passive names, ranks, descriptions and effects; active skills    |
+| `work_suitability.json`   | work-type display names                                          |
+| `fast_travel_points.json` | landmarks, and naming bases by nearest one                       |
+| `items.json`              | item names, icons, rarity, weight, stacks                        |
+| `world.json`              | structure names and icons                                        |
+| `pal_exp_table.json`      | the levelling curve behind player XP bars                        |
+| `breedingdata.json`       | combi ranks and the unique breeding combos                       |
 
 `breedingdata.json` is the one projected most aggressively: 7.1 MB on disk down
 to ~67 KB cached. Only two of its six sections are read — the per-species combi
@@ -74,6 +74,14 @@ one code path — and unlike the other seven it is allowed to fail on its own, s
 a bad or moved file costs breeding paths rather than every name and icon in the
 app. If cold start ever needs defending, this is the file to move behind a
 lazy `loadBreeding()` under its own IndexedDB key.
+
+The Builds view's recommendations are computed from these same files — base
+stats and work levels from `characters.json`, passive effect types, values and
+targets and active-skill power from `skills.json`. **One table is typed in by
+hand:** the element chart in `src/domain/typeChart.ts`, because none of the
+fetched files carry it. It records only which element beats which; the ×2 and
+×0.5 multipliers applied to it are this project's assumption, and the view
+says so.
 
 Plus `game_data/icons/**` on demand — one request per icon actually shown —
 and `assets/maps/T_WorldMap.webp`, which is baked into 341 tiles across five

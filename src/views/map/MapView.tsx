@@ -415,7 +415,7 @@ export function MapView({ index }: { index: SaveIndex }) {
       )}
 
       {/* The coordinate readout and this screen's own key prompts, on the
-          frame's bottom edge. The global row (⌘K, 1–6, ?) is in the shell's
+          frame's bottom edge. The global row (⌘K, 1–7, ?) is in the shell's
           footer directly below; these are the two keys only the map has. */}
       {/* One dark bar rather than bare text: this sits directly on map art,
           which is warm, bright and completely unpredictable. */}

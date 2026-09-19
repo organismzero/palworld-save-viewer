@@ -34,6 +34,11 @@ const BreedView = lazy(() =>
     default: m.BreedView,
   })),
 )
+const BuildsView = lazy(() =>
+  import('../views/builds/BuildsView.tsx').then((m) => ({
+    default: m.BuildsView,
+  })),
+)
 import { useSaveStore } from '../store/saveStore.ts'
 import {
   flushSessionWrite,
@@ -64,6 +69,8 @@ const VIEWS = [
   // Summary from 5 to 6 and break the one habit every existing user has. Last
   // place costs nothing and renumbers nothing.
   { id: 'breed', label: 'Breed' },
+  // Last for the same reason Breed is: number keys are positional.
+  { id: 'builds', label: 'Builds' },
 ] as const satisfies readonly { id: ViewId; label: string }[]
 
 /** Ties the tab strip to the one panel it drives, for `aria-controls`. */
@@ -398,6 +405,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
             {view === 'guild' && <GuildView index={index} />}
             {view === 'summary' && <SaveSummary index={index} />}
             {view === 'breed' && <BreedView index={index} />}
+            {view === 'builds' && <BuildsView index={index} />}
           </Suspense>
         </ErrorBoundary>
       </main>
@@ -429,7 +437,7 @@ function Prompts() {
   return (
     <PromptBar className="shrink-0 border-t border-[var(--color-line-faint)] bg-[rgb(5_13_19/0.7)]">
       <Prompt keys="⌘K">Search</Prompt>
-      <Prompt keys="1–6">Switch view</Prompt>
+      <Prompt keys="1–7">Switch view</Prompt>
       <Prompt keys="?">Shortcuts</Prompt>
       {anyOpen && <Prompt keys="Esc">Close</Prompt>}
     </PromptBar>

@@ -22,7 +22,8 @@ export type Focus =
   | { kind: 'base'; id: Guid }
   | { kind: 'item'; staticId: string; label: string }
 
-export type ViewId = 'map' | 'pals' | 'bases' | 'guild' | 'breed' | 'summary'
+export type ViewId =
+  'map' | 'pals' | 'bases' | 'guild' | 'breed' | 'summary' | 'builds'
 
 interface UiState {
   view: ViewId
