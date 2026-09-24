@@ -35,7 +35,7 @@ export function ElementTag({
           size={16}
         />
       ) : (
-        <ElementBadge name={el.name} size={10} />
+        <ElementBadge name={el.name} size={10} card={false} />
       )}
       <span style={{ color: el.oklch }}>{el.display}</span>
     </span>

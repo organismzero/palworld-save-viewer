@@ -47,6 +47,12 @@ export type CardDescriptor =
    * reference data, as for pals; `note` says why this player is named here.
    */
   | { kind: 'player'; uid: Guid; raw?: boolean; note?: string }
+  /** An active skill by `EPalWazaID` tail, in any case. */
+  | { kind: 'skill'; id: string; note?: string }
+  /** An element by any name the data uses: `Leaf`, `Grass`, an enum token. */
+  | { kind: 'element'; name: string }
+  /** A work suitability by id, e.g. `EmitFlame`. */
+  | { kind: 'work'; id: string }
 
 interface Box {
   current: CardDescriptor | undefined

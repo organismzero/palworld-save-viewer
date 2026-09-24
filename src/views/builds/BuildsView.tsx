@@ -374,7 +374,9 @@ function WorkSections({
         const mine = ownedWorkers(ctx.data, ctx.pals, ctx.where, id, spec, MINE)
         return (
           <section key={id}>
-            <SectionHeading title={workName(ctx.data, id)} />
+            <CardTrigger card={{ kind: 'work', id }} as="div">
+              <SectionHeading title={workName(ctx.data, id)} />
+            </CardTrigger>
             <TwoLists
               left={species.map((r) => (
                 <SpeciesRow
@@ -505,13 +507,19 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
                       element={f.fight.element}
                     />
                     {f.strongMoves.map((m) => (
-                      <Pill
+                      <CardTrigger
                         key={m}
-                        tone="good"
-                        title="Equipped, and strong here"
+                        card={{
+                          kind: 'skill',
+                          id: m,
+                          note: 'Equipped, and strong here.',
+                        }}
+                        focusable
                       >
-                        {ctx.data.skills[m.toLowerCase()]?.name ?? m}
-                      </Pill>
+                        <Pill tone="good">
+                          {ctx.data.skills[m.toLowerCase()]?.name ?? m}
+                        </Pill>
+                      </CardTrigger>
                     ))}
                   </>
                 )
@@ -529,11 +537,11 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
             />
             <div className="grid gap-x-6 sm:grid-cols-2">
               {moves.map((m) => (
-                <ListRow key={m.id}>
-                  <ElementBadge name={m.element} />
+                <ListRow key={m.id} card={{ kind: 'skill', id: m.id }}>
+                  <ElementBadge name={m.element} card={false} />
                   <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                  <Pill title="Power">pow {m.power}</Pill>
-                  <Pill title="Cooldown in seconds">{m.cooldown}s</Pill>
+                  <Pill>pow {m.power}</Pill>
+                  <Pill>{m.cooldown}s</Pill>
                 </ListRow>
               ))}
             </div>
@@ -1008,7 +1016,7 @@ function OpponentPicker({
             <span className="min-w-0 flex-1 truncate text-xs">{r.name}</span>
             {data &&
               elementsOf(data, r.id).map((e) => (
-                <ElementBadge key={e} name={e} size={10} />
+                <ElementBadge key={e} name={e} size={10} card={false} />
               ))}
           </ListRow>
         ))}

@@ -8,7 +8,8 @@
  */
 
 import type { Refdata } from '../../refdata/refdata.ts'
-import { element } from '../../lib/color.ts'
+import { WORK_TYPES, element } from '../../lib/color.ts'
+import { BEATS } from '../../domain/typeChart.ts'
 import { palTooltip } from '../../domain/palText.ts'
 import { passiveText } from '../../views/breed/passiveText.ts'
 import { itemText } from '../../domain/itemText.ts'
@@ -90,6 +91,38 @@ export function describeCard(
         detail?.platform,
         player && `${pals} pals`,
       ])
+    }
+    case 'skill': {
+      const info = data?.skills[desc.id.toLowerCase()]
+      return join([
+        desc.note,
+        info?.name ?? desc.id,
+        info?.element &&
+          `${element(info.element)?.display ?? info.element} skill`,
+        info && `power ${info.power}, cooldown ${info.cooldown} seconds`,
+        info?.description,
+      ])
+    }
+    case 'element': {
+      const el = element(desc.name)
+      if (!el) return desc.name
+      const names = (ids: string[]) =>
+        ids.map((id) => element(id)?.display ?? id).join(', ') || 'nothing'
+      const beatenBy = Object.entries(BEATS)
+        .filter(([, t]) => t.includes(el.name))
+        .map(([a]) => a)
+      return join([
+        `${el.display} element`,
+        `Strong against ${names([...(BEATS[el.name] ?? [])])}`,
+        `Weak to ${names(beatenBy)}`,
+      ])
+    }
+    case 'work': {
+      const display =
+        data?.work.find((w) => w.id === desc.id)?.display ??
+        WORK_TYPES.find((w) => w.id === desc.id)?.display ??
+        desc.id
+      return `${display} work suitability`
     }
   }
 }

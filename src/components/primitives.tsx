@@ -211,21 +211,33 @@ export function Field({
   )
 }
 
-/** One or two element pips. Colour is the *only* thing these encode. */
+/**
+ * One or two element pips. Colour is the *only* thing these encode.
+ *
+ * Opens the element's hover card, unless `card` is false — for a pip inside
+ * something whose own card already names the element, where a nested card
+ * would only get in the way of the one the user was reading.
+ */
 export function ElementBadge({
   name,
   size = 14,
   showLabel,
+  card = true,
 }: {
   name: string | undefined
   size?: number
   showLabel?: boolean
+  card?: boolean
 }) {
   const el = element(name)
+  const hover = useHoverCard(
+    card && el ? { kind: 'element', name: el.name } : undefined,
+  )
   if (!el) return null
   const pip = (
     <span
-      title={el.display}
+      {...(showLabel ? {} : hover)}
+      title={card ? undefined : el.display}
       aria-label={el.display}
       className="inline-block shrink-0 rounded-full"
       style={{
@@ -238,7 +250,7 @@ export function ElementBadge({
   )
   if (!showLabel) return pip
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span {...hover} className="inline-flex items-center gap-1.5">
       {pip}
       <span className="text-xs text-[var(--color-muted)]">{el.display}</span>
     </span>

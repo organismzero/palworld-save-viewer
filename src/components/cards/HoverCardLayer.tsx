@@ -20,7 +20,10 @@ import {
   type CardDescriptor,
 } from './hoverCard.ts'
 import { PalCard } from './PalCard.tsx'
+import { ElementCard } from './ElementCard.tsx'
 import { ItemCard } from './ItemCard.tsx'
+import { SkillCard } from './SkillCard.tsx'
+import { WorkCard } from './WorkCard.tsx'
 import { PassiveCard } from './PassiveCard.tsx'
 import { PlayerCard } from './PlayerCard.tsx'
 import { SpeciesCard } from './SpeciesCard.tsx'
@@ -185,6 +188,12 @@ function Body({ desc, index }: { desc: CardDescriptor; index: SaveIndex }) {
           index={index}
         />
       )
+    case 'skill':
+      return <SkillCard id={desc.id} note={desc.note} data={data} />
+    case 'element':
+      return <ElementCard name={desc.name} data={data} index={index} />
+    case 'work':
+      return <WorkCard id={desc.id} data={data} index={index} />
     case 'item':
       return (
         <ItemCard

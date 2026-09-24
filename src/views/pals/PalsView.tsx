@@ -3,7 +3,12 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ivTotal } from '../../domain/index.ts'
 import type { Pal, SaveIndex } from '../../domain/types.ts'
-import { ELEMENTS, element } from '../../lib/color.ts'
+import {
+  ELEMENTS,
+  WORK_TYPES,
+  element,
+  type ElementDef,
+} from '../../lib/color.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
@@ -28,6 +33,7 @@ import {
   Panel,
   PassiveChip,
   Pill,
+  RawId,
 } from '../../components/primitives.tsx'
 import {
   Button,
@@ -208,38 +214,21 @@ export function PalsView({ index }: { index: SaveIndex }) {
         <div>
           <div className="label mb-2">element</div>
           <div className="flex flex-wrap gap-1.5">
-            {ELEMENTS.map((el) => {
-              const on = elements.has(el.name)
-              return (
-                <button
-                  key={el.name}
-                  type="button"
-                  title={el.display}
-                  // These are colour-only toggles: `title` is the last resort
-                  // in the accessible-name algorithm and some assistive tech
-                  // ignores it outright, so the name is explicit — and
-                  // `aria-pressed` is the only thing carrying on/off, since
-                  // visually that is a scale and an opacity change.
-                  aria-label={el.display}
-                  aria-pressed={on}
-                  onClick={() =>
-                    setElements((s) => {
-                      const next = new Set(s)
-                      if (on) next.delete(el.name)
-                      else next.add(el.name)
-                      return next
-                    })
-                  }
-                  className={cn(
-                    'h-[22px] w-[22px] rounded-full border transition-all',
-                    on
-                      ? 'border-[var(--color-signal)] shadow-[var(--glow-signal)]'
-                      : 'border-[var(--color-line)] opacity-40',
-                  )}
-                  style={{ background: el.oklch }}
-                />
-              )
-            })}
+            {ELEMENTS.map((el) => (
+              <ElementToggle
+                key={el.name}
+                el={el}
+                on={elements.has(el.name)}
+                onToggle={() =>
+                  setElements((s) => {
+                    const next = new Set(s)
+                    if (next.has(el.name)) next.delete(el.name)
+                    else next.add(el.name)
+                    return next
+                  })
+                }
+              />
+            ))}
           </div>
         </div>
 
@@ -471,8 +460,9 @@ function PalCard({
             {ivTotal(pal)}
           </span>
           <span className="ml-auto flex items-center gap-1">
-            <ElementBadge name={info?.element1} size={10} />
-            <ElementBadge name={info?.element2} size={10} />
+            {/* No cards of their own: the pal card they sit on names both. */}
+            <ElementBadge name={info?.element1} size={10} card={false} />
+            <ElementBadge name={info?.element2} size={10} card={false} />
           </span>
         </div>
 
@@ -537,6 +527,25 @@ function PalDetail({
   const owner = pal?.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)
     : undefined
+
+  // Species base plus the pal's own bonus, in the game's work order.
+  const work = pal
+    ? WORK_TYPES.flatMap((t) => {
+        const base = info?.work?.[t.id] ?? 0
+        const bonus = pal.workSuitabilityBonus[t.id] ?? 0
+        if (base + bonus <= 0) return []
+        const ref = data?.work.find((w) => w.id === t.id)
+        return [
+          {
+            id: t.id,
+            display: ref?.display ?? t.display,
+            icon: ref?.icon,
+            level: base + bonus,
+            bonus,
+          },
+        ]
+      })
+    : []
 
   // "Top 3% of your Kitsunebi" is far more useful than a bare number.
   const cohort = pal ? (index.palsByCharacterId.get(pal.characterId) ?? []) : []
@@ -675,35 +684,111 @@ function PalDetail({
         </>
       )}
 
-      {info?.work && Object.keys(info.work).length > 0 && (
+      {work.length > 0 && (
         <>
           <div className="label mt-5 mb-2">work suitability</div>
           <Panel className="divide-y divide-[var(--color-line-faint)]">
-            {Object.entries(info.work).map(([id, level]) => (
-              <div
-                key={id}
-                className="flex items-center justify-between px-3 py-1.5 text-xs"
+            {work.map((w) => (
+              <CardTrigger
+                key={w.id}
+                as="div"
+                card={{ kind: 'work', id: w.id }}
+                focusable
+                className="flex items-center gap-2 px-3 py-1.5 text-xs"
               >
-                <span>
-                  {data?.work.find((w) => w.id === id)?.display ?? id}
+                {w.icon && (
+                  <GameIcon path={w.icon} name={w.display} size={18} />
+                )}
+                <span className="min-w-0 flex-1 truncate">{w.display}</span>
+                {/* The pal's own bonus is folded in and marked, so a boosted
+                    level is not mistaken for the species'. */}
+                <span className="num">
+                  {w.level}
+                  {w.bonus > 0 && (
+                    <span className="text-[var(--color-gold)]">+</span>
+                  )}
                 </span>
-                <span className="num">{level}</span>
-              </div>
+              </CardTrigger>
             ))}
           </Panel>
         </>
       )}
 
-      {pal.equipWaza.length > 0 && (
-        <>
-          <div className="label mt-5 mb-2">equipped moves</div>
-          <ul className="num space-y-1 text-xs text-[var(--color-muted)]">
-            {pal.equipWaza.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </>
-      )}
+      <MoveList title="equipped moves" ids={pal.equipWaza} />
+      {/* Learned but not equipped. Never shown until now, and it is the list
+          that says what a pal could be switched to. */}
+      <MoveList
+        title="also knows"
+        ids={pal.masteredWaza.filter((w) => !pal.equipWaza.includes(w))}
+      />
     </aside>
+  )
+}
+
+/** A pal's moves by name, each opening its skill card. */
+function MoveList({ title, ids }: { title: string; ids: string[] }) {
+  const { data } = useRefdataStore()
+  if (ids.length === 0) return null
+  return (
+    <>
+      <div className="label mt-5 mb-2">{title}</div>
+      <ul className="space-y-1 text-xs">
+        {ids.map((id) => {
+          const skill = data?.skills[id.toLowerCase()]
+          return (
+            <CardTrigger
+              key={id}
+              as="li"
+              card={{ kind: 'skill', id }}
+              focusable
+              className="flex items-center gap-2"
+            >
+              <ElementBadge name={skill?.element} size={10} card={false} />
+              <span className="min-w-0 flex-1 truncate">
+                {skill?.name ?? <RawId>{id}</RawId>}
+              </span>
+              {skill && (
+                <span className="num text-[var(--color-muted)]">
+                  {skill.power}
+                </span>
+              )}
+            </CardTrigger>
+          )
+        })}
+      </ul>
+    </>
+  )
+}
+
+/** One colour-only element filter, whose hover card names the element. */
+function ElementToggle({
+  el,
+  on,
+  onToggle,
+}: {
+  el: ElementDef
+  on: boolean
+  onToggle: () => void
+}) {
+  const hover = useHoverCard({ kind: 'element', name: el.name })
+  return (
+    <button
+      type="button"
+      {...hover}
+      // Colour-only toggles: the card shows the name to the eye, but the
+      // accessible name has to be explicit — and `aria-pressed` is the only
+      // thing carrying on/off, since visually that is a scale and an opacity
+      // change.
+      aria-label={el.display}
+      aria-pressed={on}
+      onClick={onToggle}
+      className={cn(
+        'h-[22px] w-[22px] rounded-full border transition-all',
+        on
+          ? 'border-[var(--color-signal)] shadow-[var(--glow-signal)]'
+          : 'border-[var(--color-line)] opacity-40',
+      )}
+      style={{ background: el.oklch }}
+    />
   )
 }
