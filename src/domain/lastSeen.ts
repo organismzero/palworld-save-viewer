@@ -44,7 +44,12 @@ export interface LastSeen {
 const ONLINE_EPSILON_TICKS = 60 * 10_000_000
 
 export function lastSeenFor(
-  _player: Player,
+  /**
+   * Unread today — the clocks live on the detail and the member — and
+   * optional, so a guild member with no character in the level still gets an
+   * answer.
+   */
+  _player: Player | undefined,
   detail: PlayerDetail | undefined,
   member: GuildMember | undefined,
   meta: SaveMeta,

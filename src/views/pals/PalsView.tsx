@@ -10,6 +10,7 @@ import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { useHoverCard } from '../../components/cards/hoverCard.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import { useViewParams } from '../../app/viewParams.ts'
@@ -623,7 +624,21 @@ function PalDetail({
             title={CONDENSER_RANK_HELP}
           />
         )}
-        <Field label="owner" value={owner?.name ?? 'unowned'} />
+        <Field
+          label="owner"
+          value={
+            owner ? (
+              <CardTrigger
+                card={{ kind: 'player', uid: owner.playerUid }}
+                focusable
+              >
+                {owner.name}
+              </CardTrigger>
+            ) : (
+              'unowned'
+            )
+          }
+        />
         <Field
           label="caught"
           value={relativeTime(ticksToDate(pal.ownedTime))}

@@ -12,6 +12,7 @@ import { element } from '../../lib/color.ts'
 import { palTooltip } from '../../domain/palText.ts'
 import { passiveText } from '../../views/breed/passiveText.ts'
 import { itemText } from '../../domain/itemText.ts'
+import { memberRole } from '../../lib/roles.ts'
 import type { SaveIndex } from '../../domain/types.ts'
 import type { CardDescriptor } from './hoverCard.ts'
 
@@ -72,6 +73,23 @@ export function describeCard(
           (a) => data?.passives[a.toLowerCase()]?.name ?? a,
         ),
       })
+    }
+    case 'player': {
+      const player = index.playerByUid.get(desc.uid)
+      const guild = index.guilds.find((g) =>
+        g.members.some((m) => m.playerUid === desc.uid),
+      )
+      const member = guild?.members.find((m) => m.playerUid === desc.uid)
+      const detail = index.playerDetails.find((d) => d.playerUid === desc.uid)
+      const pals = index.palsByOwner.get(desc.uid)?.length ?? 0
+      return join([
+        desc.note,
+        player?.name ?? member?.name ?? desc.uid,
+        player ? `level ${player.level}` : 'no character in this world',
+        guild && `${memberRole(guild, desc.uid).name} of ${guild.name}`,
+        detail?.platform,
+        player && `${pals} pals`,
+      ])
     }
   }
 }

@@ -403,18 +403,27 @@ function ParentChip({
       {/* `warn`, not `signal`: a borrowed parent is an obstacle, the same
           category as "needs both genders". `signal` in this file means an
           informational back-reference. */}
-      {who && (
-        <Pill
-          tone="warn"
-          title={
-            who.unowned
-              ? 'No player owns this pal — it is a base worker in shared storage, so any member can fetch it.'
-              : `This pal belongs to ${who.name}. You will need them to put it in the pen.`
-          }
-        >
-          {who.name}
-        </Pill>
-      )}
+      {who &&
+        (who.unowned || !pick?.ownerPlayerUid ? (
+          <Pill
+            tone="warn"
+            title="No player owns this pal — it is a base worker in shared storage, so any member can fetch it."
+          >
+            {who.name}
+          </Pill>
+        ) : (
+          // The owner's card, carrying why they are named here.
+          <CardTrigger
+            card={{
+              kind: 'player',
+              uid: pick.ownerPlayerUid,
+              note: `This pal belongs to ${who.name}. You will need them to put it in the pen.`,
+            }}
+            focusable
+          >
+            <Pill tone="warn">{who.name}</Pill>
+          </CardTrigger>
+        ))}
       {pick && (
         <>
           <span className="num shrink-0 text-[11px] text-[var(--color-muted)]">

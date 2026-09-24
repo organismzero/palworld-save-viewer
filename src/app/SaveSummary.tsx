@@ -257,10 +257,15 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 const pos = detail?.pos ?? player?.pos
 
                 return [
-                  <span className="flex items-center gap-2">
+                  // Raw like the rest of this view: no reference data.
+                  <CardTrigger
+                    card={{ kind: 'player', uid: m.playerUid, raw: true }}
+                    focusable
+                    className="flex items-center gap-2"
+                  >
                     {seen?.onlineAtSave && <OnlineDot />}
                     {m.name}
-                  </span>,
+                  </CardTrigger>,
                   memberRole(guild, m.playerUid).name,
                   detail ? detail.platform : <RawId>—</RawId>,
                   player?.level ?? '—',
@@ -304,7 +309,12 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 .map((d) => {
                   const player = index.playerByUid.get(d.playerUid)
                   return [
-                    player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>,
+                    <CardTrigger
+                      card={{ kind: 'player', uid: d.playerUid, raw: true }}
+                      focusable
+                    >
+                      {player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>}
+                    </CardTrigger>,
                     d.record.palsCaught,
                     d.record.speciesCaught,
                     d.record.paldexUnlocked,
@@ -335,7 +345,12 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               ...STATUS_ORDER.map((k) => STATUS_LABELS[k]),
             ]}
             rows={index.players.map((p) => [
-              p.name,
+              <CardTrigger
+                card={{ kind: 'player', uid: p.playerUid, raw: true }}
+                focusable
+              >
+                {p.name}
+              </CardTrigger>,
               p.level,
               p.hp ? p.hp.toFixed(0) : '—',
               ...STATUS_ORDER.map((k) => p.statusPoints[k] ?? 0),

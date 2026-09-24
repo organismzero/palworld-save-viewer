@@ -42,6 +42,11 @@ export type CardDescriptor =
       dynamicId?: Guid
       places?: number
     }
+  /**
+   * A player, or a guild member with no character in the level. `raw` skips
+   * reference data, as for pals; `note` says why this player is named here.
+   */
+  | { kind: 'player'; uid: Guid; raw?: boolean; note?: string }
 
 interface Box {
   current: CardDescriptor | undefined

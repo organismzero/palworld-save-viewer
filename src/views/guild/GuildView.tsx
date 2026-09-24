@@ -47,6 +47,7 @@ import {
 import { Button, Checkbox, SelectControl } from '../../components/controls.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 import { memberRole } from '../../lib/roles.ts'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 
 /**
  * Guild and player dashboard.
@@ -242,7 +243,7 @@ function GuildHero({
         </dl>
       </Panel>
 
-      <MemberStrip index={index} guild={guild} />
+      <MemberStrip guild={guild} />
       <Markers guild={guild} />
     </header>
   )
@@ -274,7 +275,6 @@ function Metric({
   )
 }
 
-
 /** The same tones as `Pill`, as a ring for the member avatars. */
 const RING_TONES: Record<PillTone, string> = {
   signal: 'border-[var(--color-signal)] text-[var(--color-signal)]',
@@ -284,26 +284,24 @@ const RING_TONES: Record<PillTone, string> = {
   danger: 'border-[var(--color-danger)]/70 text-[var(--color-danger)]',
 }
 
-function MemberStrip({ index, guild }: { index: SaveIndex; guild: Guild }) {
+function MemberStrip({ guild }: { guild: Guild }) {
   if (guild.members.length === 0) return null
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       {guild.members.map((m) => {
-        const player = index.playerByUid.get(m.playerUid)
         const role = memberRole(guild, m.playerUid)
         return (
-          <span
+          <CardTrigger
             key={m.playerUid}
-            title={`${m.name} · ${role.name}${
-              player ? ` · level ${player.level}` : ''
-            }`}
+            card={{ kind: 'player', uid: m.playerUid }}
+            focusable
             className={cn(
               'flex h-8 w-8 items-center justify-center rounded-full border font-mono text-[11px] uppercase',
               RING_TONES[role.tone],
             )}
           >
             {m.name.slice(0, 2)}
-          </span>
+          </CardTrigger>
         )
       })}
     </div>
@@ -403,12 +401,19 @@ function Players({
               onSelect={() => onSelect(m.player!)}
             />
           ) : (
-            <Panel key={m.uid} padded>
-              <div className="text-sm">{m.name}</div>
-              <p className="label mt-2">
-                in the guild record, but no character in this save
-              </p>
-            </Panel>
+            <CardTrigger
+              key={m.uid}
+              as="div"
+              card={{ kind: 'player', uid: m.uid }}
+              focusable
+            >
+              <Panel padded>
+                <div className="text-sm">{m.name}</div>
+                <p className="label mt-2">
+                  in the guild record, but no character in this save
+                </p>
+              </Panel>
+            </CardTrigger>
           ),
         )}
       </div>

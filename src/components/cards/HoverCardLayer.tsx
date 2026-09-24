@@ -22,6 +22,7 @@ import {
 import { PalCard } from './PalCard.tsx'
 import { ItemCard } from './ItemCard.tsx'
 import { PassiveCard } from './PassiveCard.tsx'
+import { PlayerCard } from './PlayerCard.tsx'
 import { SpeciesCard } from './SpeciesCard.tsx'
 
 const HAS_POPOVER =
@@ -175,6 +176,15 @@ function Body({ desc, index }: { desc: CardDescriptor; index: SaveIndex }) {
       return <SpeciesCard id={desc.id} note={desc.note} data={data} />
     case 'passive':
       return <PassiveCard id={desc.id} note={desc.note} data={data} />
+    case 'player':
+      return (
+        <PlayerCard
+          uid={desc.uid}
+          note={desc.note}
+          data={desc.raw ? undefined : data}
+          index={index}
+        />
+      )
     case 'item':
       return (
         <ItemCard

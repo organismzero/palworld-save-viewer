@@ -387,13 +387,20 @@ function PlanPane({
                 {count(elsewhere)} more in {guildLabel(stock)}
               </Pill>
             )}
-            {player && (
-              <span className="label normal-case">
-                {stock.includedGuild
-                  ? `from all of ${guildLabel(stock)}’s pals`
-                  : `from ${player.name}’s pals`}
-              </span>
-            )}
+            {player &&
+              (stock.includedGuild ? (
+                <span className="label normal-case">
+                  from all of {guildLabel(stock)}’s pals
+                </span>
+              ) : (
+                <CardTrigger
+                  card={{ kind: 'player', uid: player.playerUid }}
+                  focusable
+                  className="label normal-case"
+                >
+                  from {player.name}’s pals
+                </CardTrigger>
+              ))}
           </div>
         </div>
       </header>
