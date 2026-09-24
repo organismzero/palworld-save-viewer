@@ -12,41 +12,15 @@
 import type { DynamicItem, ItemStack } from '../domain/types.ts'
 import type { ItemInfo } from '../refdata/refdata.ts'
 import { GameIcon } from './GameIcon.tsx'
-import { compact, count } from '../lib/format.ts'
+import { useHoverCard } from './cards/hoverCard.ts'
+import { compact } from '../lib/format.ts'
+import { rarityOf } from '../lib/rarity.ts'
 import { cn } from '../lib/utils.ts'
-
-/**
- * The common → legendary ramp.
- *
- * Rarity 0 gets no frame at all: most of what fills a chest is rarity 0, and
- * giving it a colour would make every grid a wall of noise. A handful of items
- * carry rarity 5 or a sentinel 99, which clamp to the top of the ramp.
- */
-const RARITY = [
-  { name: 'common', color: undefined },
-  { name: 'uncommon', color: 'var(--color-rarity-uncommon)' },
-  { name: 'rare', color: 'var(--color-rarity-rare)' },
-  { name: 'epic', color: 'var(--color-rarity-epic)' },
-  { name: 'legendary', color: 'var(--color-rarity-legendary)' },
-] as const
-
-function rarityOf(rarity: number | undefined): (typeof RARITY)[number] {
-  const i = Math.max(0, Math.min(RARITY.length - 1, Math.round(rarity ?? 0)))
-  return RARITY[i] ?? RARITY[0]
-}
 
 export interface SlotContents {
   stack: ItemStack
   info?: ItemInfo
   dynamic?: DynamicItem
-  /**
-   * `dynamic.passives` resolved to display names.
-   *
-   * Resolved by the caller rather than here: this component is deliberately
-   * store-free, and the caller already holds the reference data. Falls back to
-   * the raw asset ids when reference data is unavailable.
-   */
-  passiveNames?: string[]
 }
 
 export function ItemSlot({
@@ -61,6 +35,14 @@ export function ItemSlot({
   onClick?: () => void
 }) {
   const frame = rarityOf(contents?.info?.rarity)
+  const hover = useHoverCard(
+    contents && {
+      kind: 'item',
+      staticId: contents.stack.staticId,
+      count: contents.stack.count,
+      dynamicId: contents.stack.dynamicLocalId,
+    },
+  )
 
   if (!contents) {
     return (
@@ -72,7 +54,7 @@ export function ItemSlot({
     )
   }
 
-  const { stack, info, dynamic, passiveNames } = contents
+  const { stack, info, dynamic } = contents
   const name = info?.name ?? stack.staticId
   // Durability is only meaningful against the item's full value; without the
   // reference data there is no denominator and so no bar.
@@ -85,7 +67,7 @@ export function ItemSlot({
     <button
       type="button"
       onClick={onClick}
-      title={tooltipText(name, info, dynamic, stack, passiveNames)}
+      {...hover}
       aria-label={`${name} ×${stack.count}`}
       style={{
         width: size,
@@ -142,36 +124,4 @@ function wearColor(fraction: number): string {
   if (fraction > 0.5) return 'var(--color-hp)'
   if (fraction > 0.2) return 'var(--color-stamina)'
   return 'var(--color-danger)'
-}
-
-/**
- * The native `title` tooltip.
- *
- * The browser's own rather than a styled hover card: it is keyboard-reachable,
- * never clipped by a scroll container, and free. A custom one would have to
- * re-earn all three.
- */
-function tooltipText(
-  name: string,
-  info: ItemInfo | undefined,
-  dynamic: DynamicItem | undefined,
-  stack: ItemStack,
-  passiveNames?: string[],
-): string {
-  const lines = [`${name} ×${count(stack.count)}`]
-  const type = [info?.typeA, info?.typeB].filter(Boolean).join(' · ')
-  if (type) lines.push(type)
-  if (info?.weight) lines.push(`${info.weight} wt each`)
-  if (dynamic?.durability !== undefined) {
-    lines.push(
-      info?.durability
-        ? `durability ${Math.round(dynamic.durability)} / ${info.durability}`
-        : `durability ${Math.round(dynamic.durability)}`,
-    )
-  }
-  if (dynamic?.ammo) lines.push(`${dynamic.ammo} rounds loaded`)
-  // Prefer resolved names; raw asset ids are the degraded fallback.
-  for (const p of passiveNames ?? dynamic?.passives ?? []) lines.push(`+ ${p}`)
-  if (info?.description) lines.push('', info.description.replace(/\r/g, ''))
-  return lines.join('\n')
 }

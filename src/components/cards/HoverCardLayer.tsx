@@ -20,6 +20,7 @@ import {
   type CardDescriptor,
 } from './hoverCard.ts'
 import { PalCard } from './PalCard.tsx'
+import { ItemCard } from './ItemCard.tsx'
 import { PassiveCard } from './PassiveCard.tsx'
 import { SpeciesCard } from './SpeciesCard.tsx'
 
@@ -46,12 +47,19 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
   const data = useRefdataStore((s) => s.data)
   const popover = useRef<HTMLDivElement | null>(null)
 
+  // Read through refs by the document listeners, which are installed once and
+  // must see the current world and reference data rather than the first ones.
   const dataRef = useRef(data)
+  const indexRef = useRef(index)
   useEffect(() => {
     dataRef.current = data
-  }, [data])
+    indexRef.current = index
+  }, [data, index])
   useEffect(
-    () => installHoverCards((d) => describeCard(d, dataRef.current)),
+    () =>
+      installHoverCards((d) =>
+        describeCard(d, dataRef.current, indexRef.current),
+      ),
     [],
   )
 
@@ -167,5 +175,16 @@ function Body({ desc, index }: { desc: CardDescriptor; index: SaveIndex }) {
       return <SpeciesCard id={desc.id} note={desc.note} data={data} />
     case 'passive':
       return <PassiveCard id={desc.id} note={desc.note} data={data} />
+    case 'item':
+      return (
+        <ItemCard
+          staticId={desc.staticId}
+          count={desc.count}
+          dynamicId={desc.dynamicId}
+          places={desc.places}
+          data={data}
+          index={index}
+        />
+      )
   }
 }

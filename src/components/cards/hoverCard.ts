@@ -21,7 +21,7 @@
 import { useCallback, useLayoutEffect, useRef, type RefCallback } from 'react'
 import { create } from 'zustand'
 
-import type { Pal } from '../../domain/types.ts'
+import type { Guid, Pal } from '../../domain/types.ts'
 
 export type CardDescriptor =
   /** `raw` skips reference data, for the summary's deliberately raw lists. */
@@ -30,6 +30,18 @@ export type CardDescriptor =
   | { kind: 'species'; id: string; note?: string }
   /** `note` is a line about this passive *here*, e.g. "Helps here". */
   | { kind: 'passive'; id: string; note?: string }
+  /**
+   * An item by id, resolved by the card itself so an inventory cell can stay
+   * store-free. `dynamicId` names the one instance a weapon or armour piece
+   * is; `places` is set on merged rows that total a count across containers.
+   */
+  | {
+      kind: 'item'
+      staticId: string
+      count?: number
+      dynamicId?: Guid
+      places?: number
+    }
 
 interface Box {
   current: CardDescriptor | undefined

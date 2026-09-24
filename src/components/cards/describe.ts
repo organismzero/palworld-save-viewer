@@ -11,11 +11,14 @@ import type { Refdata } from '../../refdata/refdata.ts'
 import { element } from '../../lib/color.ts'
 import { palTooltip } from '../../domain/palText.ts'
 import { passiveText } from '../../views/breed/passiveText.ts'
+import { itemText } from '../../domain/itemText.ts'
+import type { SaveIndex } from '../../domain/types.ts'
 import type { CardDescriptor } from './hoverCard.ts'
 
 export function describeCard(
   desc: CardDescriptor,
   data: Refdata | undefined,
+  index: SaveIndex,
 ): string {
   switch (desc.kind) {
     case 'pal': {
@@ -53,6 +56,22 @@ export function describeCard(
         text.description(id),
         text.origin(id),
       ])
+    }
+    case 'item': {
+      const dynamic = desc.dynamicId
+        ? index.dynamicItemById.get(desc.dynamicId)
+        : undefined
+      const info = data?.items[desc.staticId.toLowerCase()]
+      return itemText({
+        name: info?.name ?? desc.staticId,
+        info,
+        dynamic,
+        count: desc.count,
+        places: desc.places,
+        passiveNames: dynamic?.passives.map(
+          (a) => data?.passives[a.toLowerCase()]?.name ?? a,
+        ),
+      })
     }
   }
 }

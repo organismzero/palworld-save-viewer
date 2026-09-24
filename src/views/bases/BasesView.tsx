@@ -6,6 +6,7 @@ import {
   containerLocation,
   searchItems,
   storageTotals,
+  type ItemHit,
 } from '../../domain/bases.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type {
@@ -16,6 +17,7 @@ import type {
   Structure,
 } from '../../domain/types.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { useHoverCard } from '../../components/cards/hoverCard.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import {
   CONTAINER_COLUMNS,
@@ -1124,24 +1126,14 @@ function ItemSearch({
                 </div>
                 {hits.map((hit) => (
                   <div key={hit.staticId}>
-                    <button
-                      type="button"
+                    <ItemHitButton
+                      hit={hit}
                       onClick={() =>
                         setExpanded((e) =>
                           e === hit.staticId ? undefined : hit.staticId,
                         )
                       }
-                      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
-                    >
-                      <span className="truncate text-sm">{hit.name}</span>
-                      <span className="num ml-auto shrink-0 text-xs">
-                        {count(hit.total)}
-                      </span>
-                      <span className="label shrink-0">
-                        {hit.places.length} place
-                        {hit.places.length === 1 ? '' : 's'}
-                      </span>
-                    </button>
+                    />
 
                     {expanded === hit.staticId && (
                       <ul className="border-t border-[var(--color-line-faint)] bg-[rgb(3_9_13/0.4)]">
@@ -1187,5 +1179,36 @@ function ItemSearch({
         </div>
       )}
     </div>
+  )
+}
+
+/** A search hit, whose hover card is the item it found. */
+function ItemHitButton({
+  hit,
+  onClick,
+}: {
+  hit: ItemHit
+  onClick: () => void
+}) {
+  const hover = useHoverCard({
+    kind: 'item',
+    staticId: hit.staticId,
+    count: hit.total,
+    places: hit.places.length,
+  })
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      {...hover}
+      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
+    >
+      <span className="truncate text-sm">{hit.name}</span>
+      <span className="num ml-auto shrink-0 text-xs">{count(hit.total)}</span>
+      <span className="label shrink-0">
+        {hit.places.length} place
+        {hit.places.length === 1 ? '' : 's'}
+      </span>
+    </button>
   )
 }
