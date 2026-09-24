@@ -89,3 +89,52 @@ export function partnerSkillText(
   if (failed || /[{}[\]]/.test(text)) return undefined
   return text.replace(/[ \t]{2,}/g, ' ').trim()
 }
+
+/**
+ * What a species drops when it works a Ranch, read out of its description.
+ *
+ * The data has no ranch-drop field; the partner-skill text says it in a few
+ * fixed phrasings — "Sometimes drops Milk when assigned to Ranch", "Sometimes
+ * lays an Egg…", "…digs up Gold Coin…", "…makes High Quality Cloth…". So this
+ * takes only the sentences that mention a Ranch and finds item names in them.
+ *
+ * Longest name first, and no match may overlap another: "Caramel Cotton Candy"
+ * contains "Cotton Candy", and the Woolipop that drops the one does not drop
+ * the other. Names match whole words only, so "Egg" is not found inside
+ * "Eggplant".
+ *
+ * `items` maps each item's display name to its id; returns ids, in the order
+ * the sentence names them.
+ */
+export function ranchDrops(
+  raw: unknown,
+  items: ReadonlyMap<string, string>,
+  byLength: readonly string[],
+): string[] {
+  if (typeof raw !== 'string') return []
+  const out: string[] = []
+  for (const sentence of raw.replace(/\r\n?/g, ' ').split(/(?<=\.)\s+/)) {
+    if (!/\bRanch\b/.test(sentence)) continue
+    const taken: [number, number][] = []
+    const found: [number, string][] = []
+    for (const name of byLength) {
+      if (!sentence.includes(name)) continue
+      const re = new RegExp(`(?<![\\w-])${escapeRe(name)}(?![\\w-])`, 'g')
+      for (const m of sentence.matchAll(re)) {
+        const start = m.index
+        const end = start + name.length
+        if (taken.some(([a, b]) => start < b && end > a)) continue
+        taken.push([start, end])
+        found.push([start, items.get(name)!])
+      }
+    }
+    for (const [, id] of found.sort((a, b) => a[0] - b[0])) {
+      if (!out.includes(id)) out.push(id)
+    }
+  }
+  return out
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}

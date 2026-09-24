@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { partnerSkillText } from '@/refdata/gameText.ts'
+import { partnerSkillText, ranchDrops } from '@/refdata/gameText.ts'
 
 const effects = (asset: string) =>
   ({
@@ -69,5 +69,60 @@ describe('partnerSkillText', () => {
   it('returns nothing for empty or non-string input', () => {
     expect(partnerSkillText('', [], [], effects)).toBeUndefined()
     expect(partnerSkillText(undefined, [], [], effects)).toBeUndefined()
+  })
+})
+
+describe('ranchDrops', () => {
+  const ITEMS = new Map([
+    ['Milk', 'milk'],
+    ['Egg', 'egg'],
+    ['Eggplant', 'eggplant'],
+    ['Gold Coin', 'money'],
+    ['Cotton Candy', 'sweet'],
+    ['Caramel Cotton Candy', 'sweet_caramel'],
+    ['High Quality Cloth', 'cloth2'],
+    ['Wool', 'wool'],
+  ])
+  const byLength = [...ITEMS.keys()].sort((a, b) => b.length - a.length)
+  const drops = (text: string) => ranchDrops(text, ITEMS, byLength)
+
+  it('reads each phrasing the data uses', () => {
+    expect(drops('Sometimes drops Milk when assigned to Ranch.')).toEqual([
+      'milk',
+    ])
+    expect(drops('Sometimes lays an Egg when assigned to Ranch.')).toEqual([
+      'egg',
+    ])
+    expect(
+      drops('Sometimes digs up Gold Coin when assigned to Ranch.'),
+    ).toEqual(['money'])
+    expect(
+      drops('Sometimes makes High Quality Cloth when assigned to Ranch.'),
+    ).toEqual(['cloth2'])
+  })
+
+  it('takes the longest name and never a name inside it', () => {
+    expect(
+      drops('Sometimes drops Caramel Cotton Candy when assigned to Ranch.'),
+    ).toEqual(['sweet_caramel'])
+    expect(
+      drops('Sometimes drops Cotton Candy when assigned to Ranch.'),
+    ).toEqual(['sweet'])
+  })
+
+  it('matches whole words only', () => {
+    expect(drops('Sometimes drops Eggplant when assigned to Ranch.')).toEqual([
+      'eggplant',
+    ])
+  })
+
+  it('ignores sentences that are not about a Ranch', () => {
+    expect(
+      drops(
+        'Can be ridden. While in party, finds more Wool. Sometimes drops Milk when assigned to Ranch.',
+      ),
+    ).toEqual(['milk'])
+    expect(drops('Can be ridden.')).toEqual([])
+    expect(drops(undefined as unknown as string)).toEqual([])
   })
 })

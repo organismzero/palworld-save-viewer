@@ -17,7 +17,7 @@
 
 import { deleteDB, type IDBPDatabase } from 'idb'
 
-import { partnerSkillText } from './gameText.ts'
+import { partnerSkillText, ranchDrops } from './gameText.ts'
 import {
   ASSETS_STORE,
   LEGACY_DB_NAME,
@@ -34,7 +34,8 @@ const PST_REF = 'main'
 // 6: passive descriptions arrive with their {EffectValueN} placeholders filled.
 // 8: species stats and mount kind, passive effects, active skills — for Builds.
 // 9: partner-skill and active-skill descriptions, element icons — for hover cards.
-const SLIM_VERSION = 9
+// 10: partner-skill effects, ranch drops and a food flag — for the new Builds.
+const SLIM_VERSION = 10
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -78,6 +79,14 @@ export interface SpeciesInfo {
   stats?: SpeciesStats
   /** What riding it (or carrying it) does for getting around, if anything. */
   mount?: MountKind
+  /**
+   * What its partner skill does, as typed effects — the fishing and salvage
+   * bonuses, crop growth, base-wide hunger, ranch rank. The partner skill's
+   * **level 1** values: the same caveat as `partnerSkillText`.
+   */
+  partnerEffects?: PassiveEffect[]
+  /** Item ids it drops when assigned to a Ranch, lowercased. */
+  ranchDrops?: string[]
 }
 
 /**
@@ -221,6 +230,8 @@ export interface ItemInfo {
   description?: string
   /** Full durability for weapons and armour — the denominator for the bar. */
   durability?: number
+  /** Food or a food ingredient (`EPalItemTypeB::Food*`). */
+  food?: true
   magazine?: number
 }
 
@@ -295,11 +306,25 @@ export interface Refdata {
  * `skills` is here for the partner-skill text, whose placeholders name passives
  * by asset id — including internal ones `slimPassives` rightly throws away.
  */
-function slimCharacters(raw: any, skills: any): Record<string, SpeciesInfo> {
+function slimCharacters(
+  raw: any,
+  skills: any,
+  items: any,
+): Record<string, SpeciesInfo> {
   const effects = new Map<string, Record<string, unknown>>()
   for (const p of skills?.passives ?? []) {
     if (typeof p?.asset === 'string') effects.set(p.asset, p)
   }
+  // Display name → id, for reading ranch drops out of descriptions. The first
+  // item of a name wins; a handful of names are shared by internal variants.
+  const itemIds = new Map<string, string>()
+  for (const i of items?.items ?? []) {
+    if (typeof i?.asset !== 'string' || typeof i.name !== 'string') continue
+    if (!itemIds.has(i.name)) itemIds.set(i.name, i.asset.toLowerCase())
+  }
+  const byLength = [...itemIds.keys()]
+    .filter((n) => n.length >= 3)
+    .sort((a, b) => b.length - a.length)
   const out: Record<string, SpeciesInfo> = {}
   for (const p of raw?.pals ?? []) {
     if (typeof p?.asset !== 'string') continue
@@ -329,6 +354,8 @@ function slimCharacters(raw: any, skills: any): Record<string, SpeciesInfo> {
       ),
       stats: slimStats(p.stats),
       mount: mountKind(p.description),
+      partnerEffects: partnerEffects(p, effects),
+      ranchDrops: nonEmpty(ranchDrops(p.description, itemIds, byLength)),
     }
   }
   return out
@@ -348,6 +375,34 @@ function slimStats(raw: any): SpeciesStats | undefined {
     rideSpeed: n(raw.ride_sprint_speed),
   }
 }
+
+/**
+ * The partner skill's effects, first of each type.
+ *
+ * A species' `passives` list starts with its level-1 set and appends later
+ * levels' variants (see `gameText.ts`), so keeping the first effect of each
+ * type keeps the level-1 value. `reference_passives` are included because a
+ * few partner skills keep their numbers there.
+ */
+function partnerEffects(
+  p: any,
+  effects: ReadonlyMap<string, Record<string, unknown>>,
+): PassiveEffect[] | undefined {
+  const out = new Map<string, PassiveEffect>()
+  for (const asset of [
+    ...(Array.isArray(p.passives) ? p.passives : []),
+    ...(Array.isArray(p.reference_passives) ? p.reference_passives : []),
+  ]) {
+    const row = typeof asset === 'string' ? effects.get(asset) : undefined
+    if (!row) continue
+    for (const e of passiveEffects(row))
+      if (!out.has(e.type)) out.set(e.type, e)
+  }
+  return out.size > 0 ? [...out.values()] : undefined
+}
+
+const nonEmpty = <T>(xs: T[]): T[] | undefined =>
+  xs.length > 0 ? xs : undefined
 
 /** See `MountKind` for where each phrasing comes from and how many match. */
 function mountKind(text: unknown): MountKind | undefined {
@@ -391,6 +446,8 @@ const EFFECT_TARGET: Record<string, PassiveEffect['target']> = {
   ToTrainer: 'trainer',
   ToSelfAndTrainer: 'both',
   ToBuildObject: 'base',
+  // Partner skills that act on every other pal at a base — hunger, ranch rank.
+  ToBaseCampPal: 'base',
 }
 
 /**
@@ -593,6 +650,8 @@ function slimItems(raw: any): Record<string, ItemInfo> {
       description: i.description || undefined,
       durability: i.durability > 0 ? i.durability : undefined,
       magazine: i.magazine_size > 0 ? i.magazine_size : undefined,
+      ...(typeof i.type_b === 'string' &&
+        i.type_b.startsWith('EPalItemTypeB::Food') && { food: true as const }),
     }
   }
   return out
@@ -721,7 +780,8 @@ export async function loadRefdata(): Promise<{
   return { data, fromCache: false }
 }
 
-async function fetchAndSlim(): Promise<Refdata> {
+/** Exported for Node-side checks of the projection against live upstream data. */
+export async function fetchAndSlim(): Promise<Refdata> {
   const [characters, travel, skills, work, items, world, exp, breeding] =
     await Promise.all([
       fetchFirst('game_data/characters.json').then((r) => r.json()),
@@ -740,7 +800,7 @@ async function fetchAndSlim(): Promise<Refdata> {
         .catch(() => undefined),
     ])
   return {
-    species: slimCharacters(characters, skills),
+    species: slimCharacters(characters, skills, items),
     passives: withImplants(slimPassives(skills), items),
     work: slimWork(work),
     landmarks: slimLandmarks(travel),
