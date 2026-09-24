@@ -9,6 +9,7 @@
 
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import type { GoalId } from '../../domain/recommend.ts'
+import { DEFAULT_CAKE, cakeRecipe } from '../../domain/recipes.ts'
 import {
   encodeList,
   list,
@@ -26,6 +27,8 @@ export interface BuildsParams {
   opponent: string
   /** The opponent search box. */
   query: string
+  /** The cake tier a cake base is for, by item id. */
+  cake: string
   playerUid?: Guid
 }
 
@@ -34,10 +37,20 @@ export const BUILDS_DEFAULTS: BuildsParams = {
   work: [],
   opponent: '',
   query: '',
+  cake: DEFAULT_CAKE,
   playerUid: undefined,
 }
 
-const GOALS: readonly GoalId[] = ['breeding', 'work', 'fight', 'travel']
+const GOALS: readonly GoalId[] = [
+  'breeding',
+  'work',
+  'fight',
+  'travel',
+  'fishing',
+  'food',
+  'cake',
+  'ranch',
+]
 
 export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
   return {
@@ -47,6 +60,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       if (v.work.length > 0) out.w = encodeList(v.work)
       if (v.opponent) out.vs = v.opponent
       if (v.query) out.q = v.query
+      if (v.cake !== d.cake) out.c = v.cake
       if (v.playerUid) out.p = shortId(v.playerUid)
       return out
     },
@@ -57,6 +71,8 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
         work: [...new Set(list(raw, 'w'))].sort(),
         opponent: str(raw, 'vs', d.opponent).toLowerCase(),
         query: str(raw, 'q', d.query),
+        // Checked against the typed-in recipes, which need no reference data.
+        cake: cakeRecipe(str(raw, 'c', d.cake))?.item ?? d.cake,
         playerUid: resolveShortId(
           raw.get('p') ?? undefined,
           index.playerByUid.keys(),

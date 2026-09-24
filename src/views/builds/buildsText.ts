@@ -47,6 +47,17 @@ const EFFECT_LABEL: Record<string, string> = {
   RideJumpCount_Increase: 'Mounted jumps',
   LeanBackInvalid_ForPassiveSkill: 'Immune to flinch',
   KnockbackInvalid_ForPassiveSkill: 'Immune to knockback',
+  // Partner-skill effects, for the production purposes.
+  Fishing_ItemAddDrop: 'Fishing drops',
+  Fishing_EnemyAddDrop: 'Fished-pal drops',
+  Fishing_GoodTalentPalProbability: 'Talented catches',
+  Fishing_StartProgressAdd: 'Catch head start',
+  Fishing_SuccessAmountUp: 'Catch progress',
+  Fishing_FailedAmountDown: 'Slower gauge loss',
+  FishingSalvage_ItemDrop: 'Salvage drops',
+  FarmCropHarvestNumRate: 'Crop harvest',
+  FarmCropGrowupSpeed: 'Crop growth',
+  ItemCorruptionSpeedRate: 'Spoilage',
 }
 
 /** Types whose value is a count rather than a percentage. */

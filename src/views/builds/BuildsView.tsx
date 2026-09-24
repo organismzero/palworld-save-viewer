@@ -22,6 +22,8 @@ import type { Player, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import {
   BREEDING_WORK,
+  FOOD_WORK,
+  RANCH_WORK,
   MOUNT_KINDS,
   advisePassives,
   bestFighters,
@@ -78,6 +80,7 @@ import {
   WorkSections,
 } from './parts.tsx'
 import { BUILDS_DEFAULTS, buildsCodec, type BuildsParams } from './params.ts'
+import { Cake, CakePicker, Fishing, Food, Ranch } from './ProductionBuilds.tsx'
 
 const GOALS: { id: GoalId; label: string; hint: string }[] = [
   {
@@ -88,7 +91,33 @@ const GOALS: { id: GoalId; label: string; hint: string }[] = [
   { id: 'work', label: 'Work base', hint: 'The best pals for chosen jobs' },
   { id: 'fight', label: 'Fight a pal', hint: 'A party for a boss or alpha' },
   { id: 'travel', label: 'Travel', hint: 'The fastest mounts' },
+  {
+    id: 'fishing',
+    label: 'Fishing & salvaging',
+    hint: 'Partners that land more',
+  },
+  {
+    id: 'food',
+    label: 'Food base',
+    hint: 'Crops, ranch food and cooks',
+  },
+  {
+    id: 'cake',
+    label: 'Cake base',
+    hint: 'The best cakes for breeding',
+  },
+  {
+    id: 'ranch',
+    label: 'Ranch base',
+    hint: 'Who drops which materials',
+  },
 ]
+
+/** The purposes carried by partner skills and ranch drops. */
+const PRODUCTION: readonly GoalId[] = ['fishing', 'food', 'cake', 'ranch']
+
+/** The purposes whose jobs can be picked in the rail. */
+const JOB_GOALS: readonly GoalId[] = ['breeding', 'work', 'food', 'ranch']
 
 /** The jobs a work base starts with, before any are picked. */
 const WORK_DEFAULT = ['Mining', 'Deforest']
@@ -129,7 +158,11 @@ export function BuildsView({ index }: { index: SaveIndex }) {
       ? params.work
       : params.goal === 'breeding'
         ? [...BREEDING_WORK]
-        : WORK_DEFAULT
+        : params.goal === 'food'
+          ? [...FOOD_WORK]
+          : params.goal === 'ranch'
+            ? [...RANCH_WORK]
+            : WORK_DEFAULT
 
   const text = speciesText(data)
   const passives = passiveText(data)
@@ -181,12 +214,20 @@ export function BuildsView({ index }: { index: SaveIndex }) {
           ))}
         </div>
 
-        {(params.goal === 'breeding' || params.goal === 'work') && data && (
+        {JOB_GOALS.includes(params.goal) && data && (
           <WorkPicker
             data={data}
             pool={pool}
             selected={work}
             onChange={(next) => patch({ work: next })}
+          />
+        )}
+
+        {params.goal === 'cake' && ctx && (
+          <CakePicker
+            ctx={ctx}
+            selected={params.cake}
+            onPick={(cake) => patch({ cake })}
           />
         )}
       </aside>
@@ -223,6 +264,10 @@ export function BuildsView({ index }: { index: SaveIndex }) {
                 <Missing what="Pick the pal you are fighting on the left — a tower boss, an alpha, anything. What beats it is worked out from its elements." />
               ))}
             {params.goal === 'travel' && <Travel ctx={ctx} />}
+            {params.goal === 'fishing' && <Fishing ctx={ctx} />}
+            {params.goal === 'food' && <Food ctx={ctx} work={work} />}
+            {params.goal === 'cake' && <Cake ctx={ctx} cake={params.cake} />}
+            {params.goal === 'ranch' && <Ranch ctx={ctx} work={work} />}
             <Footnote goal={params.goal} player={player} />
           </div>
         )}
@@ -721,6 +766,21 @@ function Footnote({ goal, player }: { goal: GoalId; player?: Player }) {
           to fight with its own elements. Level, IVs and condensing are in the
           save, but the damage formula is not, so they order your pals rather
           than feed a number.
+        </p>
+      )}
+      {PRODUCTION.includes(goal) && (
+        <p className="mt-2">
+          Partner-skill effects are the data’s own, at the skill’s level 1; a
+          condensed pal’s are higher. What a pal drops at a Ranch is read from
+          its partner-skill description, since the data has no field for it.
+        </p>
+      )}
+      {goal === 'cake' && (
+        <p className="mt-2">
+          The cake recipes are the second thing here not read from the data,
+          which does not carry them: they are typed in from a list, and so is
+          Flour being milled Wheat. Where every ingredient comes from is read
+          from the data.
         </p>
       )}
       <p className="mt-2">
