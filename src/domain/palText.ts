@@ -6,10 +6,10 @@
  * each one showed a different subset with no way to see the rest without
  * clicking through. These build the hover text, once, so every surface agrees.
  *
- * Modelled on `tooltipText` in `components/ItemSlot.tsx`, which is the existing
- * precedent: a `\n`-joined string handed to the native `title` attribute rather
- * than a styled hover card. Same reasoning as there — it is keyboard
- * reachable, never clipped by a scroll container, and free.
+ * This was the pal's native `title` text until hover cards replaced it. It
+ * lives on as the card's plain-text twin — what the trigger is
+ * `aria-describedby` while the card is open (`components/cards/describe.ts`) —
+ * so it is still the screen reader's whole account of a pal.
  *
  * Pure, and takes its lookups as arguments: the app has a designed degraded
  * state where reference data is unavailable and a pal's name is a raw asset id,

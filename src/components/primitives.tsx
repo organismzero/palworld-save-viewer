@@ -12,6 +12,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 
 import { element, passiveTier } from '../lib/color.ts'
+import { useHoverCard, type HoverTrigger } from './cards/hoverCard.ts'
 import { cn } from '../lib/utils.ts'
 import { count } from '../lib/format.ts'
 
@@ -361,10 +362,16 @@ export function Pill({
    * `★2`, `officer`, `inferred` — and the label alone rarely explains it.
    */
   title,
+  trigger,
+  focusable,
 }: {
   children: ReactNode
   tone?: PillTone
   title?: string
+  /** A hover card, from `useHoverCard`. Replaces `title` when given. */
+  trigger?: HoverTrigger
+  /** In the tab order, so a keyboard can reach its hover card. */
+  focusable?: boolean
 }) {
   // 11px, not the 10px the design system's own pill sets: the same package
   // states an 11px floor two pages earlier, and the floor wins.
@@ -379,7 +386,9 @@ export function Pill({
   }
   return (
     <span
-      title={title}
+      {...trigger}
+      title={trigger?.['data-hc'] === undefined ? title : undefined}
+      tabIndex={focusable ? 0 : undefined}
       className={cn(
         'inline-flex max-w-full items-center gap-1 overflow-hidden rounded-control border px-1.5 py-0.5 font-mono text-[11px] leading-none tracking-[0.08em] uppercase',
         tones[tone],
@@ -395,8 +404,30 @@ export function Pill({
 /**
  * A passive skill chip, coloured by its numeric **rank** rather than its name.
  * Ranks run −3…9 in real data; negatives are detrimental traits.
+ *
+ * With an `id` — the raw asset id — it opens the passive's hover card. Leave it
+ * off where the chip is itself inside a card, or sits in a row that already
+ * prints the description.
  */
-export function PassiveChip({ name, rank }: { name: string; rank?: number }) {
+export function PassiveChip({
+  name,
+  rank,
+  id,
+  note,
+  focusable,
+}: {
+  name: string
+  rank?: number
+  id?: string
+  /** A line on the card about this passive in context. */
+  note?: string
+  /**
+   * In the tab order. Only where the chip is not inside something already
+   * focusable: a button inside a button is not a thing.
+   */
+  focusable?: boolean
+}) {
+  const trigger = useHoverCard(id ? { kind: 'passive', id, note } : undefined)
   const tier = passiveTier(rank)
   const tone: Record<typeof tier, PillTone> = {
     detrimental: 'danger',
@@ -408,7 +439,12 @@ export function PassiveChip({ name, rank }: { name: string; rank?: number }) {
     // `title` earns its keep in degraded mode: with no reference data the name
     // is a raw asset id like `ElementResist_Fire_1_PAL`, wider than any card it
     // sits on, so the chip truncates and the tooltip carries the whole thing.
-    <Pill tone={tone[tier]} title={name}>
+    <Pill
+      tone={tone[tier]}
+      title={name}
+      trigger={trigger}
+      focusable={focusable && id !== undefined}
+    >
       {tier === 'detrimental' && <span aria-hidden>▾</span>}
       {tier === 'legendary' && <span aria-hidden>▴</span>}
       {name}

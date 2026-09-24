@@ -690,7 +690,12 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
           <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
             {passives.map((p) => (
               <div key={p.asset} className="flex items-center gap-2">
-                <PassiveChip name={p.name} rank={p.rank} />
+                <PassiveChip
+                  id={p.asset}
+                  name={p.name}
+                  rank={p.rank}
+                  focusable
+                />
                 <span className="num ml-auto text-xs text-[var(--color-muted)]">
                   {count(p.count)}
                 </span>

@@ -53,6 +53,7 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
   ElementBadge,
   Panel,
@@ -437,12 +438,14 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-4">
-        <GameIcon
-          path={ctx.text.icon(opponent)}
-          name={opponent}
-          elementName={ctx.text.element(opponent)}
-          size={56}
-        />
+        <CardTrigger card={{ kind: 'species', id: opponent }} focusable>
+          <GameIcon
+            path={ctx.text.icon(opponent)}
+            name={opponent}
+            elementName={ctx.text.element(opponent)}
+            size={56}
+          />
+        </CardTrigger>
         <div>
           <div className="label">fighting</div>
           <div className="text-xl">{ctx.text.name(opponent)}</div>
@@ -657,7 +660,7 @@ function SpeciesRow({
   children?: ReactNode
 }) {
   return (
-    <ListRow>
+    <ListRow card={{ kind: 'species', id }}>
       <GameIcon
         path={ctx.text.icon(id)}
         name={id}
@@ -718,15 +721,21 @@ function Owned({
             className="border-t border-[var(--color-line-faint)] py-2"
           >
             <div className="flex items-center gap-3 text-sm">
-              <GameIcon
-                path={ctx.text.icon(id)}
-                name={id}
-                elementName={ctx.text.element(id)}
-                size={26}
-              />
-              <span className="min-w-0 flex-1 truncate">
-                {palName(r.pal, ctx.data.species[id])}
-              </span>
+              <CardTrigger
+                card={{ kind: 'pal', pal: r.pal }}
+                focusable
+                className="flex min-w-0 flex-1 items-center gap-3"
+              >
+                <GameIcon
+                  path={ctx.text.icon(id)}
+                  name={id}
+                  elementName={ctx.text.element(id)}
+                  size={26}
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {palName(r.pal, ctx.data.species[id])}
+                </span>
+              </CardTrigger>
               <Pill title="Pal level">Lv {r.pal.level}</Pill>
               <Pill title="Where it is now">{WHERE_LABEL[r.where]}</Pill>
             </div>
@@ -742,15 +751,17 @@ function Owned({
                     className={
                       good.has(pid) || bad.has(pid) ? undefined : 'opacity-50'
                     }
-                    title={
-                      good.has(pid)
-                        ? 'Helps here'
-                        : bad.has(pid)
-                          ? 'Works against this'
-                          : 'No effect here'
-                    }
                   >
                     <PassiveChip
+                      id={pid}
+                      focusable
+                      note={
+                        good.has(pid)
+                          ? 'Helps here.'
+                          : bad.has(pid)
+                            ? 'Works against this.'
+                            : 'No effect here.'
+                      }
                       name={ctx.passives.name(pid)}
                       rank={ctx.passives.rank(pid)}
                     />
@@ -823,12 +834,11 @@ function PassiveAdviceBlock({
       <div
         key={s.id}
         className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--color-line-faint)] py-1.5 text-sm"
-        title={[ctx.passives.description(s.id), ctx.passives.origin(s.id)]
-          .filter(Boolean)
-          .join('\n\n')}
       >
         <span className="w-44 shrink-0">
           <PassiveChip
+            id={s.id}
+            focusable
             name={ctx.passives.name(s.id)}
             rank={ctx.passives.rank(s.id)}
           />
@@ -987,6 +997,7 @@ function OpponentPicker({
             key={r.id}
             selected={r.id === selected}
             onClick={() => onPick(r.id)}
+            card={{ kind: 'species', id: r.id }}
           >
             <GameIcon
               path={text.icon(r.id)}

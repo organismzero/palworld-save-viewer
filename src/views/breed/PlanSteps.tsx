@@ -21,6 +21,7 @@ import type {
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import { palName } from '../../domain/palText.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
   IVBar,
   Panel,
@@ -114,7 +115,11 @@ function StepRow({
           owner={owner}
         />
         <span className="shrink-0 text-[var(--color-muted)]">→</span>
-        <span className="flex shrink-0 items-center gap-2">
+        <CardTrigger
+          card={{ kind: 'species', id: step.species }}
+          focusable
+          className="flex shrink-0 items-center gap-2"
+        >
           <GameIcon
             path={text.icon(step.species)}
             name={step.species}
@@ -122,10 +127,12 @@ function StepRow({
             size={24}
           />
           <span className="text-sm">{text.name(step.species)}</span>
-        </span>
+        </CardTrigger>
         {step.carries?.map((id) => (
           <PassiveChip
             key={id}
+            id={id}
+            focusable
             name={passives.name(id)}
             rank={passives.rank(id)}
           />
@@ -210,7 +217,13 @@ function Progress({
   if (!at) return null
 
   const short = (id: string) => (
-    <PassiveChip key={id} name={passives.name(id)} rank={passives.rank(id)} />
+    <PassiveChip
+      key={id}
+      id={id}
+      focusable
+      name={passives.name(id)}
+      rank={passives.rank(id)}
+    />
   )
   const name = (id: string) => passives.name(id)
   const lacks = (step.carries ?? []).filter((id) => !at.has.includes(id))
@@ -336,13 +349,19 @@ function ParentChip({
   if (node.kind === 'bred') {
     return (
       <span className="flex min-w-0 items-center gap-1.5">
-        <GameIcon
-          path={text.icon(node.species)}
-          name={node.species}
-          elementName={text.element(node.species)}
-          size={22}
-        />
-        <span className="truncate text-sm">{text.name(node.species)}</span>
+        <CardTrigger
+          card={{ kind: 'species', id: node.species }}
+          focusable
+          className="flex min-w-0 items-center gap-1.5"
+        >
+          <GameIcon
+            path={text.icon(node.species)}
+            name={node.species}
+            elementName={text.element(node.species)}
+            size={22}
+          />
+          <span className="truncate text-sm">{text.name(node.species)}</span>
+        </CardTrigger>
         <Pill tone="signal">from {node.step}</Pill>
       </span>
     )
@@ -353,17 +372,29 @@ function ParentChip({
 
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      <GameIcon
-        path={text.icon(node.species)}
-        name={node.species}
-        elementName={text.element(node.species)}
-        size={22}
-      />
-      <span className="truncate text-sm">
-        {pick
-          ? palName(pick, { name: text.name(node.species) })
-          : text.name(node.species)}
-      </span>
+      {/* The pal to fetch when there is one, so its level, rolls and other
+          passives are a hover away; otherwise just the species. */}
+      <CardTrigger
+        card={
+          pick
+            ? { kind: 'pal', pal: pick }
+            : { kind: 'species', id: node.species }
+        }
+        focusable
+        className="flex min-w-0 items-center gap-1.5"
+      >
+        <GameIcon
+          path={text.icon(node.species)}
+          name={node.species}
+          elementName={text.element(node.species)}
+          size={22}
+        />
+        <span className="truncate text-sm">
+          {pick
+            ? palName(pick, { name: text.name(node.species) })
+            : text.name(node.species)}
+        </span>
+      </CardTrigger>
       {node.gender && (
         <Pill title="Which side of this pair it has to be">
           {node.gender === 'Male' ? '♂' : '♀'}
@@ -402,6 +433,8 @@ function ParentChip({
       {node.carries?.map((id) => (
         <PassiveChip
           key={id}
+          id={id}
+          focusable
           name={passives.name(id)}
           rank={passives.rank(id)}
         />
@@ -437,13 +470,18 @@ function TreeNode({
     <div style={{ paddingLeft: depth === 0 ? 0 : 18 }}>
       <div className="flex items-center gap-2 py-0.5 whitespace-nowrap">
         {depth > 0 && <span className="num text-[var(--color-muted)]">└</span>}
-        <GameIcon
-          path={text.icon(node.species)}
-          name={node.species}
-          elementName={text.element(node.species)}
-          size={20}
-        />
-        <span className="text-xs">{text.name(node.species)}</span>
+        <CardTrigger
+          card={{ kind: 'species', id: node.species }}
+          className="flex items-center gap-2"
+        >
+          <GameIcon
+            path={text.icon(node.species)}
+            name={node.species}
+            elementName={text.element(node.species)}
+            size={20}
+          />
+          <span className="text-xs">{text.name(node.species)}</span>
+        </CardTrigger>
         {node.kind === 'owned' ? (
           <Pill tone="good">owned</Pill>
         ) : (

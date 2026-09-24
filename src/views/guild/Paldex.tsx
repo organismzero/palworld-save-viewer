@@ -2,7 +2,8 @@
  * The paldex grid. Its data comes from `paldex.ts`; this is presentation only.
  */
 
-import type { PaldexView } from './paldex.ts'
+import type { PaldexCell, PaldexView } from './paldex.ts'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { Pill } from '../../components/primitives.tsx'
 import { count, percent } from '../../lib/format.ts'
@@ -49,11 +50,10 @@ export function PaldexGrid({ view }: { view: PaldexView }) {
 
       <div className="grid grid-cols-6 gap-1">
         {view.cells.map((c) => (
-          <div
+          <CardTrigger
             key={c.id}
-            title={`${c.name}${c.owned ? ` · ${c.owned} owned` : ''}${
-              c.caught ? '' : ' · not caught'
-            }`}
+            as="div"
+            card={{ kind: 'species', id: c.id, note: cellNote(c) }}
             className={cn(
               'relative flex aspect-square items-center justify-center rounded-slot border',
               c.caught
@@ -74,9 +74,19 @@ export function PaldexGrid({ view }: { view: PaldexView }) {
                 ▲
               </span>
             )}
-          </div>
+          </CardTrigger>
         ))}
       </div>
     </>
   )
+}
+
+/** What this player has of the species, for the top of its card. */
+function cellNote(c: PaldexCell): string {
+  const parts = [
+    c.caught ? (c.owned ? `${count(c.owned)} owned` : 'Caught') : 'Not caught',
+    c.alpha && 'holds an alpha',
+    c.lucky && 'holds a lucky one',
+  ]
+  return parts.filter(Boolean).join(' · ')
 }

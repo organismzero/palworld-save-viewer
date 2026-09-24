@@ -17,6 +17,7 @@
 
 import { deleteDB, type IDBPDatabase } from 'idb'
 
+import { partnerSkillText } from './gameText.ts'
 import {
   ASSETS_STORE,
   LEGACY_DB_NAME,
@@ -32,7 +33,8 @@ const PST_REF = 'main'
 /** Bumped when a projection changes; invalidates every cached entry. */
 // 6: passive descriptions arrive with their {EffectValueN} placeholders filled.
 // 8: species stats and mount kind, passive effects, active skills — for Builds.
-const SLIM_VERSION = 8
+// 9: partner-skill and active-skill descriptions, element icons — for hover cards.
+const SLIM_VERSION = 9
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -67,6 +69,11 @@ export interface SpeciesInfo {
   /** Work suitability levels above zero, keyed by work id. */
   work?: Record<string, number>
   partnerSkill?: string
+  /**
+   * What the partner skill does, with its values filled in. Absent when the
+   * text has a placeholder the data cannot fill — see `gameText.ts`.
+   */
+  partnerSkillText?: string
   /** Base stats, as the game's own table states them. */
   stats?: SpeciesStats
   /** What riding it (or carrying it) does for getting around, if anything. */
@@ -175,6 +182,13 @@ export interface ActiveSkillInfo {
   power: number
   /** Seconds. */
   cooldown: number
+  description?: string
+}
+
+/** An element's art, keyed in `Refdata.elements` by its internal name. */
+export interface ElementInfo {
+  /** The small round icon the game sets beside a name. */
+  icon?: string
 }
 
 export interface WorkType {
@@ -273,9 +287,19 @@ export interface Refdata {
   breeding: BreedingData
   /** Active skills, keyed by lowercased asset id — the tail of `EPalWazaID::…`. */
   skills: Record<string, ActiveSkillInfo>
+  /** Keyed by internal element name, lowercased: `leaf`, `electricity`. */
+  elements: Record<string, ElementInfo>
 }
 
-function slimCharacters(raw: any): Record<string, SpeciesInfo> {
+/**
+ * `skills` is here for the partner-skill text, whose placeholders name passives
+ * by asset id — including internal ones `slimPassives` rightly throws away.
+ */
+function slimCharacters(raw: any, skills: any): Record<string, SpeciesInfo> {
+  const effects = new Map<string, Record<string, unknown>>()
+  for (const p of skills?.passives ?? []) {
+    if (typeof p?.asset === 'string') effects.set(p.asset, p)
+  }
   const out: Record<string, SpeciesInfo> = {}
   for (const p of raw?.pals ?? []) {
     if (typeof p?.asset !== 'string') continue
@@ -297,6 +321,12 @@ function slimCharacters(raw: any): Record<string, SpeciesInfo> {
       icon: p.icon,
       work,
       partnerSkill: p.partner_skill,
+      partnerSkillText: partnerSkillText(
+        p.description,
+        p.passives,
+        p.reference_passives,
+        (asset) => effects.get(asset),
+      ),
       stats: slimStats(p.stats),
       mount: mountKind(p.description),
     }
@@ -396,6 +426,10 @@ function slimSkills(raw: any): Record<string, ActiveSkillInfo> {
       element: enumTail(k.element),
       power: k.power,
       cooldown: typeof k.cooldown === 'number' ? k.cooldown : 0,
+      description:
+        typeof k.description === 'string' && k.description.trim()
+          ? k.description.replace(/\r\n?/g, '\n').trim()
+          : undefined,
     }
   }
   return out
@@ -498,6 +532,19 @@ function resolveEffects(p: any): string | undefined {
   // A leftover brace means a token shape this has never seen.
   if (unresolved || filled.includes('{')) return undefined
   return ALREADY_NEGATIVE.test(filled) ? undefined : filled
+}
+
+/**
+ * Element art only: names and colours stay hardcoded in `lib/color.ts`, for the
+ * reasons given there.
+ */
+function slimElements(raw: any): Record<string, ElementInfo> {
+  const out: Record<string, ElementInfo> = {}
+  for (const e of raw?.elements ?? []) {
+    if (typeof e?.name !== 'string') continue
+    out[e.name.toLowerCase()] = { icon: e.icons?.small }
+  }
+  return out
 }
 
 function slimWork(raw: any): WorkType[] {
@@ -693,7 +740,7 @@ async function fetchAndSlim(): Promise<Refdata> {
         .catch(() => undefined),
     ])
   return {
-    species: slimCharacters(characters),
+    species: slimCharacters(characters, skills),
     passives: withImplants(slimPassives(skills), items),
     work: slimWork(work),
     landmarks: slimLandmarks(travel),
@@ -702,6 +749,7 @@ async function fetchAndSlim(): Promise<Refdata> {
     expTable: slimExpTable(exp),
     breeding: slimBreeding(breeding),
     skills: slimSkills(skills),
+    elements: slimElements(skills),
   }
 }
 

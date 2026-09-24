@@ -80,7 +80,12 @@ export function PassivePicker({
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (
             <span key={id} className="flex items-center gap-1">
-              <PassiveChip name={text.name(id)} rank={text.rank(id)} />
+              <PassiveChip
+                id={id}
+                name={text.name(id)}
+                rank={text.rank(id)}
+                focusable
+              />
               <IconButton
                 label={`Stop targeting ${text.name(id)}`}
                 size={18}

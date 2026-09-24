@@ -57,6 +57,7 @@ import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
 import { AboutDialog, ShortcutsDialog } from './Dialogs.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
+import { HoverCardLayer } from '../components/cards/HoverCardLayer.tsx'
 
 const VIEWS = [
   { id: 'map', label: 'Map' },
@@ -415,6 +416,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
       {drop.over && <DropOverlay />}
 
       <CommandPalette index={index} />
+      <HoverCardLayer index={index} />
       <AboutDialog />
       <ShortcutsDialog />
     </div>

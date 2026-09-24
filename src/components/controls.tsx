@@ -24,6 +24,7 @@ import {
 } from 'react'
 
 import { KeyHint } from './primitives.tsx'
+import { useHoverCard, type CardDescriptor } from './cards/hoverCard.ts'
 import { cn, tabId } from '../lib/utils.ts'
 
 /* -------------------------------------------------------------------------
@@ -330,15 +331,20 @@ export function ListRow({
   selected,
   onClick,
   title,
+  card,
   className,
   children,
 }: {
   selected?: boolean
   onClick?: () => void
   title?: string
+  /** A hover card for the thing this row stands for. Replaces `title`. */
+  card?: CardDescriptor
   className?: string
   children?: ReactNode
 }) {
+  const trigger = useHoverCard(card)
+  if (card) title = undefined
   const shared = cn(
     'flex min-h-[var(--row-height)] w-full items-center gap-3 border-t border-[var(--color-line-faint)] px-3 text-left text-sm transition-colors',
     selected
@@ -349,13 +355,14 @@ export function ListRow({
 
   if (!onClick) {
     return (
-      <div title={title} className={shared}>
+      <div {...trigger} title={title} className={shared}>
         {children}
       </div>
     )
   }
   return (
     <button
+      {...trigger}
       type="button"
       onClick={onClick}
       title={title}

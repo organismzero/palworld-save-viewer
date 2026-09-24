@@ -6,14 +6,11 @@ import type { Pal, SaveIndex } from '../../domain/types.ts'
 import { ELEMENTS, element } from '../../lib/color.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
-import {
-  CONDENSER_RANK_HELP,
-  palName,
-  palTooltip,
-} from '../../domain/palText.ts'
+import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { useHoverCard } from '../../components/cards/hoverCard.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import { useViewParams } from '../../app/viewParams.ts'
 import {
@@ -418,12 +415,13 @@ function PalCard({
 
   const name = palName(pal, info)
   const species = info?.name ?? pal.characterId
+  const hover = useHoverCard({ kind: 'pal', pal })
 
   return (
     <button
       type="button"
       onClick={() => onSelect(pal)}
-      title={palTooltip(pal, info, (a) => data?.passives[a.toLowerCase()])}
+      {...hover}
       style={{
         height: CARD_HEIGHT - 12,
         // A faint element wash from the corner is what makes a wall of a
@@ -481,6 +479,7 @@ function PalCard({
           {pal.passives.slice(0, 2).map((asset) => (
             <PassiveChip
               key={asset}
+              id={asset}
               name={data?.passives[asset.toLowerCase()]?.name ?? asset}
               rank={data?.passives[asset.toLowerCase()]?.rank}
             />
@@ -643,7 +642,12 @@ function PalDetail({
               const p = data?.passives[asset.toLowerCase()]
               return (
                 <li key={asset}>
-                  <PassiveChip name={p?.name ?? asset} rank={p?.rank} />
+                  <PassiveChip
+                    id={asset}
+                    name={p?.name ?? asset}
+                    rank={p?.rank}
+                    focusable
+                  />
                   {p?.description && (
                     <p className="mt-1 text-xs text-[var(--color-muted)]">
                       {p.description}

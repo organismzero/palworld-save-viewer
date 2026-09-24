@@ -165,6 +165,7 @@ const DATA = {
     },
     aqua: { name: 'Aqua Gun', element: 'Water', power: 40, cooldown: 4 },
   },
+  elements: {},
 } satisfies Refdata
 
 const INPUT: GoalInput = { work: [], opponentElements: [], attackElements: [] }

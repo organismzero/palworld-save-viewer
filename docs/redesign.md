@@ -8,7 +8,7 @@ The UI kit only renders over HTTP — it fetches its `.jsx` files with XHR, whic
 
 **What changes:** every surface treatment. Colour, type, spacing, edges, depth, motion, and the shape of the header, rails and drawers.
 
-**What does not change:** the information architecture, the six views and their panes, the domain vocabulary, the copy, the data rules, the store, the worker, the virtualiser, and anything under `src/parse/`. No new dependencies.
+**What does not change:** the information architecture, the six views and their panes, the domain vocabulary, the copy, the data rules, the store, the worker, the virtualiser, and anything under `src/parse/`. No new dependencies — with one later exception: `@floating-ui/react-dom` (~3 KB gzipped) positions the hover cards in `src/components/cards/`. Placing a card that must flip and shift around the viewport edges, follow its anchor through scrolling and resizing, and do so for a virtual anchor at the pointer is the part of a tooltip worth not hand-rolling. Only the positioning core is used; the interaction layer is the app's own (`hoverCard.ts`), because one shared card serves every trigger and nothing in it is interactive.
 
 ## Decisions
 

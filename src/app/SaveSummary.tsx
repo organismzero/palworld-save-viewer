@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
 import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
-import { palTooltip } from '../domain/palText.ts'
+import { CardTrigger } from '../components/cards/CardTrigger.tsx'
 import {
   bytes,
   count,
@@ -393,12 +393,16 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               .slice(0, 10)
               .map((p) => [
                 // No refdata in this view by design — it reports what the save
-                // says, raw ids and all. `palTooltip` degrades to exactly that.
-                <span title={palTooltip(p)} className="flex items-center gap-2">
+                // says, raw ids and all, and a `raw` card does the same.
+                <CardTrigger
+                  card={{ kind: 'pal', pal: p, raw: true }}
+                  focusable
+                  className="flex items-center gap-2"
+                >
                   <MonogramTile name={p.characterId} size={26} />
                   {p.isBoss && <Pill tone="danger">alpha</Pill>}
                   {p.characterId}
-                </span>,
+                </CardTrigger>,
                 p.nickname ?? '—',
                 p.level,
                 <span className="flex items-center gap-2">

@@ -38,6 +38,7 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
   Field,
   Panel,
@@ -338,12 +339,14 @@ function PlanPane({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="flex items-start gap-4">
-        <GameIcon
-          path={text.icon(plan.target)}
-          name={plan.target}
-          elementName={text.element(plan.target)}
-          size={56}
-        />
+        <CardTrigger card={{ kind: 'species', id: plan.target }} focusable>
+          <GameIcon
+            path={text.icon(plan.target)}
+            name={plan.target}
+            elementName={text.element(plan.target)}
+            size={56}
+          />
+        </CardTrigger>
         <div className="min-w-0">
           <h2 className="text-2xl leading-tight">{text.name(plan.target)}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -984,6 +987,7 @@ function SpeciesList({
           key={r.id}
           selected={r.id === selected}
           onClick={() => onPick(r.id)}
+          card={{ kind: 'species', id: r.id }}
         >
           <GameIcon
             path={text.icon(r.id)}
