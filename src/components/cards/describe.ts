@@ -147,6 +147,8 @@ export function describeCard(
         s.locked && 'locked',
       ])
     }
+    case 'text':
+      return join([desc.title, desc.sub])
   }
 }
 

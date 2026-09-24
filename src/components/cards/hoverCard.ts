@@ -57,6 +57,8 @@ export type CardDescriptor =
   | { kind: 'base'; id: Guid }
   /** A map object, by instance id. */
   | { kind: 'structure'; id: Guid }
+  /** Anything with no card of its own: a map pin, a landmark, a dungeon. */
+  | { kind: 'text'; title: string; sub?: string }
 
 interface Box {
   current: CardDescriptor | undefined
@@ -68,6 +70,11 @@ export interface HoverCardState {
   open: boolean
   desc?: CardDescriptor
   anchor?: Element
+  /**
+   * Placed at the pointer rather than beside an element — the map, where the
+   * thing hovered is a marker on a canvas and has no element to anchor to.
+   */
+  atPointer?: boolean
   /**
    * Where along a wide trigger the pointer entered, from its left edge. A card
    * beside a full-width row has nowhere to go but on top of the page; one
@@ -170,7 +177,13 @@ function show(el: Element, byFocus: boolean) {
     !byFocus && rect.width > WIDE
       ? Math.max(0, Math.min(rect.width, lastX - rect.left))
       : undefined
-  useHoverCardStore.setState({ open: true, desc, anchor: el, pointerX })
+  useHoverCardStore.setState({
+    open: true,
+    desc,
+    anchor: el,
+    pointerX,
+    atPointer: false,
+  })
 }
 
 /** Gives the anchor back its own `aria-describedby`. */
@@ -181,6 +194,66 @@ function release() {
   else current.removeAttribute('aria-describedby')
   priorDescribedBy = null
   current = undefined
+}
+
+/* -------------------------------------------------------------------------
+   Pointer-anchored cards, for the map
+   ------------------------------------------------------------------------- */
+
+const point = { x: 0, y: 0 }
+let pointerKey: string | undefined
+let reposition: (() => void) | undefined
+
+/** Where a pointer-anchored card is pinned. Read by the layer. */
+export function pointerPoint(): { x: number; y: number } {
+  return point
+}
+
+/** The layer hands over its reposition function; the map calls it per move. */
+export function setPointerReposition(fn: (() => void) | undefined) {
+  reposition = fn
+}
+
+/**
+ * Shows `desc` at a screen point, for things drawn on a canvas.
+ *
+ * Called on every pointermove over the map, so the common case — the same
+ * marker still under the pointer — only moves the anchor and asks the layer to
+ * re-place the card, without touching the store or re-rendering anything.
+ * `key` identifies the thing hovered; a new key swaps the card.
+ */
+export function showCardAt(
+  x: number,
+  y: number,
+  desc: CardDescriptor,
+  key: string,
+) {
+  point.x = x
+  point.y = y
+  const state = useHoverCardStore.getState()
+  if (state.open && state.atPointer && key === pointerKey) {
+    reposition?.()
+    return
+  }
+  clearTimers()
+  release()
+  pointerKey = key
+  const twin = document.getElementById(DESCRIPTION_ID)
+  if (twin && describe) twin.textContent = describe(desc)
+  useHoverCardStore.setState({
+    open: true,
+    desc,
+    anchor: undefined,
+    pointerX: undefined,
+    atPointer: true,
+  })
+}
+
+/** Hides a pointer-anchored card, and leaves an element-anchored one alone. */
+export function hideCardAt() {
+  if (!useHoverCardStore.getState().atPointer) return
+  pointerKey = undefined
+  hideHoverCard()
 }
 
 /** Closes whatever card is open. Safe to call when none is. */
@@ -194,6 +267,7 @@ export function hideHoverCard() {
     desc: undefined,
     anchor: undefined,
     pointerX: undefined,
+    atPointer: false,
   })
 }
 

@@ -16,11 +16,14 @@ import {
   DESCRIPTION_ID,
   hideHoverCard,
   installHoverCards,
+  pointerPoint,
+  setPointerReposition,
   useHoverCardStore,
   type CardDescriptor,
 } from './hoverCard.ts'
 import { PalCard } from './PalCard.tsx'
 import { BaseCard, StructureCard } from './BaseCards.tsx'
+import { CardFrame } from './CardFrame.tsx'
 import { ElementCard } from './ElementCard.tsx'
 import { ItemCard } from './ItemCard.tsx'
 import { SkillCard } from './SkillCard.tsx'
@@ -48,7 +51,7 @@ const HAS_POPOVER =
  * click, so it can overlap the neighbouring cells without taking their hover.
  */
 export function HoverCardLayer({ index }: { index: SaveIndex }) {
-  const { open, desc, anchor, pointerX } = useHoverCardStore()
+  const { open, desc, anchor, pointerX, atPointer } = useHoverCardStore()
   const data = useRefdataStore((s) => s.data)
   const popover = useRef<HTMLDivElement | null>(null)
 
@@ -70,7 +73,17 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
 
   // A wide trigger is narrowed to a zero-width strip at the pointer, still
   // tracking the element itself so scrolling and resizing move it.
+  // A map marker has no element at all: a zero-size point at the pointer,
+  // re-read on every placement so moving it needs no re-render.
   const reference = useMemo((): Element | VirtualElement | null => {
+    if (atPointer) {
+      return {
+        getBoundingClientRect() {
+          const { x, y } = pointerPoint()
+          return DOMRect.fromRect({ x, y, width: 0, height: 0 })
+        },
+      }
+    }
     if (!anchor) return null
     if (pointerX === undefined) return anchor
     return {
@@ -81,9 +94,9 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
         return DOMRect.fromRect({ x, y: r.top, width: 0, height: r.height })
       },
     }
-  }, [anchor, pointerX])
+  }, [anchor, pointerX, atPointer])
 
-  const { refs, floatingStyles, isPositioned } = useFloating({
+  const { refs, floatingStyles, isPositioned, update } = useFloating({
     open,
     strategy: 'fixed',
     // Placed with top/left, leaving `transform` free for the entrance
@@ -93,7 +106,8 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
     placement: 'right-start',
     elements: { reference },
     middleware: [
-      offset(8),
+      // Clear of the cursor when pinned to it, rather than under its tip.
+      offset(atPointer ? 16 : 8),
       // Sideways only. Running off the bottom is `shift`'s to fix by sliding
       // the card up; letting `flip` answer it throws the card above the
       // trigger, over whatever the user was reading.
@@ -122,6 +136,11 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
         }
       }),
   })
+
+  useEffect(() => {
+    setPointerReposition(update)
+    return () => setPointerReposition(undefined)
+  }, [update])
 
   // Shown again on every open, not just toggled: the top layer stacks by the
   // order of showing, so a dialog opened since the last card would otherwise
@@ -197,6 +216,8 @@ function Body({ desc, index }: { desc: CardDescriptor; index: SaveIndex }) {
       return <WorkCard id={desc.id} data={data} index={index} />
     case 'base':
       return <BaseCard id={desc.id} data={data} index={index} />
+    case 'text':
+      return <CardFrame title={desc.title} sub={desc.sub} />
     case 'structure':
       return <StructureCard id={desc.id} data={data} index={index} />
     case 'item':

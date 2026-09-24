@@ -26,6 +26,11 @@ import { cn } from '../../lib/utils.ts'
 import { count } from '../../lib/format.ts'
 import { downloadBlob, exportName } from '../../lib/export.ts'
 import { useFilePicker } from '../../app/filePicker.tsx'
+import {
+  hideCardAt,
+  showCardAt,
+  type CardDescriptor,
+} from '../../components/cards/hoverCard.ts'
 
 /**
  * Legend order — what a reader looks for, densest-signal first. Distinct from
@@ -69,9 +74,6 @@ export function MapView({ index }: { index: SaveIndex }) {
   const controllerRef = useRef<MapController>(null)
   const { data, tiles, status, bakeLabel, ensure } = useRefdataStore()
 
-  const [hover, setHover] = useState<
-    { e: MapEntity; x: number; y: number } | undefined
-  >()
   const [selected, setSelected] = useState<MapEntity | undefined>()
   const [cursor, setCursor] = useState<{ mx: number; my: number }>()
   const [visible, setVisible] =
@@ -105,7 +107,12 @@ export function MapView({ index }: { index: SaveIndex }) {
       index,
       refdata: data,
       tiles,
-      onHover: (e, at) => setHover(e ? { e, x: at.x, y: at.y } : undefined),
+      // Straight to the hover-card layer, not through React state: this fires
+      // on every pointermove over the canvas.
+      onHover: (e, at) => {
+        if (e) showCardAt(at.x, at.y, cardFor(e, index), `${e.kind}:${e.id}`)
+        else hideCardAt()
+      },
       onSelect: setSelected,
       onView: () => {},
     })
@@ -250,6 +257,10 @@ export function MapView({ index }: { index: SaveIndex }) {
         onPointerMove={(e) =>
           setCursor(controllerRef.current?.screenToMap(e.clientX, e.clientY))
         }
+        // The map moves under a still pointer on zoom, and a card left behind
+        // would be describing whatever used to be there.
+        onWheel={hideCardAt}
+        onPointerLeave={hideCardAt}
       />
 
       {status === 'loading' && (
@@ -437,21 +448,6 @@ export function MapView({ index }: { index: SaveIndex }) {
         </PromptBar>
       </div>
 
-      {/* Hover tooltip */}
-      {hover && (
-        <div
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+12px)]"
-          style={{ left: hover.x, top: hover.y }}
-        >
-          <Panel className="px-2.5 py-1.5">
-            <div className="text-xs whitespace-nowrap">{hover.e.label}</div>
-            {hover.e.sub && (
-              <div className="label whitespace-nowrap">{hover.e.sub}</div>
-            )}
-          </Panel>
-        </div>
-      )}
-
       {/* Selection detail */}
       {selected && (
         <div className="absolute right-3 bottom-9 w-72">
@@ -533,4 +529,30 @@ function LocalDataPrompt() {
       {picker.input}
     </>
   )
+}
+
+/**
+ * The hover card for a map marker.
+ *
+ * Pals, players, bases and structures resolve to their own cards through the
+ * index; pins, landmarks and dungeons have no index entry and keep the label
+ * the marker already carries.
+ */
+function cardFor(e: MapEntity, index: SaveIndex): CardDescriptor {
+  switch (e.kind) {
+    case 'pals': {
+      const pal = index.palById.get(e.id)
+      if (pal) return { kind: 'pal', pal }
+      break
+    }
+    case 'players':
+      return { kind: 'player', uid: e.id }
+    case 'bases':
+      return { kind: 'base', id: e.id }
+    case 'structuresBuilt':
+    case 'structuresWorld':
+    case 'chests':
+      return { kind: 'structure', id: e.id }
+  }
+  return { kind: 'text', title: e.label, sub: e.sub }
 }

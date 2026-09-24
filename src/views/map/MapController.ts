@@ -528,7 +528,10 @@ export class MapController {
         {
           kind,
           id: s.instanceId,
-          label: s.mapObjectId,
+          // The asset id only when there is no reference data to name it.
+          label:
+            refdata?.structures[s.mapObjectId.toLowerCase()]?.name ??
+            s.mapObjectId,
           sub:
             [
               stacks !== undefined ? `${stacks} stacks` : undefined,
