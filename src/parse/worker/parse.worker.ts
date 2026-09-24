@@ -3,9 +3,9 @@
  *
  * ## Why the raw tree stays here
  *
- * A real `Level.json` is ~74 MB of text that parses to roughly 170 MB of live
- * objects — and a `.sav` reaches the same place via 13.8 MB of decompressed
- * GVAS. That whole tree is retained in this module's `raw` binding and
+ * A `Level.sav` decompresses to tens of megabytes of GVAS — 55 MB for the
+ * current reference world — and reads into a live object tree several times
+ * that size. That whole tree is retained in this module's `raw` binding and
  * **never** posted to the main thread — what crosses is the ~1.8 MB slim
  * payload from `buildIndexes`. Keeping the heavy object graph off the main
  * thread's heap is the entire point of the architecture, so resist any change
@@ -15,13 +15,8 @@
  * pull a subtree on demand; it serialises to a string before sending, which
  * deliberately breaks the reference.
  *
- * ## Why there is no streaming parser
- *
- * Measured in a real browser: `TextDecoder` over 74 MB takes ~180 ms and
- * `JSON.parse` ~105 ms. Under 300 ms end to end does not justify a streaming
- * parser, and one would make the readers far messier. Progress reporting for
- * that phase is therefore honest-but-indeterminate — you cannot get progress
- * out of `JSON.parse`.
+ * Everything `.sav`-specific — including the GPL Oodle WASM — arrives through
+ * a dynamic import (`savTree`), so the main bundle never carries it.
  */
 
 import { buildIndexes, mergePlayerDetails, type Phase } from './buildIndexes.ts'
@@ -57,57 +52,17 @@ function subtree(path: string[]): unknown {
   return node ?? null
 }
 
-function handleParseJson(id: number, buf: ArrayBuffer) {
-  const timings: Record<string, number> = {}
-  let phase: Phase = 'decode'
-
-  try {
-    let t = performance.now()
-    progress('decode', 'Decoding file')
-    const text = new TextDecoder().decode(buf)
-    timings.decode = performance.now() - t
-
-    phase = 'json'
-    t = performance.now()
-    progress('json', `Parsing ${(buf.byteLength / 1e6).toFixed(0)} MB of JSON`)
-    raw = JSON.parse(text)
-    timings.json = performance.now() - t
-
-    t = performance.now()
-    // A new level means a different world. Stale player details would
-    // mis-attribute containers against ids that no longer mean anything.
-    details.clear()
-    payload = buildIndexes(raw, {
-      source: 'json',
-      onPhase: (p, label) => {
-        phase = p
-        progress(p, label)
-      },
-    })
-    carriedWarnings = payload.stats.warnings
-    timings.index = performance.now() - t
-
-    post({ t: 'result', id, payload, timings })
-  } catch (err) {
-    raw = null
-    payload = null
-    details.clear()
-    post({
-      t: 'error',
-      id,
-      phase,
-      message: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-    })
-  }
+/** Decompresses a raw save and reads it into the GVAS tree the readers take. */
+async function savTree(buf: ArrayBuffer): Promise<unknown> {
+  const { decodeSav } = await import('../sav/decode.ts')
+  const { readGvas } = await import('../sav/gvas.ts')
+  const result = await decodeSav(buf)
+  if (!result.ok) throw new Error(result.message)
+  return readGvas(result.gvas)
 }
 
 /**
  * Reads a batch of player saves onto the world already loaded.
- *
- * Shared by the JSON and `.sav` paths, which differ only in how they get from
- * bytes to a tree. They were two near-identical loops until this was factored
- * out, which is exactly how both came to be missing the same check.
  *
  * **A save whose player is not in this world is refused, not merged.** Files
  * arrive one gesture at a time now, so a save from a different world is a real
@@ -121,7 +76,6 @@ function handleParseJson(id: number, buf: ArrayBuffer) {
 async function readPlayerBatch(
   files: { fileName: string; buf: ArrayBuffer }[],
   world: SlimPayload,
-  toTree: (buf: ArrayBuffer) => unknown | Promise<unknown>,
 ): Promise<{ reports: PlayerFileReport[]; warn: Warnings }> {
   const warn = new Warnings()
   const reports: PlayerFileReport[] = []
@@ -129,7 +83,7 @@ async function readPlayerBatch(
   progress('players', `Reading ${files.length} player saves`)
   for (const { fileName, buf } of files) {
     try {
-      const detail = readPlayerSave(await toTree(buf), fileName, warn)
+      const detail = readPlayerSave(await savTree(buf), fileName, warn)
       if (!playerBelongs(world.players, detail.playerUid)) {
         reports.push({
           fileName,
@@ -154,44 +108,11 @@ async function readPlayerBatch(
   return { reports, warn }
 }
 
-async function handleParsePlayerJson(
-  id: number,
-  files: { fileName: string; buf: ArrayBuffer }[],
-) {
-  if (!payload) {
-    post({
-      t: 'error',
-      id,
-      phase: 'players',
-      message: 'Load a Level.json before adding player saves.',
-    })
-    return
-  }
-
-  const { reports, warn } = await readPlayerBatch(files, payload, (buf) =>
-    JSON.parse(new TextDecoder().decode(buf)),
-  )
-
-  progress('merge', 'Re-deriving ownership')
-  mergePlayerDetails(
-    payload,
-    [...details.values()],
-    [...carriedWarnings, ...warn.list()],
-  )
-
-  post({ t: 'playersResult', id, payload, reports })
-}
-
 /**
- * The `.sav` path.
+ * A world: decompress, read the GVAS archive into a tree, index it.
  *
- * Identical to the JSON path after the first two steps: decompress, read the
- * GVAS archive into the same tree `JSON.parse` would have produced, then hand
- * it to the very same `buildIndexes`. That the two converge on one indexer is
- * what makes them verifiable against each other.
- *
- * Everything `.sav`-specific — including the GPL Oodle WASM — arrives through
- * a dynamic import, so a user who only ever drops JSON never downloads it.
+ * Inlined rather than going through `savTree` so each step gets its own
+ * progress label and timing.
  */
 async function handleParseSav(id: number, buf: ArrayBuffer) {
   const timings: Record<string, number> = {}
@@ -219,7 +140,6 @@ async function handleParseSav(id: number, buf: ArrayBuffer) {
     t = performance.now()
     details.clear()
     payload = buildIndexes(raw, {
-      source: 'sav',
       onPhase: (p, label) => {
         phase = p
         progress(p, label)
@@ -257,18 +177,7 @@ async function handleParsePlayerSav(
     return
   }
 
-  const { decodeSav } = await import('../sav/decode.ts')
-  const { readGvas } = await import('../sav/gvas.ts')
-
-  const { reports, warn } = await readPlayerBatch(
-    files,
-    payload,
-    async (buf) => {
-      const result = await decodeSav(buf)
-      if (!result.ok) throw new Error(result.message)
-      return readGvas(result.gvas)
-    },
-  )
+  const { reports, warn } = await readPlayerBatch(files, payload)
 
   progress('merge', 'Re-deriving ownership')
   mergePlayerDetails(
@@ -280,7 +189,7 @@ async function handleParsePlayerSav(
 }
 
 /**
- * The client's `LocalData`, in either format.
+ * The client's `LocalData`.
  *
  * Stateless, unlike every other handler here: nothing about this file feeds
  * `buildIndexes` or ownership, so there is nothing to retain and re-merge. It
@@ -301,16 +210,7 @@ async function handleParseLocal(
 
   try {
     progress('decode', 'Reading client data')
-    let tree: unknown
-    if (isJsonName(fileName)) {
-      tree = JSON.parse(new TextDecoder().decode(buf))
-    } else {
-      const { decodeSav } = await import('../sav/decode.ts')
-      const { readGvas } = await import('../sav/gvas.ts')
-      const result = await decodeSav(buf)
-      if (!result.ok) throw new Error(result.message)
-      tree = readGvas(result.gvas)
-    }
+    const tree = await savTree(buf)
 
     const local = readLocalData(tree, fileName, warn)
     post(
@@ -346,16 +246,7 @@ async function handleParseLevelMeta(
 
   try {
     progress('decode', 'Reading world metadata')
-    let tree: unknown
-    if (isJsonName(fileName)) {
-      tree = JSON.parse(new TextDecoder().decode(buf))
-    } else {
-      const { decodeSav } = await import('../sav/decode.ts')
-      const { readGvas } = await import('../sav/gvas.ts')
-      const result = await decodeSav(buf)
-      if (!result.ok) throw new Error(result.message)
-      tree = readGvas(result.gvas)
-    }
+    const tree = await savTree(buf)
 
     post({
       t: 'levelMetaResult',
@@ -376,21 +267,9 @@ async function handleParseLevelMeta(
   }
 }
 
-function isJsonName(fileName: string): boolean {
-  return fileName.toLowerCase().endsWith('.json')
-}
-
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data
   switch (msg.t) {
-    case 'parseJson':
-      handleParseJson(msg.id, msg.buf)
-      break
-
-    case 'parsePlayerJson':
-      void handleParsePlayerJson(msg.id, msg.files)
-      break
-
     case 'parseSav':
       void handleParseSav(msg.id, msg.buf)
       break

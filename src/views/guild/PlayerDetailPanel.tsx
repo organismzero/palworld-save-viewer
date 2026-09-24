@@ -2,7 +2,7 @@
  * One player, in depth.
  *
  * The interesting design problem here is what to do about the half of a
- * player's data that `Level.json` simply does not contain. Their inventory,
+ * player's data that `Level.sav` simply does not contain. Their inventory,
  * true position and paldex progress live in `Players/<uid>.sav`, which is a
  * separate file. Rendering an empty inventory would be a lie; hiding the
  * section would hide the fact that there is more to see. So the gap is shown

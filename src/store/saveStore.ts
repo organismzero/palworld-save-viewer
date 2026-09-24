@@ -79,8 +79,11 @@ export interface SaveState {
 
   /** Ingestion ledger, keyed by file name. Drives the player-saves panel. */
   playerFiles: Record<string, PlayerFileState>
-  /** Held until a Level.json arrives, then drained automatically. */
-  pendingPlayerFiles: File[]
+  /**
+   * Player saves dropped before any world, held until a level arrives and then
+   * read with it — dropping the `Players/` folder first is a natural order.
+   */
+  pendingPlayerFiles: Sniffed[]
   /** Same, for `LocalData` — reading it needs a world to attribute it to. */
   pendingLocalFile?: File
   /**
@@ -187,8 +190,7 @@ function ledgerFrom(
 /**
  * Folds the worker's per-file verdicts back into the ledger.
  *
- * Shared by the JSON and `.sav` player paths, which report identically. `bytes`
- * comes from whatever row is already there — the worker is handed buffers and
+ * `bytes` comes from whatever row is already there — the worker is handed buffers and
  * never learns a file's size — and `kind` is asserted rather than carried,
  * because a report only comes back for a file that was sent to a player reader.
  */
@@ -215,7 +217,7 @@ function mergeReports(
 function slotOf(kind: Sniffed['kind']): PlayerFileState['kind'] {
   if (kind === 'local') return 'local'
   if (kind === 'levelmeta') return 'levelmeta'
-  if (kind === 'player' || kind === 'sav') return 'player'
+  if (kind === 'sav') return 'player'
   return undefined
 }
 
@@ -243,46 +245,6 @@ async function adoptIfRestored(): Promise<void> {
   adoptedFor = s.index
 }
 
-async function parsePlayers(files: File[]) {
-  if (files.length === 0) return
-  await adoptIfRestored()
-
-  useSaveStore.setState((s) => ({
-    playerFiles: {
-      ...s.playerFiles,
-      ...Object.fromEntries(
-        files.map((f) => [
-          f.name,
-          {
-            fileName: f.name,
-            bytes: f.size,
-            status: 'parsing' as const,
-            kind: 'player' as const,
-          },
-        ]),
-      ),
-    },
-  }))
-
-  const bufs = await Promise.all(
-    files.map(async (f) => ({ fileName: f.name, buf: await f.arrayBuffer() })),
-  )
-
-  const msg = await request(
-    { t: 'parsePlayerJson', files: bufs },
-    bufs.map((b) => b.buf),
-  )
-  if (msg.t !== 'playersResult') return
-
-  useSaveStore.setState((s) => ({
-    index: buildSaveIndex(msg.payload),
-    playerFiles: {
-      ...s.playerFiles,
-      ...mergeReports(msg.reports, s.playerFiles),
-    },
-  }))
-}
-
 /**
  * Ingests raw `.sav` files.
  *
@@ -291,7 +253,7 @@ async function parsePlayers(files: File[]) {
  * renaming it should still work. The level is simply the largest — a world is
  * orders of magnitude bigger than any player file.
  */
-async function acceptSavs(savs: Sniffed[], set: Setter) {
+async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
   // Player files are named after their UID; a level save is not. Size cannot
   // do this job — a compressed level save is under a megabyte, smaller than
   // any cap that would still admit a real player file.
@@ -301,7 +263,14 @@ async function acceptSavs(savs: Sniffed[], set: Setter) {
   const sorted = unnamed.length > 0 ? unnamed : [...savs]
   sorted.sort((a, b) => b.file.size - a.file.size)
   const level = sorted[0]!
-  const players = [...sorted.slice(1), ...(unnamed.length > 0 ? named : [])]
+  const dropped = [...sorted.slice(1), ...(unnamed.length > 0 ? named : [])]
+  // Held from an earlier gesture, for this level — see `pendingPlayerFiles`.
+  // Read before the reset below, which empties the list.
+  const droppedNames = new Set(dropped.map((p) => p.file.name))
+  const players = [
+    ...get().pendingPlayerFiles.filter((p) => !droppedNames.has(p.file.name)),
+    ...dropped,
+  ]
 
   set({
     status: 'loading',
@@ -309,9 +278,8 @@ async function acceptSavs(savs: Sniffed[], set: Setter) {
     fileBytes: level.file.size,
     error: undefined,
     index: undefined,
-    // Same reasoning as the JSON path in `ingestWorld`, and missing here until
-    // now: a different world means different exploration, so the previous
-    // world's fog would be drawn over terrain it never described.
+    // A different world means different exploration, so the previous world's
+    // fog would be drawn over terrain it never described.
     levelMeta: undefined,
     localData: undefined,
     restoredFrom: undefined,
@@ -615,160 +583,82 @@ export const useSaveStore = create<SaveState>((set, get) => ({
  * path this takes and whichever of its many exits it leaves by.
  */
 async function ingestWorld(
-  { level, players, rejected, ignored, savs, local, levelMeta }: Partitioned,
+  { rejected, ignored, savs, local, levelMeta }: Partitioned,
   set: Setter,
   get: () => SaveState,
 ) {
-  // Raw saves are only used when no converted JSON came with them: a folder
-  // drop contains both, and the JSON is cheaper to read and is what the
-  // golden tests are written against.
-  if (!level && players.length === 0 && savs.length > 0) {
-    // Player `.sav` files dropped onto a world already open are an addition,
-    // not a replacement. Without this they fell through to "treat the
-    // largest as the level", which threw away the loaded save and reported
-    // the player file as a malformed level.
+  if (savs.length > 0) {
     const named = savs.filter((s) => s.filenameUid !== undefined)
-    if (get().index && named.length === savs.length) {
+    if (named.length !== savs.length) {
+      await acceptSavs(savs, set, get)
+    } else if (get().index) {
+      // Player saves dropped onto a world already open are an addition, not a
+      // replacement. Without this they fell through to "treat the largest as
+      // the level", which threw away the loaded save and reported the player
+      // file as a malformed level.
       await parsePlayerSavs(named, set)
-      return
-    }
-    await acceptSavs(savs, set)
-    return
-  }
-
-  if (!level && players.length === 0) {
-    // A `LocalData` or a `LevelMeta` on its own is a complete, sensible drop —
-    // the caller reads both after this — so neither may be reported as nothing.
-    // Without `levelMeta` here, adding world metadata to an open world planted
-    // "Nothing here looks like a Palworld save" in the store while succeeding,
-    // and dropping it *first* showed that message on the landing screen.
-    if (local || levelMeta) return
-
-    /**
-     * A mis-drop onto an open world must never cost the user that world.
-     *
-     * This branch used to set `status: 'error'` unconditionally, which was
-     * survivable while the only drop target was the landing screen — there was
-     * nothing to lose. Now that every gesture is an incremental one it was
-     * actively destructive: dropping a stray `notes.txt` onto a loaded save
-     * replaced the entire app with "Could not read that file", with the parsed
-     * index still sitting in the store and no way back to it. Caught by the
-     * last step of this feature's own walkthrough.
-     *
-     * So with a world open the rejection is *reported*, in the ledger the Files
-     * panel already reads, and nothing else changes. `error` is for the landing
-     * screen, where a message is the only feedback there is.
-     */
-    if (get().index) {
+    } else {
+      // With no world yet they are held, not rejected — the user very
+      // reasonably may drop the folder first — and read when a level arrives.
       set((s) => ({
-        playerFiles: {
-          ...s.playerFiles,
-          ...ledgerFrom(rejected, 'rejected'),
-          // A `*_dps.sav` is normally kept silent — see `Partitioned.ignored` —
-          // but if it is all that arrived, silence is indistinguishable from the
-          // app having missed the drop.
-          ...(rejected.length === 0 ? ledgerFrom(ignored, 'rejected') : {}),
-        },
+        pendingPlayerFiles: [...s.pendingPlayerFiles, ...named],
+        playerFiles: { ...s.playerFiles, ...ledgerFrom(named, 'queued') },
       }))
-      return
     }
-
-    // Nothing usable and nothing loaded, so an ignored file is worth explaining
-    // after all: a drop that produces no visible change at all reads as a bug.
-    const unusable = rejected[0] ?? ignored[0]
-    set({
-      status: unusable ? 'error' : get().status,
-      error:
-        unusable?.reason ??
-        'Nothing here looks like a Palworld save. Drop a converted Level.json.',
-    })
+    // Anything refused alongside — typically old converter `.json` left in the
+    // same folder — is listed rather than dropped without a word. After the
+    // load, not before: a new world starts a new ledger.
+    if (rejected.length > 0) {
+      set((s) => ({
+        playerFiles: { ...s.playerFiles, ...ledgerFrom(rejected, 'rejected') },
+      }))
+    }
     return
   }
 
-  set((s) => ({
-    playerFiles: { ...s.playerFiles, ...ledgerFrom(rejected, 'rejected') },
-  }))
-
-  // Players dropped with no level loaded are held, not rejected — the user
-  // very reasonably may drop the folder first.
-  if (!level && !get().index) {
-    set((s) => ({
-      pendingPlayerFiles: [
-        ...s.pendingPlayerFiles,
-        ...players.map((p) => p.file),
-      ],
-      playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'queued') },
-    }))
-    return
-  }
+  // A `LocalData` or a `LevelMeta` on its own is a complete, sensible drop —
+  // the caller reads both after this — so neither may be reported as nothing.
+  // Without `levelMeta` here, adding world metadata to an open world planted
+  // "Nothing here looks like a Palworld save" in the store while succeeding,
+  // and dropping it *first* showed that message on the landing screen.
+  if (local || levelMeta) return
 
   /**
-   * Read before the reset below, not after.
+   * A mis-drop onto an open world must never cost the user that world.
    *
-   * Files held from an earlier gesture are for *this* level — that is the whole
-   * point of holding them — but the reset that starts a new world cleared
-   * `pendingPlayerFiles` first and the drain at the bottom of this function then
-   * read the emptied list. So "drop your Players folder, then the level", the
-   * exact flow the hold exists for, silently parsed nothing and left every row
-   * queued forever.
+   * This branch used to set `status: 'error'` unconditionally, which was
+   * survivable while the only drop target was the landing screen — there was
+   * nothing to lose. Now that every gesture is an incremental one it was
+   * actively destructive: dropping a stray `notes.txt` onto a loaded save
+   * replaced the entire app with "Could not read that file", with the parsed
+   * index still sitting in the store and no way back to it. Caught by the
+   * last step of this feature's own walkthrough.
+   *
+   * So with a world open the rejection is *reported*, in the ledger the Files
+   * panel already reads, and nothing else changes. `error` is for the landing
+   * screen, where a message is the only feedback there is.
    */
-  const held = get().pendingPlayerFiles
-  const heldNames = new Set(held.map((f) => f.name))
-
-  if (level) {
+  if (get().index) {
     set((s) => ({
-      status: 'loading' as const,
-      fileName: level.file.name,
-      fileBytes: level.file.size,
-      error: undefined,
-      index: undefined,
-      // A different world means different exploration; the fog from the last
-      // one would be drawn over terrain it never described.
-      levelMeta: undefined,
-      localData: undefined,
-      // This one is being parsed, whatever the last one was.
-      restoredFrom: undefined,
-      // A new world gets a new ledger, except for the rows it is about to
-      // parse: those files were dropped for this level.
       playerFiles: {
-        ...Object.fromEntries(
-          Object.entries(s.playerFiles).filter(([name]) => heldNames.has(name)),
-        ),
-        ...ledgerFrom(players, 'queued'),
+        ...s.playerFiles,
+        ...ledgerFrom(rejected, 'rejected'),
+        // A `*_dps.sav` is normally kept silent — see `Partitioned.ignored` —
+        // but if it is all that arrived, silence is indistinguishable from the
+        // app having missed the drop.
+        ...(rejected.length === 0 ? ledgerFrom(ignored, 'rejected') : {}),
       },
-      pendingPlayerFiles: [],
-      phase: 'decode' as const,
-      progressLabel: 'Reading file',
     }))
-
-    try {
-      const buf = await level.file.arrayBuffer()
-      const msg = await request({ t: 'parseJson', buf }, [buf])
-      if (msg.t !== 'result') return
-      set({
-        status: 'ready',
-        index: buildSaveIndex(msg.payload),
-        timings: msg.timings,
-        phase: 'done',
-        progressLabel: undefined,
-      })
-    } catch (err) {
-      // The worker's message is accurate but often unactionable; this turns
-      // it into something the user can do something about.
-      const { message } = explainParseError(err, level.file.name)
-      set({ status: 'error', error: message, progressLabel: undefined })
-      return
-    }
+    return
   }
 
-  // Anything held from an earlier gesture goes in with this batch.
-  const batch = [...held, ...players.map((p) => p.file)]
-  if (batch.length > 0) {
-    set({ pendingPlayerFiles: [] })
-    try {
-      await parsePlayers(batch)
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) })
-    }
-  }
+  // Nothing usable and nothing loaded, so an ignored file is worth explaining
+  // after all: a drop that produces no visible change at all reads as a bug.
+  const unusable = rejected[0] ?? ignored[0]
+  set({
+    status: unusable ? 'error' : get().status,
+    error:
+      unusable?.reason ??
+      'Nothing here looks like a Palworld save. Drop the world’s Level.sav.',
+  })
 }

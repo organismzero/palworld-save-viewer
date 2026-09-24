@@ -68,10 +68,10 @@ inferred to exact, positions become real rather than last-jump estimates, and
 paldex progress, technology points and true last-online times appear. Without
 it the app says so rather than guessing silently.
 
-JSON converted by
+Raw `.sav` files are all it reads. JSON converted by
 [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools)
-works too, and the two paths produce the same result — a golden test asserts
-that entity for entity against a real world.
+used to work too; it is no longer accepted, because the raw save is read
+directly and the conversion step only cost time.
 
 | Key                       | What it does                       |
 | ------------------------- | ---------------------------------- |
@@ -163,13 +163,13 @@ clean-room Kraken decompressor.
 
 Every save in the reference set is `PlM`, including per-player files. An 861 KB
 `Level.sav` decompresses to 13.8 MB of GVAS in about 25 ms, and the binary
-reader in `src/parse/sav/` turns that into exactly the tree a converted `.json`
-parses to. Both paths then run the same indexer, which is what makes them
-checkable against each other rather than merely similar.
+reader in `src/parse/sav/` turns that into a tree shaped exactly like
+PalworldSaveTools' JSON export — the shape the readers and the committed test
+fixtures are written against.
 
 `ooz-wasm` is GPL-3.0-or-later, which is why this project is too — see
-[Licence](#licence). Both it and the GVAS reader are dynamically imported, so a
-session that only opens `.json` never downloads either.
+[Licence](#licence). Both it and the GVAS reader are dynamically imported, so
+the drop zone and landing screen never pay for them.
 
 Two lookup tables — struct type hints and map-object model classes — are
 generated from a PalworldSaveTools checkout by `pnpm gen:sav-tables`. They
@@ -257,8 +257,8 @@ real data, put a save there:
 
 ```
 data/Level.sav     # the raw save — read directly
-data/Level.json    # the same world converted, so the two paths can be compared
-data/Players/      # per-player saves, either extension
+data/LevelMeta.sav # the world's name and in-game day
+data/Players/      # per-player saves, <uid>.sav
 data/LocalData.sav # your client's own file: fog of war, map pins, progress
 ```
 
@@ -268,9 +268,10 @@ the server, so it will not be in a server save folder. On Windows look under
 name, and one world's copy makes no sense against another's, so it is dropped
 separately and merges onto whatever world is already open.
 
-Only `Level.sav` is needed to use the app. The converted `.json` is what lets
-the cross-check in `savPipeline.golden.test.ts` work, so keep both if you
-intend to change anything under `src/parse/sav/`.
+Only `Level.sav` is needed to use the app, and `LocalData.sav` only ever adds
+to what the others show — no view depends on it. The golden tests read every
+one of these files that is present and skip the rest. `pnpm fixture` rebuilds
+the committed, redacted `test/fixtures/level.mini.json` from `data/Level.sav`.
 
 ### Configuration
 

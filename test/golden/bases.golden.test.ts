@@ -6,11 +6,9 @@
  * signal that a Palworld update changed the format, and a fuzzy assertion
  * would swallow it.
  *
- * Self-skips without `data/Level.json`, so CI stays green.
+ * Self-skips without `data/Level.sav`, so CI stays green.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
@@ -23,41 +21,39 @@ import {
   storageTotals,
 } from '@/domain/bases.ts'
 import type { SaveIndex, Structure } from '@/domain/types.ts'
-
-const LEVEL_JSON = resolve(process.cwd(), 'data/Level.json')
-const hasSave = existsSync(LEVEL_JSON)
+import { hasLevel as hasSave, levelTree } from './load.ts'
 
 /** Measured from the reference save. */
 const EXPECTED = {
-  bases: 2,
+  bases: 4,
   /** Structures per base, largest first. */
-  baseStructures: [265, 130],
+  baseStructures: [1372, 853, 828, 397],
   /** Chests inside a base camp, and out in the world. */
-  baseChests: 98,
-  worldChests: 868,
-  containers: 1317,
-  orphans: 351,
-  /** How the 351 orphans break down after inference. */
-  orphanPal: 262,
-  orphanGuild: 1,
+  baseChests: 157,
+  worldChests: 4220,
+  containers: 4599,
+  orphans: 222,
+  /** How the 222 orphans break down after inference. */
+  orphanPal: 132,
+  orphanGuild: 2,
   orphanUnknown: 88,
   /** Distinct item ids anywhere in the save. */
-  distinctItems: 333,
+  distinctItems: 761,
   /**
    * Objects carrying a `PasswordLock` module, against those actually locked.
-   * The gap is the whole point: reading `lock_state` as a boolean would mark
-   * 38 of the 42 as locked, which is why the reader tests the password.
+   * The gap is the whole point: carrying the module is not the same as being
+   * locked, which is why the reader tests the password rather than the
+   * module's presence or its `lock_state` flag.
    */
-  withLockModule: 42,
+  withLockModule: 82,
   locked: 5,
 } as const
 
 describe.skipIf(!hasSave)('golden: bases and inventories', () => {
   let index: SaveIndex
 
-  beforeAll(() => {
-    const raw = JSON.parse(readFileSync(LEVEL_JSON, 'utf8'))
-    index = buildSaveIndex(buildIndexes(raw, { source: 'json' }))
+  beforeAll(async () => {
+    index = buildSaveIndex(buildIndexes(await levelTree()))
   })
 
   const nameOfStructure = (s: Structure) => s.mapObjectId
@@ -107,7 +103,7 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
     expect(by('unknown')).toBe(EXPECTED.orphanUnknown)
     expect(by('pal') + by('guild') + by('unknown')).toBe(EXPECTED.orphans)
 
-    // Every one of them must render with a label — including the 88 that
+    // Every one of them must render with a label — including the ones that
     // nothing claims, which the explorer shows rather than hides.
     for (const c of orphans) {
       const where = containerLocation(index, c, nameOfStructure, nameOfBase)
@@ -130,9 +126,9 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
       (s) => s.buildPlayerUid !== undefined && s.isBuilt,
     )
 
-    expect(withBuilder).toHaveLength(396)
-    expect(inBase).toHaveLength(395)
-    expect(both).toHaveLength(392)
+    expect(withBuilder).toHaveLength(3429)
+    expect(inBase).toHaveLength(3450)
+    expect(both).toHaveLength(3426)
 
     // The whole point: neither is a subset of the other.
     expect(withBuilder.length).not.toBe(both.length)
@@ -154,16 +150,16 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
     const containers = index.structures.filter((s) => s.containerId)
     const built = containers.filter((s) => s.buildPlayerUid !== undefined)
 
-    expect(containers).toHaveLength(966)
-    // ~90% of containers are world loot. If player-built chests were left in
+    expect(containers).toHaveLength(4377)
+    // ~97% of containers are world loot. If player-built chests were left in
     // the chest layer, turning chests off would hide your own storage too.
-    expect(built).toHaveLength(95)
+    expect(built).toHaveLength(133)
     expect(built.length / containers.length).toBeLessThan(0.2)
   })
 
-  it('marks only genuinely password-locked structures as locked', () => {
+  it('marks only genuinely password-locked structures as locked', async () => {
     // Counted from the raw tree, so this fails if the module ever moves.
-    const raw = JSON.parse(readFileSync(LEVEL_JSON, 'utf8'))
+    const raw = await levelTree()
     const objects =
       raw.properties.worldSaveData.value.MapObjectSaveData.value.values
     let withModule = 0
@@ -187,7 +183,7 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
   it('finds every stack of a known item, wherever it is', () => {
     expect(index.containersByItem.size).toBe(EXPECTED.distinctItems)
 
-    // Brute force over all 1,317 containers, as the ground truth the inverted
+    // Brute force over every container, as the ground truth the inverted
     // index has to match.
     for (const staticId of ['Wood', 'Stone', 'PalSphere']) {
       let expectedTotal = 0

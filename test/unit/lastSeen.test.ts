@@ -14,7 +14,6 @@ import type {
 
 const UPTIME = 5_946_807_290_000
 const meta: SaveMeta = {
-  source: 'json',
   worldUptimeTicks: UPTIME,
   savedAtTicks: 639_214_026_450_400_000,
 }

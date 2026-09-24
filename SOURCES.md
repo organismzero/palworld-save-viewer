@@ -30,12 +30,12 @@ _compressor_.
 
 `src/parse/sav/` reads the container header, decompresses all three formats
 (`PlM` via `ooz-wasm`, `PlZ` and `CNK` via the browser's own
-`DecompressionStream`), and parses the GVAS archive into the same tree that a
-converted `.json` produces. `test/golden/savPipeline.golden.test.ts` asserts
-both paths yield an identical `SaveIndex` from the same world.
+`DecompressionStream`), and parses the GVAS archive into a tree shaped like
+PalworldSaveTools' JSON export, which is what the readers are written against.
+The app once accepted that JSON too; it now reads raw saves only.
 
-The Oodle WASM and the GVAS reader are dynamically imported, so a session that
-only ever opens `.json` never downloads either.
+The Oodle WASM and the GVAS reader are dynamically imported, so the landing
+screen never downloads either.
 
 ## Game data and art
 
@@ -147,8 +147,7 @@ belonged to the design this one replaced.
 
 ## Privacy
 
-Save files — raw `.sav` and converted `.json` alike — are decompressed and
-parsed entirely in a Web Worker on your own machine, and are never uploaded
+Save files are decompressed and parsed entirely in a Web Worker on your own machine, and are never uploaded
 anywhere. There is no server, no account, no analytics and no telemetry.
 
 The only network requests the app makes are for the game reference data and art

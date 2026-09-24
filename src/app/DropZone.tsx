@@ -63,7 +63,6 @@ export function DropZone() {
           Drop <span className="num">Level.sav</span> here
         </div>
         <div className="mt-1 text-sm text-[var(--color-muted)]">
-          Raw saves and converted <span className="num">.json</span> both work.
           Add your <span className="num">Players</span> folder too for exact
           inventories, real positions and paldex progress
         </div>
@@ -95,20 +94,9 @@ export function DropZone() {
           </p>
           <p>
             Drop <span className="num">Level.sav</span> straight in — it is
-            decompressed and read here, in your browser. A typical world is{' '}
-            {bytes(861_000)} compressed and takes well under a second.
-          </p>
-          <p>
-            JSON exported by{' '}
-            <a
-              className="text-[var(--color-signal)] underline"
-              href="https://github.com/deafdudecomputers/PalworldSaveTools"
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              PalworldSaveTools
-            </a>{' '}
-            works too, and both produce identical results.
+            decompressed and read here, in your browser, with no conversion
+            step. A large, well-built world is around {bytes(3_300_000)}{' '}
+            compressed and reads in a second or two.
           </p>
         </div>
       </details>

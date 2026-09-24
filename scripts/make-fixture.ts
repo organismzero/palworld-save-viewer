@@ -1,5 +1,5 @@
 /**
- * Generates `test/fixtures/level.mini.json` from a real `data/Level.json`.
+ * Generates `test/fixtures/level.mini.json` from a real `data/Level.sav`.
  *
  *     pnpm fixture
  *
@@ -23,7 +23,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-const SOURCE = resolve(process.cwd(), 'data/Level.json')
+import { gvasReplacer, readSavFile } from './readSav.ts'
+
+const SOURCE = resolve(process.cwd(), 'data/Level.sav')
 const OUT = resolve(process.cwd(), 'test/fixtures/level.mini.json')
 
 const GUID_RE =
@@ -326,17 +328,22 @@ function verifyRedaction(output: string, source: string): void {
    Main
    ------------------------------------------------------------------------- */
 
-function main() {
+async function main() {
   if (!existsSync(SOURCE)) {
     console.error(
       `No save at ${SOURCE}.\n` +
-        'Drop a converted Level.json into data/ first — see the README.',
+        'Copy a world’s Level.sav into data/ first — see the README.',
     )
     process.exit(1)
   }
 
   console.log(`reading ${SOURCE} …`)
-  const raw = JSON.parse(readFileSync(SOURCE, 'utf8'))
+  // Round-tripped through text on the way in, so the tree is plain JSON data —
+  // byte blobs as `{"~b": base64}`, as the committed fixture has always held
+  // them — before anything walks it. The same text is what the redaction is
+  // verified against.
+  const sourceText = JSON.stringify(await readSavFile(SOURCE), gvasReplacer)
+  const raw = JSON.parse(sourceText)
   const wsd = raw?.properties?.worldSaveData?.value
   if (!wsd) {
     console.error('properties.worldSaveData is missing — is this a Level save?')
@@ -348,7 +355,20 @@ function main() {
   const pals = pickPals(characters)
   const keptCharacters = [...players, ...pals]
 
-  const mapObjects = pickMapObjects(wsd.MapObjectSaveData?.value?.values ?? [])
+  const bases = (wsd.BaseCampSaveData?.value ?? []).slice(0, 1)
+  const keptBaseIds = new Set<string>(
+    bases.map((b: any) => b?.value?.RawData?.value?.id).filter(Boolean),
+  )
+
+  // Only objects in the base this fixture keeps, or in none. A world with
+  // several bases otherwise hands the picker structures from bases that are
+  // not retained, and each one is a dangling reference in the fixture.
+  const mapObjects = pickMapObjects(
+    (wsd.MapObjectSaveData?.value?.values ?? []).filter((o: any) => {
+      const base = o?.Model?.value?.RawData?.value?.base_camp_id_belong_to
+      return !base || base === ZERO || keptBaseIds.has(base)
+    }),
+  )
 
   // Keep containers the retained entities actually reference, so the fixture's
   // cross-links resolve rather than dangling.
@@ -365,7 +385,6 @@ function main() {
     if (id && id !== ZERO) wantedCharContainers.add(id)
   }
 
-  const bases = (wsd.BaseCampSaveData?.value ?? []).slice(0, 1)
   for (const b of bases) {
     const id = b?.value?.WorkerDirector?.value?.RawData?.value?.container_id
     if (id && id !== ZERO) wantedCharContainers.add(id)
@@ -415,9 +434,6 @@ function main() {
   // base_ids are filtered to the bases actually retained — otherwise the
   // fixture ships a dangling reference, and "parses without warnings" stops
   // being a meaningful assertion.
-  const keptBaseIds = new Set(
-    bases.map((b: any) => b?.value?.RawData?.value?.id).filter(Boolean),
-  )
   const groups = (wsd.GroupSaveDataMap?.value ?? []).map((g: any) => {
     const rd = g?.value?.RawData?.value
     if (!rd) return g
@@ -491,7 +507,7 @@ function main() {
   const redacted = redact(mini)
   const text = JSON.stringify(redacted)
 
-  verifyRedaction(text, readFileSync(SOURCE, 'utf8'))
+  verifyRedaction(text, sourceText)
 
   mkdirSync(dirname(OUT), { recursive: true })
   // Written compact: indentation roughly doubles the committed size, and this
@@ -509,4 +525,4 @@ function main() {
   )
 }
 
-main()
+void main()

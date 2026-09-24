@@ -236,6 +236,34 @@ describe('readPlayerSave', () => {
     })
   })
 
+  it('reads mutation and arena counts, and leaves them absent on older saves', () => {
+    const older = readPlayerSave(playerSave(), 'a.sav', new Warnings())
+    expect(older.record.mutations).toBeUndefined()
+    expect(older.record.arenaSoloClears).toBeUndefined()
+
+    const warn = new Warnings()
+    const raw = playerSave()
+    Object.assign((raw.properties.SaveData.value as any).RecordData.value, {
+      MutationCount: { value: 3, type: 'IntProperty' },
+      ArenaSoloClearCount: {
+        type: 'MapProperty',
+        value: [
+          { key: 'Bronze', value: 1 },
+          { key: 'Silver', value: 2 },
+        ],
+      },
+      AreaBarrierUnlockFlags: {
+        type: 'MapProperty',
+        value: [{ key: 'DAB3A425', value: true }],
+      },
+    })
+    const d = readPlayerSave(raw, 'a.sav', warn)
+    expect(d.record.mutations).toBe(3)
+    expect(d.record.arenaSoloClears).toBe(3)
+    // Known and deliberately unread: no warning.
+    expect(warn.list()).toEqual([])
+  })
+
   it('warns once per unrecognised RecordData field', () => {
     const warn = new Warnings()
     const raw = playerSave()

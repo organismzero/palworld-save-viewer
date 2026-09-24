@@ -7,12 +7,11 @@
  * ## The output shape is not a design choice
  *
  * Everything here produces exactly the object graph that the Python tool emits
- * when it writes `Level.json` — including field names, field order-independence,
- * and the two byte encodings (`{'~b': base64}` for opaque blobs, plain number
- * arrays where the original decoder returned a list). That is deliberate and
- * load-bearing: `buildIndexes` already consumes that shape, so matching it
- * means the `.sav` path and the `.json` path converge on one parser rather than
- * two, and the golden test can assert they produce identical results.
+ * when it converts a save to JSON — including field names, field
+ * order-independence, and plain number arrays where the original decoder
+ * returned a list. That was load-bearing while the app also read those
+ * exports, and it still is: every reader, and the committed test fixtures, are
+ * written against that shape.
  *
  * ## GUIDs
  *
@@ -115,11 +114,11 @@ export class FArchiveReader {
   /**
    * 64-bit integers arrive as `number`.
    *
-   * Lossy above 2^53, and deliberately so: the JSON path is lossy in exactly
-   * the same way, because `JSON.parse` produces doubles. Tick counts (~6.4e17)
-   * are the values this affects, and `domain/types.ts` already documents that
-   * they are safe to display and never safe to compare. Reading them as
-   * `bigint` here would make the two paths disagree.
+   * Lossy above 2^53, and deliberately so. Tick counts (~6.4e17) are the
+   * values this affects, and `domain/types.ts` already documents that they are
+   * safe to display and never safe to compare. Reading them as `bigint` would
+   * put a type through every reader and the structured clone to the main
+   * thread for a precision nothing uses.
    */
   i64(): number {
     const v = this.view.getBigInt64(this.offset, true)
@@ -188,11 +187,10 @@ export class FArchiveReader {
   /**
    * An opaque byte run.
    *
-   * The JSON path renders these as `{'~b': base64}`; this path keeps the bytes.
-   * That is the one place the two representations differ, and it is safe
-   * because **no reader consumes a raw byte blob** — they are trailing padding,
-   * custom-version stamps and unparsed tails. Base64-encoding them would mean
-   * building megabytes of string for data nothing reads.
+   * Kept as bytes. The converter renders these as `{'~b': base64}`, and the
+   * committed fixtures and `scripts/readSav.ts` still write them that way,
+   * which is safe because **no reader consumes a raw byte blob** — they are
+   * trailing padding, custom-version stamps and unparsed tails.
    */
   byteList(n: number): Uint8Array {
     return this.read(n)

@@ -4,13 +4,13 @@
  * Palworld answers that on two incompatible clocks, and conflating them is the
  * trap this module exists to prevent:
  *
- * - **`Level.json`** guild members carry `last_online_real_time`, which sits on
+ * - **`Level.sav`** guild members carry `last_online_real_time`, which sits on
  *   the server's **uptime** counter — `max()` across members equals
  *   `GameTimeSaveData.RealDateTimeTicks` exactly. That counter stops while the
  *   server is down, and the save records no downtime, so it can never be
  *   turned into a wall-clock date. Reconstructing one anyway was measured
  *   **52 hours** off on the reference save.
- * - **`Players/<uid>.json`** carries `LastOnlineDateTime`, genuine absolute
+ * - **`Players/<uid>.sav`** carries `LastOnlineDateTime`, genuine absolute
  *   .NET ticks.
  *
  * The two also disagree on *ordering* by up to 51 minutes, so a single sorted

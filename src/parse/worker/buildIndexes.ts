@@ -11,7 +11,6 @@
 
 import type {
   PlayerDetail,
-  SaveMeta,
   SaveWarning,
   SlimPayload,
 } from '../../domain/types.ts'
@@ -30,8 +29,7 @@ import { readMapObjects } from './readers/mapObjects.ts'
 
 export type Phase =
   | 'decode'
-  | 'json'
-  /** Reading the GVAS binary — the `.sav` path's equivalent of `json`. */
+  /** Reading the decompressed GVAS binary into a tree. */
   | 'gvas'
   | 'characters'
   | 'groups'
@@ -44,11 +42,10 @@ export type Phase =
   | 'done'
 
 export interface BuildOptions {
-  source: SaveMeta['source']
   onPhase?: (phase: Phase, label: string) => void
 }
 
-export function buildIndexes(raw: any, opts: BuildOptions): SlimPayload {
+export function buildIndexes(raw: any, opts: BuildOptions = {}): SlimPayload {
   const warn = new Warnings()
   const phase = (p: Phase, label: string) => opts.onPhase?.(p, label)
 
@@ -102,7 +99,6 @@ export function buildIndexes(raw: any, opts: BuildOptions): SlimPayload {
         wsd.GameTimeSaveData?.value?.RealDateTimeTicks?.value ?? undefined,
       gameTimeTicks:
         wsd.GameTimeSaveData?.value?.GameDateTimeTicks?.value ?? undefined,
-      source: opts.source,
     },
   }
 

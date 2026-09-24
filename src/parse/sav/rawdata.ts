@@ -14,9 +14,8 @@
  * every blob because its job is a lossless round-trip; this project's job is
  * to produce a `SaveIndex`, and blobs nothing reads are left as bytes rather
  * than given hundreds of lines of per-object-type layout code that could only
- * ever be wrong in silence. {@link DECODED_PATHS} is the explicit list, and
- * `test/golden/savPipeline.golden.test.ts` proves the result is identical to
- * the JSON path's.
+ * ever be wrong in silence. {@link DECODED_PATHS} is the explicit list; the
+ * golden tests pin what the readers get out of it against a real world.
  *
  * The notable omissions are the foliage grid, the guild lab and item storage,
  * work assignments, and the per-object-type bodies of concrete models beyond

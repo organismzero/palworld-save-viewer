@@ -48,10 +48,10 @@ There are no component tests (`test/` is domain-only), so `pnpm test` will stay 
 
 ```sh
 pnpm lint && pnpm typecheck && pnpm test    # must pass before each merge
-pnpm dev                                    # then drop test/fixtures/level.mini.json
+pnpm dev                                    # then drop data/Level.sav
 ```
 
-`test/fixtures/level.mini.json` is a redacted, committed Level.json subset, so every view can be driven and screenshotted with no real save present. Compare each screen against its counterpart in `ui_kits/save-viewer/`. Three things to check on every stage: it still renders with reference data unavailable (degraded mode, monogram tiles, raw ids), nothing below 11px crept back in, and — for the stages that add glass over scrolling content — the Pals grid still scrolls smoothly.
+Drive it with a real world from `data/` (gitignored): `Level.sav`, then the `Players/` folder, `LevelMeta.sav` and `LocalData.sav`. The app reads raw saves only, so the committed, redacted `test/fixtures/level.mini.json` is test data for the readers now, not something to drop into the app. Compare each screen against its counterpart in `ui_kits/save-viewer/`. Three things to check on every stage: it still renders with reference data unavailable (degraded mode, monogram tiles, raw ids), nothing below 11px crept back in, and — for the stages that add glass over scrolling content — the Pals grid still scrolls smoothly.
 
 ## The stages
 

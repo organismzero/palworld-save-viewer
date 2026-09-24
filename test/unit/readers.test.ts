@@ -25,7 +25,7 @@ describe('readers over the mini fixture', () => {
 
   beforeAll(() => {
     const raw = JSON.parse(readFileSync(FIXTURE, 'utf8'))
-    payload = buildIndexes(raw, { source: 'json' })
+    payload = buildIndexes(raw)
     index = buildSaveIndex(payload)
   })
 
@@ -155,7 +155,7 @@ describe('warnings across a player-save merge', () => {
    */
   it('does not report a derived warning once per pass', () => {
     const raw = JSON.parse(readFileSync(FIXTURE, 'utf8'))
-    const payload = buildIndexes(raw, { source: 'json' })
+    const payload = buildIndexes(raw)
 
     // The fixture is clean, so plant one of each: a carried derived warning as
     // the level pass would have produced it, and a carried read warning that

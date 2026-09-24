@@ -279,7 +279,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <section className="mb-10">
             <SectionHeading
               title="Progression"
-              hint="from player saves — not present in Level.json"
+              hint="from player saves — not present in Level.sav"
             />
             <Table
               head={[
@@ -293,6 +293,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 'dungeons',
                 'fish',
                 'condensed',
+                'mutated',
+                'arena',
                 'crafted',
                 'recipes',
               ]}
@@ -312,6 +314,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                       (d.record.fixedDungeonsCleared ?? 0),
                     d.record.fishCaught,
                     d.record.palsCondensed,
+                    d.record.mutations ?? '—',
+                    d.record.arenaSoloClears ?? '—',
                     count(d.record.itemsCrafted),
                     d.unlockedRecipes.length,
                   ]

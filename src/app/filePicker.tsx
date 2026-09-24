@@ -18,8 +18,8 @@ import { useRef, type ReactNode } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
 
-/** Everything this app can read, in the order a file dialog should offer it. */
-export const SAVE_ACCEPT = '.sav,.json,application/json'
+/** Everything this app can read: raw Palworld saves, nothing else. */
+export const SAVE_ACCEPT = '.sav'
 
 export interface FilePicker {
   /** Opens the file dialog. */

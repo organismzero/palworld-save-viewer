@@ -13,11 +13,12 @@
  *     pnpm bench:passives path/to/breedingdata.json
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { buildIndexes } from '../src/parse/worker/buildIndexes.ts'
+import { readSavFile } from './readSav.ts'
 import { buildSaveIndex } from '../src/domain/index.ts'
 import {
   buildBreedingTable,
@@ -33,7 +34,7 @@ import { carrierCounts } from '../src/domain/passives.ts'
 import type { BreedingData } from '../src/refdata/refdata.ts'
 import type { Pal, SaveIndex } from '../src/domain/types.ts'
 
-const LEVEL_JSON = resolve(process.cwd(), 'data/Level.json')
+const LEVEL_SAV = resolve(process.cwd(), 'data/Level.sav')
 
 const SOURCES = [
   'https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@main/resources/game_data/breedingdata.json',
@@ -103,16 +104,12 @@ function ms(run: () => void): number {
 }
 
 async function main() {
-  if (!existsSync(LEVEL_JSON)) {
-    console.error('needs data/Level.json — see README')
+  if (!existsSync(LEVEL_SAV)) {
+    console.error('needs data/Level.sav — see README')
     process.exit(1)
   }
 
-  const index = buildSaveIndex(
-    buildIndexes(JSON.parse(readFileSync(LEVEL_JSON, 'utf8')), {
-      source: 'json',
-    }),
-  )
+  const index = buildSaveIndex(buildIndexes(await readSavFile(LEVEL_SAV)))
   const table = buildBreedingTable(slim(await loadBreeding()))
 
   for (const includeGuild of [false, true]) {

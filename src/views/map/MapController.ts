@@ -576,7 +576,7 @@ export class MapController {
           kind: 'players',
           id: p.playerUid,
           label: p.name,
-          // Only a player save records a true position; Level.json's
+          // Only a player save records a true position; Level.sav's
           // LastJumpedLocation is a fallback and worth labelling as such.
           sub: detail ? `Lv ${p.level}` : `Lv ${p.level} · approx.`,
           world: pos!,
