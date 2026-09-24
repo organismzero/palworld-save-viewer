@@ -17,7 +17,10 @@ import type {
   Structure,
 } from '../../domain/types.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
-import { useHoverCard } from '../../components/cards/hoverCard.ts'
+import {
+  useHoverCard,
+  type CardDescriptor,
+} from '../../components/cards/hoverCard.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import {
   CONTAINER_COLUMNS,
@@ -406,6 +409,7 @@ function SourceRail({
                     source.kind === 'base' && source.baseId === base.baseId
                   }
                   title={baseNames.get(base.baseId) ?? 'Base'}
+                  card={{ kind: 'base', id: base.baseId }}
                   lines={[
                     `${count(structures.length)} structures · ${totals.containers} chests`,
                     `${workers} workers · ${compact(totals.items)} items`,
@@ -469,15 +473,22 @@ function RailButton({
   active,
   title,
   lines,
+  card,
   onClick,
 }: {
   active: boolean
   title: string
   lines: string[]
+  card?: CardDescriptor
   onClick: () => void
 }) {
   return (
-    <ListRow selected={active} onClick={onClick} className="items-start py-1.5">
+    <ListRow
+      selected={active}
+      onClick={onClick}
+      card={card}
+      className="items-start py-1.5"
+    >
       <span className="min-w-0 flex-1">
         <span className="block truncate leading-tight">{title}</span>
         {lines.map((l) => (
@@ -750,7 +761,12 @@ function StructureRow({
     : undefined
 
   return (
-    <ListRow selected={selected} onClick={onSelect} className="h-full pl-6">
+    <ListRow
+      selected={selected}
+      onClick={onSelect}
+      card={{ kind: 'structure', id: structure.instanceId }}
+      className="h-full pl-6"
+    >
       <GameIcon path={info?.icon} name={name} size={22} />
       <span className="min-w-0 flex-1">
         <span className="block truncate leading-tight">{name}</span>

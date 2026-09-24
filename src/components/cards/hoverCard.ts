@@ -53,6 +53,10 @@ export type CardDescriptor =
   | { kind: 'element'; name: string }
   /** A work suitability by id, e.g. `EmitFlame`. */
   | { kind: 'work'; id: string }
+  /** A base camp, by `baseId`. */
+  | { kind: 'base'; id: Guid }
+  /** A map object, by instance id. */
+  | { kind: 'structure'; id: Guid }
 
 interface Box {
   current: CardDescriptor | undefined

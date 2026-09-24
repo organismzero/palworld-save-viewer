@@ -14,6 +14,7 @@ import { palTooltip } from '../../domain/palText.ts'
 import { passiveText } from '../../views/breed/passiveText.ts'
 import { itemText } from '../../domain/itemText.ts'
 import { memberRole } from '../../lib/roles.ts'
+import { baseLabel } from '../../domain/bases.ts'
 import type { SaveIndex } from '../../domain/types.ts'
 import type { CardDescriptor } from './hoverCard.ts'
 
@@ -123,6 +124,28 @@ export function describeCard(
         WORK_TYPES.find((w) => w.id === desc.id)?.display ??
         desc.id
       return `${display} work suitability`
+    }
+    case 'base': {
+      const ordinal = index.bases.findIndex((b) => b.baseId === desc.id)
+      const base = index.bases[ordinal]
+      if (!base) return 'Base'
+      const structures = index.structuresByBase.get(base.baseId)?.length ?? 0
+      return join([
+        baseLabel(base, ordinal + 1, data?.landmarks),
+        `${structures} structures`,
+      ])
+    }
+    case 'structure': {
+      const s = index.structureById.get(desc.id)
+      if (!s) return 'Structure'
+      const builder = s.buildPlayerUid
+        ? index.playerByUid.get(s.buildPlayerUid)?.name
+        : undefined
+      return join([
+        data?.structures[s.mapObjectId.toLowerCase()]?.name ?? s.mapObjectId,
+        builder && `built by ${builder}`,
+        s.locked && 'locked',
+      ])
     }
   }
 }
