@@ -20,6 +20,7 @@ import {
 import { useSaveStore, type PlayerFileState } from '../store/saveStore.ts'
 import { Button } from '../components/controls.tsx'
 import { useFilePicker } from './filePicker.tsx'
+import { memberRole } from '../lib/roles.ts'
 import {
   ElementBadge,
   IVBar,
@@ -260,7 +261,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                     {seen?.onlineAtSave && <OnlineDot />}
                     {m.name}
                   </span>,
-                  ROLE_NAMES[m.role ?? 4] ?? '—',
+                  memberRole(guild, m.playerUid).name,
                   detail ? detail.platform : <RawId>—</RawId>,
                   player?.level ?? '—',
                   index.palsByOwner.get(m.playerUid)?.length ?? 0,
@@ -747,13 +748,6 @@ function LastSeenCell({
     )
   }
   return <>—</>
-}
-
-const ROLE_NAMES: Record<number, string> = {
-  1: 'master',
-  2: 'officer',
-  3: 'member',
-  4: '—',
 }
 
 /** Kept for the element pip's import to stay meaningful in future views. */
