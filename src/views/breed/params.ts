@@ -27,8 +27,26 @@ import {
   type ParamCodec,
 } from '../../app/viewParams.ts'
 import type { BreedPair } from '../../domain/breeding.ts'
+import {
+  DEFAULT_PAIR_PURPOSE,
+  PAIR_PURPOSES,
+} from '../../domain/pairOutcomes.ts'
+import type { GoalId } from '../../domain/recommend.ts'
+
+/**
+ * Which question the view is answering: a route to a target, or what two
+ * chosen pals would hatch.
+ */
+export type BreedMode = 'plan' | 'pair'
 
 export interface BreedParams {
+  /** Absent from a link means `plan`, so every link written before pairs still works. */
+  mode: BreedMode
+  /** The two parents in pair mode, by instance id. */
+  pairA?: Guid
+  pairB?: Guid
+  /** What a pair's outcomes are ranked for. */
+  purpose: GoalId
   /** Whose pals to plan from. Absent means "the view's default choice". */
   playerUid?: Guid
   /** Lowercased asset id, unvalidated at decode time. */
@@ -70,6 +88,10 @@ export interface BreedParams {
 }
 
 export const BREED_DEFAULTS: BreedParams = {
+  mode: 'plan',
+  pairA: undefined,
+  pairB: undefined,
+  purpose: DEFAULT_PAIR_PURPOSE,
   playerUid: undefined,
   target: '',
   query: '',
@@ -110,6 +132,14 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
       // Meaningless without something to be exact about, so it does not travel
       // on its own — a bare `pvo=1` in a link would tick a box that does nothing.
       if (v.noSpares && v.passives.length > 0) out.pvo = '1'
+      // The pair travels only in pair mode: a plan link has no use for it, and
+      // carrying it would make two identical plans two different links.
+      if (v.mode === 'pair') {
+        out.m = 'pair'
+        if (v.pairA) out.a = shortId(v.pairA)
+        if (v.pairB) out.b = shortId(v.pairB)
+        if (v.purpose !== DEFAULT_PAIR_PURPOSE) out.for = v.purpose
+      }
       return out
     },
 
@@ -148,11 +178,23 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         // repeat, but the picker renders one chip per entry, so `pv=a,a,a,a`
         // would draw four identical chips on four duplicate React keys and then
         // announce that the four-slot limit had been reached.
-        passives: [...new Set(list(raw, 'pv').map((p) => p.toLowerCase()))].sort(),
+        passives: [
+          ...new Set(list(raw, 'pv').map((p) => p.toLowerCase())),
+        ].sort(),
         noSpares: bool(raw, 'pvo', d.noSpares),
+        mode: raw.get('m') === 'pair' ? 'pair' : d.mode,
+        // Resolved against the save's pals, which exist at decode time — unlike
+        // reference data. An ambiguous or foreign id is no parent, not a guess.
+        pairA: resolveShortId(raw.get('a') ?? undefined, index.palById.keys()),
+        pairB: resolveShortId(raw.get('b') ?? undefined, index.palById.keys()),
+        purpose: purposeOf(raw.get('for')) ?? d.purpose,
       }
     },
   }
+}
+
+function purposeOf(raw: string | null): GoalId | undefined {
+  return PAIR_PURPOSES.find((p) => p.id === raw)?.id
 }
 
 /**

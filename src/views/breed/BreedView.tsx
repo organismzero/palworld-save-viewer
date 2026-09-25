@@ -51,6 +51,7 @@ import {
   Button,
   Checkbox,
   ListRow,
+  SegmentBar,
   SelectControl,
   TextInput,
 } from '../../components/controls.tsx'
@@ -65,7 +66,22 @@ import { usePassiveSearch } from './usePassiveSearch.ts'
 import { passiveText, type PassiveText } from './passiveText.ts'
 import { speciesText, type SpeciesText } from './speciesText.ts'
 import { ownerText, type OwnerText } from './ownerText.ts'
-import { BREED_DEFAULTS, breedCodec, type BreedParams } from './params.ts'
+import {
+  BREED_DEFAULTS,
+  breedCodec,
+  type BreedMode,
+  type BreedParams,
+} from './params.ts'
+import { PairPicker } from './PairPicker.tsx'
+import { PairPane } from './PairPane.tsx'
+
+const MODES: { id: BreedMode; label: string }[] = [
+  { id: 'plan', label: 'Plan a target' },
+  { id: 'pair', label: 'Pick a pair' },
+]
+
+/** Stable, so pair mode hands the passive search the same nothing every render. */
+const NO_PASSIVES: string[] = []
 
 export function BreedView({ index }: { index: SaveIndex }) {
   const { data, status, ensure } = useRefdataStore()
@@ -133,7 +149,9 @@ export function BreedView({ index }: { index: SaveIndex }) {
     ],
   )
   const owner = useMemo(() => ownerText(index, ownerUid), [index, ownerUid])
-  // The expensive one, and the reason for the memo split.
+  const pairMode = params.mode === 'pair'
+  // The expensive one, and the reason for the memo split. Pair mode still pays
+  // for it: the rail's "species reachable" tile is shared by both modes.
   const reach = useMemo(
     () => (table ? reachFrom(stock, table) : undefined),
     [table, stock],
@@ -141,7 +159,25 @@ export function BreedView({ index }: { index: SaveIndex }) {
   // The search is keyed on the stock and the passive set, not on the target, so
   // clicking through the species list still costs only the plan. It runs in a
   // worker because it takes seconds at four passives — see `search.worker.ts`.
-  const search = usePassiveSearch(stock, data?.breeding, params.passives)
+  const search = usePassiveSearch(
+    stock,
+    data?.breeding,
+    pairMode ? NO_PASSIVES : params.passives,
+  )
+
+  // A linked parent that is not in the pool as it stands — another player
+  // picked, a guildmate unpooled — is no parent. Derived rather than cleared, so
+  // pooling them back in brings the pair back.
+  const inStock = (uid: Guid | undefined) => {
+    const pal = uid ? index.palById.get(uid) : undefined
+    const entry = pal && stock.bySpecies.get(pal.characterId.toLowerCase())
+    if (!pal || !entry) return undefined
+    return [...entry.male, ...entry.female, ...entry.unknown].includes(pal)
+      ? pal
+      : undefined
+  }
+  const pairA = inStock(params.pairA)
+  const pairB = inStock(params.pairB)
 
   // Who in this pool carries what, for the picker's marks. Cheap, and needed
   // whether or not a search has finished.
@@ -188,6 +224,13 @@ export function BreedView({ index }: { index: SaveIndex }) {
   return (
     <div className="flex h-full">
       <aside className="w-[var(--rail-width)] shrink-0 space-y-5 overflow-y-auto border-r border-[var(--color-line)] p-4">
+        <SegmentBar
+          name="breed-mode"
+          tabs={MODES}
+          value={params.mode}
+          onChange={(v) => patch({ mode: v as BreedMode })}
+          panelId="breed-panel"
+        />
         <div>
           <SelectControl
             label="whose pals"
@@ -227,48 +270,103 @@ export function BreedView({ index }: { index: SaveIndex }) {
       {/* A flex column rather than the fixed `calc` the list used to size
           itself with: the picker above it has no fixed height. */}
       <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-[var(--color-line)]">
-        <div className="space-y-4 p-4 pb-3">
-          <TextInput
-            label="what to breed"
-            value={params.query}
-            onChange={(v) => patch({ query: v })}
-            placeholder="Search species"
+        {pairMode ? (
+          <PairPicker
+            // Remounted per player, so the active slot and the search box
+            // start fresh rather than carrying over into a different palbox.
+            key={ownerUid}
+            stock={stock}
+            a={pairA}
+            b={pairB}
+            assumeUnknownGender={params.assumeUnknownGender}
+            text={text}
+            passives={passives}
+            owner={owner}
+            onPick={(slot, pal) =>
+              patch(
+                slot === 'a'
+                  ? { pairA: pal?.instanceId }
+                  : { pairB: pal?.instanceId },
+              )
+            }
           />
-          <PassivePicker
-            selected={params.passives}
-            noSpares={params.noSpares}
-            carriers={carriers}
-            text={passives}
-            // The store's own status, not the shape of `data`. A failed fetch
-            // never sets `data` at all — `loadRefdata` throws and the catch
-            // sets `status` — so testing it for emptiness reads `false` in
-            // exactly the case this is for, and the picker would offer a search
-            // box that answers "no passive matches that" to every real name.
-            // It is also the only test that separates degraded from still
-            // loading, where `data` is equally undefined. `MapView` reads
-            // `status` for its own degraded pill for both reasons.
-            degraded={status === 'degraded'}
-            // A different passive set can make the pinned pair no longer one of
-            // the shortest, exactly as changing the stock can.
-            onChange={(next) => patch({ passives: next, route: undefined })}
-            // And so can a different requirement: it selects a different goal
-            // state, which has its own cheapest route.
-            onNoSpares={(next) => patch({ noSpares: next, route: undefined })}
-          />
-        </div>
-        <SpeciesList
-          index={index}
-          table={table}
-          reach={reach}
-          query={params.query}
-          selected={params.target}
-          onPick={(id) => patch({ target: id, route: undefined })}
-          text={text}
-        />
+        ) : (
+          <>
+            <div className="space-y-4 p-4 pb-3">
+              <TextInput
+                label="what to breed"
+                value={params.query}
+                onChange={(v) => patch({ query: v })}
+                placeholder="Search species"
+              />
+              <PassivePicker
+                selected={params.passives}
+                noSpares={params.noSpares}
+                carriers={carriers}
+                text={passives}
+                // The store's own status, not the shape of `data`. A failed fetch
+                // never sets `data` at all — `loadRefdata` throws and the catch
+                // sets `status` — so testing it for emptiness reads `false` in
+                // exactly the case this is for, and the picker would offer a search
+                // box that answers "no passive matches that" to every real name.
+                // It is also the only test that separates degraded from still
+                // loading, where `data` is equally undefined. `MapView` reads
+                // `status` for its own degraded pill for both reasons.
+                degraded={status === 'degraded'}
+                // A different passive set can make the pinned pair no longer one of
+                // the shortest, exactly as changing the stock can.
+                onChange={(next) => patch({ passives: next, route: undefined })}
+                // And so can a different requirement: it selects a different goal
+                // state, which has its own cheapest route.
+                onNoSpares={(next) =>
+                  patch({ noSpares: next, route: undefined })
+                }
+              />
+            </div>
+            <SpeciesList
+              index={index}
+              table={table}
+              reach={reach}
+              query={params.query}
+              selected={params.target}
+              onPick={(id) => patch({ target: id, route: undefined })}
+              text={text}
+            />
+          </>
+        )}
       </aside>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {noBreedingData ? (
+      <div
+        id="breed-panel"
+        role="tabpanel"
+        className="flex-1 overflow-y-auto p-6"
+      >
+        {pairMode ? (
+          noBreedingData ? (
+            <Missing what="Breeding data could not be loaded, so what a pair hatches cannot be worked out. Everything else in the app still works." />
+          ) : !pairA || !pairB || !table ? (
+            <Missing
+              what={
+                pairA || pairB
+                  ? 'Now pick the second parent on the left.'
+                  : 'Pick two pals on the left to see what they would hatch, best first.'
+              }
+            />
+          ) : (
+            <PairPane
+              a={pairA}
+              b={pairB}
+              table={table}
+              data={data}
+              purpose={params.purpose}
+              onPurpose={(purpose) => patch({ purpose })}
+              assumeUnknownGender={params.assumeUnknownGender}
+              text={text}
+              passives={passives}
+              owner={owner}
+            />
+          )
+        ) : noBreedingData ? (
           <Missing what="Breeding data could not be loaded, so no path can be worked out. Everything else in the app still works." />
         ) : !params.target ? (
           <Missing
@@ -290,9 +388,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
             failed={search.failed}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
-            onDropNoSpares={() =>
-              patch({ noSpares: false, route: undefined })
-            }
+            onDropNoSpares={() => patch({ noSpares: false, route: undefined })}
           />
         )}
       </div>
@@ -486,11 +582,13 @@ function PassiveHeader({
     return null
   }
 
-  const names = (ids: string[]) =>
-    ids.map((id) => passives.name(id)).join(', ')
+  const names = (ids: string[]) => ids.map((id) => passives.name(id)).join(', ')
 
   return (
-    <Panel padded className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-muted)]">
+    <Panel
+      padded
+      className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-muted)]"
+    >
       {pending && (
         <p>
           Working out a route that carries those passives. Four of them can take
@@ -681,8 +779,8 @@ function NoRoute({
               : 'lands them all together'}{' '}
             inside <span className="num">{MAX_EXPECTED_EGGS}</span> expected
             hatches, which is where a plan stops being advice. Asking for fewer
-            at once, or finding a cleaner carrier, is the way in: every unrelated
-            passive on a parent competes for the child’s four slots.
+            at once, or finding a cleaner carrier, is the way in: every
+            unrelated passive on a parent competes for the child’s four slots.
             {!plan.noSpares && <PoolHint stock={stock} />}
           </p>
           {/* The trade, priced. Demanding a clean result costs two to seven
@@ -924,8 +1022,8 @@ function PoolPicker({
           like three boxes that ticked themselves. */}
       {stock.includedGuild && members.length > 0 && (
         <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
-          All of {guildLabel(stock)} is pooled, including anyone who joins later.
-          Unticking one narrows it to the rest.
+          All of {guildLabel(stock)} is pooled, including anyone who joins
+          later. Unticking one narrows it to the rest.
         </p>
       )}
     </div>
@@ -1031,13 +1129,7 @@ function SpeciesList({
  * two-generation route as two eggs rather than as "at least two, probably more",
  * or a pooled route as one they can walk tonight.
  */
-function Footnote({
-  stock,
-  plan,
-}: {
-  stock: Stock
-  plan?: BreedingPlan
-}) {
+function Footnote({ stock, plan }: { stock: Stock; plan?: BreedingPlan }) {
   return (
     <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
@@ -1050,9 +1142,8 @@ function Footnote({
         ) : (
           <>
             Counted {count(stock.counted)} pals across{' '}
-            {count(stock.bySpecies.size)} species —{' '}
-            {count(stock.countedOwn)} this player’s,{' '}
-            {count(stock.countedBorrowed)} from{' '}
+            {count(stock.bySpecies.size)} species — {count(stock.countedOwn)}{' '}
+            this player’s, {count(stock.countedBorrowed)} from{' '}
             {stock.includedGuild
               ? `all of ${guildLabel(stock)}`
               : `${count(stock.includedMembers.size)} pooled ${stock.includedMembers.size === 1 ? 'guildmate' : 'guildmates'}`}
@@ -1103,14 +1194,14 @@ function Footnote({
       {plan?.wanted && plan.wanted.length > 0 && (
         <p className="mt-2">
           A child’s passives are drawn from its parents’ combined list, and how
-          many it takes is a roll. Those odds are not in the save, and not in the
-          game’s own exported tables either — they are community reverse
-          engineering, so read “≈{Math.round(plan.expectedEggs ?? 0)} hatches” as
-          an order of magnitude rather than a promise. It is the pessimistic end:
-          the two parents’ other passives are assumed not to overlap, a random
-          fill is never counted as one you wanted, and breeding cakes are not
-          modelled at all — each of which makes the real thing a little kinder
-          than the number.
+          many it takes is a roll. Those odds are not in the save, and not in
+          the game’s own exported tables either — they are community reverse
+          engineering, so read “≈{Math.round(plan.expectedEggs ?? 0)} hatches”
+          as an order of magnitude rather than a promise. It is the pessimistic
+          end: the two parents’ other passives are assumed not to overlap, a
+          random fill is never counted as one you wanted, and breeding cakes are
+          not modelled at all — each of which makes the real thing a little
+          kinder than the number.
           {plan.truncated && (
             <>
               {' '}

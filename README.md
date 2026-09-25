@@ -43,6 +43,13 @@ Seven views, switchable with the tabs or the number keys:
   fewer pals wins. Gender is checked against the pals actually held, alternate
   routes of the same length are offered, and when there is no path it says which
   specific parent is out of reach rather than only "no route".
+  Its second mode, **Pick a pair**, works the other way round: choose two of
+  the pals in that same pool and it shows the child they make and every set of
+  passives it can inherit, ranked for a purpose (fighting by default, or working
+  a base, travel or a breeding base) with the chance of each and of "this or
+  better". Pals that cannot pair with the first pick, because they are the same
+  gender or have no recorded gender, are dimmed rather than hidden. The child's
+  IVs are not predicted.
 - **Builds** — which pals to carry and which to station, by purpose: a breeding base, a work base for chosen jobs, a fight against any pal, travel, fishing and salvaging, a food production base, a cake base for any of the five cake tiers, or a ranch resources base. Split into party, base and breeding farm, because a passive that acts on you only counts in the party and one that acts on a building only counts at a base — and that split comes from the game's own passive data, as does every ranking here. Each list pairs the best species there are with the best of your own pals, and a species you lack links to Breed with the right passives already picked. The production purposes rank by partner skills and Ranch drops, since almost no rollable passive touches fishing, crops or ranching; the cake base lists the chosen cake's ingredients and where each one comes from — which pals drop it at a Ranch, which crop to grow, or what to mill or butcher.
 
 Press <kbd>⌘K</kbd> to search pals, items, players and bases from anywhere.
