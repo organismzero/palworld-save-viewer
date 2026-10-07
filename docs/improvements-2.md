@@ -49,18 +49,17 @@ Nothing user-visible on its own, but every later phase leans on it.
 
 Doing it turned up a race in `useHashSync`. A view change pushes the hash, the push fires `hashchange`, and the handler adopted that echo as if it were a navigation, re-decoding the destination view from a hash that had no params yet. Whether a jump's focus survived depended on whether the view mounted before the event arrived. The hook now ignores the echo of its own push.
 
-### 0b. Map params codec — M
+### 0b. Map params codec — done
 
-Map is the only view with no `params.ts`, so it forgets zoom, layers, fog and selection on every tab switch and cannot be linked to.
+`src/views/map/params.ts` holds `MapParams` and `mapCodec`: layers (`l=bases,players`, or `l=none`), fog and its opacity, the viewport as one param (`at=mx,my,zoom`), the selection (`sel=pals:<shortId>`) and colour by guild (`by=guild`). `MapView` reads all of it through `useViewParams`.
 
-- New `src/views/map/params.ts` with `MapParams { layers: Set<LayerId>; fog: boolean; fogOpacity: number; zoom?: number; mx?: number; my?: number; selected?: { layer: LayerId; id: string }; query: string }` and `mapCodec()`. Layers encode as a list of ids (`l=players,bases`), the viewport as three rounded numbers, the selection as `sel=pals:<shortId>`.
-- Replace the `useState` cluster in `MapView` with `useViewParams(mapCodec, ...)`.
-- Wire `onView` (currently `() => {}`) to publish zoom and centre; the controller already emits them from `emitView`, and `useHashSync` already throttles param writes to 400 ms.
-- On mount, after `controller.mount()`, apply `visible`, fog and viewport, then resolve `selected` through the controller's entity index and `focus()` it.
-- Consume the new `map` focus kind here: `focus(entity)` after mount.
-- Player-save merge currently rebuilds the controller; with the viewport in params the rebuild restores where the user was, which is enough. A true incremental update is a separate item (5f).
+Three things differ from the plan:
 
-Tests: `test/unit/mapParams.test.ts` round-trip, defaults omitted, unknown layer ids dropped, malformed numbers ignored.
+- The codec is not bound to the save. A marker id only means something once the controller has plotted its entities, and fast-travel points come from reference data that has not arrived when `decode` runs, so the selection is carried unresolved and `MapView` resolves it against the controller after mount. A link naming a marker that is not there raises a notice.
+- The search text is not in the link. It empties itself when a result is picked, and what was picked is the selection.
+- Zoom is quoted against a 4096px map, so a link means the same thing whatever size the art was baked at. A map nobody has moved has no viewport in its link, and Fit goes back to that.
+
+The controller reports the viewport only for movement the user made, and the view publishes it 250 ms after the last one, so a drag is not a render per frame.
 
 ### 0c. Notice channel — S **(tray)**
 
@@ -80,11 +79,9 @@ First callers: rejected files while a world is open (today they reach the ledger
 
 `src/domain/names.ts` holds `speciesName`, `itemName`, `structureName`, `skillName` and `baseNames(index, refdata)`. The exports pass the real resolvers, so a saved file reads "Wooden Chest" and "Base 3 · near Sea Breeze Archipelago" as the screen does, and the palette matches a base by its full label, landmark included. Tested in `test/unit/names.test.ts`.
 
-### 0f. Combobox hook — S
+### 0f. Combobox hook — done
 
-Three typeaheads are lists of buttons with no keyboard or ARIA: item search (`ItemSearch` in `BasesView`), map search (`MapView`, silently limited to 8 by the controller), passive picker (`PassivePicker`, silently sliced to 40). Add `useCombobox({ items, onPick })` to `controls.tsx` returning input props (`role="combobox"`, `aria-expanded`, `aria-activedescendant`, Arrow/Enter/Escape handlers) and option props (`role="option"`, ids). Close on click outside. Each caller also renders a "showing N of M" line when a limit truncated results, with a "show more" that raises the limit.
-
-Tests: Testing Library and jsdom are dev dependencies but no vitest project runs in jsdom, and the repo has no component tests. Keep the key handling in a pure reducer (`comboboxKey(state, key)`) and test that in the node project.
+`useCombobox` in `src/components/combobox.ts`, used by the map search, the Bases item search and the Breed passive picker. Arrow keys move a highlight, Enter takes it or the best match, Escape and a press outside close the list, and focus stays in the field. The key handling is the pure `comboboxKey`, tested in `test/unit/combobox.test.ts`. `MoreResults` in `controls.tsx` is the "showing 8 of 17 · show more" row all three end with.
 
 ### 0g. README shortcut table — done
 
@@ -104,12 +101,12 @@ Done. 1d was removed as obsolete. Three landed differently from how they were wr
 
 ## Phase 2 — Cross-view links
 
-Done, except the two pieces that wait on other items. `Jump` in `src/components/Jump.tsx` is a button that calls `jump(view, focus)` and still raises the hover card of whatever it names. It has a `quiet` form for names inside list rows, where the text keeps its own colour and only the arrow is in the accent.
+Done; the two pieces that waited on other items went in with 3a and 5c. `Jump` in `src/components/Jump.tsx` is a button that calls `jump(view, focus)` and still raises the hover card of whatever it names. It has a `quiet` form for names inside list rows, where the text keeps its own colour and only the arrow is in the accent.
 
 - **2a. Pal drawer.** Owner opens the player in Guild, position shows the pal on the Map, and under the species name are `breed →` (a real link into Breed) and `fight →` (Builds, Fight, against that species). The **Where** row is 3a's and its link goes in with it.
 - **2b. Map selection card.** "Open in Pals", "Open in Guild" or "Open in Bases" by what is selected. Landmarks, dungeons and pins get none.
 - **2c. Breed and Builds.** A step's parent pal and a borrowed parent's owner are links, as are the owned-pal rows in Builds. The "owned" pill opens Pals on that species for that player.
-- **2d. Guild.** The player panel's bases, best pals and position are links. The marker chips wait on 5c, which plots them.
+- **2d. Guild.** The player panel's bases, best pals and position are links. The marker chips open the map on their marker (5c).
 - **2e. Base plan.** The dots are named buttons with a stroke focus ring, and the plan is one tab stop with arrow keys, Home and End inside it, not one stop per dot: a single base in the reference save has 1,372 structures.
 - **2f. Copy link.** Done with the tray.
 
@@ -159,28 +156,19 @@ Item search results gain a "Show on map" button that jumps to Map with a new tra
 
 ## Phase 5 — Map
 
-### 5a. Controls — S
+Done, apart from 5f, which stays optional.
 
-Zoom in and out buttons beside Fit; `tabIndex={0}` on the host with arrow keys panning and `+`/`-` zooming; layer panel gains all, none and invert; the Dungeons row is removed from the panel while its count is zero by design (README Limitations) rather than shown as a permanently empty layer.
+- **5a. Controls.** Zoom buttons beside Fit; the map is a tab stop with arrow keys to pan and `+`/`-` to zoom; all, none and invert for the layers; the Dungeons row is hidden while it counts zero.
+- **5b. Input.** A press that moves more than 4 px before release is a drag and selects nothing. Search matches a marker's owner (a pal's owner, a structure's builder, a base's guild) and a container's contents, and says which.
+- **5c. Guild markers.** On the pins layer, named for the guild and who placed them. The Guild tab's marker chips open the map on them, which closes 2d.
+- **5d. Pals layer follows the Pals filter.** `filteredPalIds` in `src/views/pals/filter.ts` reads the Pals tab's link from the store and the controller hides the pals it leaves out. The row reads "9 of 3,292 · following the Pals filter" with a "clear" that takes the filter off on the Pals tab too, keeping its sort and its open pal.
+- **5e. Colour by guild.** Bases, their radius, player-built structures and guild markers. Offered only when the save has more than one guild; the reference save has one, so this was checked by setting `by=guild` in the link and not with a second guild's colours side by side.
 
-### 5b. Input polish — S
+Found on the way:
 
-- Drag threshold: a `pointerup` within 4 px of `pointerdown` is a click; otherwise not. Today a separate `click` listener always selects.
-- Search matches owner name and container contents, not only the label, and uses the combobox hook.
-
-The map's own tooltip was replaced by the shared hover card, which already flips and shifts to stay in the viewport, so the clamp fix is gone.
-
-### 5c. Plot guild markers — S
-
-`Guild.markers` are listed as text and never drawn; `buildMarkers()` draws only `LocalData` pins. Add them to the `markers` layer with the guild's tint and the owner's name as `sub`. Guild view's marker chips then jump to them.
-
-### 5d. Pals layer driven by the Pals filter — M
-
-Read `uiStore.viewParams.pals`, decode with `palsCodec(index)`, compute the same filtered set the Pals view shows (extract the filter from `PalsView` into `src/domain/palFilter.ts` so both use one function), and pass the id set to `controller.setPalFilter(ids)`. The layer row reads "Pals · 41 of 1,204 (filtered)" with a "clear" link. Nothing changes when no filter is set.
-
-### 5e. Colour by guild — S
-
-A mode toggle on the structures and bases layers: tint by `groupId` with a legend of guild names. Multi-guild dedicated servers become readable.
+- The map's tiles were stacked coarsest on top, so once the fitted view had loaded, zooming in never got sharper.
+- A pal, player or guild marker in the World Tree had a "show on the map" link that opened the map only for it to say the thing was not on it. `MapJump` shows those coordinates as text marked "World Tree" instead.
+- A selection made from the search box never drew the ring; only a click on the canvas did. The ring was also sized in map pixels, a speck when fitted and enormous zoomed in.
 
 ### 5f. Incremental index update — M, optional
 
@@ -318,7 +306,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
-5. **0b and 0f, then Phase 5** (5a–5e), **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
+5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. Then **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -28,6 +29,9 @@ import {
   type MapViewport,
 } from './params.ts'
 import { useViewParams } from '../../app/viewParams.ts'
+import { placer } from '../../domain/palState.ts'
+import { filteredPalIds, unfiltered } from '../pals/filter.ts'
+import { palsCodec } from '../pals/params.ts'
 import { KeyHint, Panel, PromptBar } from '../../components/primitives.tsx'
 import {
   Button,
@@ -98,6 +102,25 @@ export function MapView({ index }: { index: SaveIndex }) {
   const [query, setQuery] = useState('')
   const [counts, setCounts] = useState<Record<LayerId, number>>()
   const [guildKey, setGuildKey] = useState<GuildKey[]>([])
+
+  /**
+   * The Pals tab's filter, applied to the Pals layer.
+   *
+   * Read from the store's copy of that view's link rather than from the view,
+   * which is not mounted while this one is.
+   */
+  const palsQs = useUiStore((s) => s.viewParams.pals ?? '')
+  const publishParams = useUiStore((s) => s.publishParams)
+  const palIds = useMemo(
+    () =>
+      filteredPalIds(palsQs, palsCodec(index), {
+        index,
+        data,
+        place: placer(index),
+      }),
+    [palsQs, index, data],
+  )
+  const [palsShown, setPalsShown] = useState<number>()
   const localData = useSaveStore((s) => s.localData)
 
   const setLayers = (next: (prev: Set<LayerId>) => Iterable<LayerId>) =>
@@ -259,6 +282,13 @@ export function MapView({ index }: { index: SaveIndex }) {
   useEffect(() => {
     controllerRef.current?.setTintByGuild(byGuild)
   }, [byGuild, mounted])
+
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller?.ready) return
+    controller.setPalFilter(palIds)
+    setPalsShown(controller.palsShown)
+  }, [palIds, mounted])
 
   /**
    * Push the client's own save into Pixi.
@@ -591,11 +621,32 @@ export function MapView({ index }: { index: SaveIndex }) {
                           />
                           <span className="flex-1">{style.label}</span>
                           <span className="num text-[var(--color-muted)]">
+                            {id === 'pals' && palsShown !== undefined
+                              ? `${count(palsShown)} of `
+                              : ''}
                             {counts ? count(counts[id] ?? 0) : '—'}
                           </span>
                         </span>
                       }
                     />
+                    {id === 'pals' && palsShown !== undefined && (
+                      <div className="flex items-baseline justify-between gap-2 pr-0.5 pl-7 text-[11px] text-[var(--color-muted)]">
+                        <span>following the Pals filter</span>
+                        <button
+                          type="button"
+                          title="Take the filter off on the Pals tab too"
+                          onClick={() =>
+                            publishParams(
+                              'pals',
+                              unfiltered(palsQs, palsCodec(index)),
+                            )
+                          }
+                          className="text-[var(--color-signal)] hover:underline"
+                        >
+                          clear
+                        </button>
+                      </div>
+                    )}
                   </li>
                 )
               })}

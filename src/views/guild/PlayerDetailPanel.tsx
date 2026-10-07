@@ -15,9 +15,8 @@ import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { playerSummary } from '../../domain/guild.ts'
 import { palName } from '../../domain/palText.ts'
-import { Jump } from '../../components/Jump.tsx'
+import { Jump, MapJump } from '../../components/Jump.tsx'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
-import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
@@ -137,13 +136,10 @@ export function PlayerDetailPanel({
               label="position"
               value={
                 <>
-                  <Jump
-                    view="map"
-                    focus={{ kind: 'map', id: player.playerUid }}
-                    title="Show on the map"
-                  >
-                    {formatMapPos(posToMap(detail?.pos ?? player.pos))}
-                  </Jump>
+                  <MapJump
+                    id={player.playerUid}
+                    pos={detail?.pos ?? player.pos}
+                  />
                   <span className="label ml-2 normal-case">
                     {detail ? 'from player save' : 'last jump point'}
                   </span>

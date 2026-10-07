@@ -9,7 +9,12 @@ import { describe, expect, it } from 'vitest'
 import { serialiseParams } from '@/app/viewParams.ts'
 import type { Pal, SaveIndex } from '@/domain/types.ts'
 import type { Refdata } from '@/refdata/refdata.ts'
-import { filterPals, isFiltered } from '@/views/pals/filter.ts'
+import {
+  filterPals,
+  filteredPalIds,
+  isFiltered,
+  unfiltered,
+} from '@/views/pals/filter.ts'
 import {
   OWNER_BASE,
   OWNER_NONE,
@@ -220,5 +225,31 @@ describe('isFiltered', () => {
     ] as Partial<PalsParams>[]) {
       expect(isFiltered({ ...PALS_DEFAULTS, ...over })).toBe(true)
     }
+  })
+})
+
+describe('a Pals link, read from another view', () => {
+  const context = { index, data, place: () => ({ where: 'unknown' as const }) }
+
+  it('gives the ids its filter lets through', () => {
+    const got = filteredPalIds('sex=f', codec, context)
+    expect([...(got ?? [])]).toEqual([pals[0]!.instanceId])
+  })
+
+  it('gives nothing, not everything, when there is no filter', () => {
+    expect(filteredPalIds('', codec, context)).toBeUndefined()
+    // A sort and an open pal narrow nothing.
+    expect(filteredPalIds('sort=level&sel=11111111', codec, context)).toBeUndefined() // prettier-ignore
+  })
+
+  it('can match no pal at all, which is still a filter', () => {
+    expect(filteredPalIds('lvl=99', codec, context)?.size).toBe(0)
+  })
+
+  it('takes the filter off and keeps the sort and the open pal', () => {
+    expect(
+      unfiltered('sex=f&lvl=20&sort=level&rev=1&sel=11111111', codec),
+    ).toBe('rev=1&sel=11111111&sort=level')
+    expect(unfiltered('q=zed', codec)).toBe('')
   })
 })

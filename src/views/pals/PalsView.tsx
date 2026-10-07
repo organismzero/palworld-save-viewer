@@ -10,7 +10,6 @@ import {
   type ElementDef,
 } from '../../lib/color.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
-import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
@@ -26,7 +25,7 @@ import { levelProgress } from '../../domain/guild.ts'
 import { baseNames } from '../../domain/names.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
-import { Jump } from '../../components/Jump.tsx'
+import { Jump, MapJump } from '../../components/Jump.tsx'
 import { breedHref } from '../builds/buildsText.ts'
 import { useHoverCard } from '../../components/cards/hoverCard.ts'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
@@ -834,17 +833,7 @@ function PalDetail({
         <Field
           label="position"
           value={
-            pal.pos ? (
-              <Jump
-                view="map"
-                focus={{ kind: 'map', id: pal.instanceId }}
-                title="Show on the map"
-              >
-                {formatMapPos(posToMap(pal.pos))}
-              </Jump>
-            ) : (
-              '—'
-            )
+            <MapJump id={pal.instanceId} pos={pal.pos} />
           }
         />
         {where && at && (

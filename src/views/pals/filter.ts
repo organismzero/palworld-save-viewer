@@ -9,11 +9,13 @@
 import { ivTotal } from '../../domain/index.ts'
 import { palName } from '../../domain/palText.ts'
 import { conditions, workLevel, type PalPlace } from '../../domain/palState.ts'
-import type { Pal, SaveIndex } from '../../domain/types.ts'
+import { serialiseParams, type ParamCodec } from '../../app/viewParams.ts'
+import type { Guid, Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import {
   OWNER_BASE,
   OWNER_NONE,
+  PALS_DEFAULTS,
   type PalsParams,
   type SortKey,
 } from './params.ts'
@@ -117,5 +119,48 @@ export function isFiltered(params: PalsParams): boolean {
     params.flags.boss ||
     params.flags.rare ||
     params.flags.named,
+  )
+}
+
+/**
+ * The pals a Pals link would show, by id, or nothing when it filters nothing.
+ *
+ * For the map, whose Pals layer follows the filter set on the Pals tab: the
+ * question "where are my level 50 miners" is asked there and answered here, and
+ * it should be one filter rather than two that happen to look alike. "Nothing"
+ * is distinct from "everything" so the map can leave its layer alone, and say
+ * nothing about a filter, when none is set.
+ */
+export function filteredPalIds(
+  qs: string,
+  codec: ParamCodec<PalsParams>,
+  context: FilterContext,
+): Set<Guid> | undefined {
+  const params = codec.decode(new URLSearchParams(qs), PALS_DEFAULTS)
+  if (!isFiltered(params)) return undefined
+  return new Set(
+    filterPals(context.index.pals, params, context).map((p) => p.instanceId),
+  )
+}
+
+/**
+ * The same link with its filter taken off.
+ *
+ * The sort and the open pal stay: they are not what narrowed the list, and
+ * clearing a filter from another tab should not also close a drawer on this
+ * one.
+ */
+export function unfiltered(qs: string, codec: ParamCodec<PalsParams>): string {
+  const params = codec.decode(new URLSearchParams(qs), PALS_DEFAULTS)
+  return serialiseParams(
+    codec.encode(
+      {
+        ...PALS_DEFAULTS,
+        sort: params.sort,
+        reversed: params.reversed,
+        selectedId: params.selectedId,
+      },
+      PALS_DEFAULTS,
+    ),
   )
 }

@@ -16,10 +16,7 @@ everything is parsed in your browser. Your save never leaves your machine.
 
 Seven views, switchable with the tabs or the number keys:
 
-- **Map** — the whole island, rendered with Pixi. Players, bases, player-built
-  structures, world objects, loot chests, pals and fast-travel points as
-  independently toggleable layers, with hover names, click-to-inspect and a
-  live coordinate readout.
+- **Map** — the whole island, rendered with Pixi. Players, bases, player-built structures, world objects, loot chests, pals, guild markers and fast-travel points as independently toggleable layers, with hover names, click-to-inspect and a live coordinate readout. The layers, where you are looking and what is selected are all in the link. Search finds a marker by its name, its owner or what it holds; the Pals layer follows whatever filter is set on the Pals tab; and on a server with several guilds the map can be coloured by guild. Arrow keys pan and `+`/`-` zoom when the map has focus.
 - **Pals** — every pal in the save in a virtualised grid. Filter by name or passive, element, level range, IV total, owner (a player, base workers, or nobody), gender, a job at a minimum level, and "needs attention", which finds the sick, injured, starving and low-sanity ones; sort by IV, level, HP, rarity, capture date, name, species or owner, either way up. Click through to a detail drawer with passives, work suitability, moves, where the pal is kept, its condition, progress to the next level, and an IV percentile against your own collection.
 - **Bases** — a three-pane storage explorer. Bases (named by nearest landmark,
   because the game's own name is a Japanese placeholder), the structures in

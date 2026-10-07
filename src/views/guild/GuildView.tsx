@@ -45,7 +45,7 @@ import {
   type PillTone,
 } from '../../components/primitives.tsx'
 import { Checkbox, SelectControl } from '../../components/controls.tsx'
-import { Jump } from '../../components/Jump.tsx'
+import { MapJump } from '../../components/Jump.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 import { memberRole } from '../../lib/roles.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
@@ -327,16 +327,13 @@ function Markers({ guild }: { guild: Guild }) {
     <div className="mt-4 flex flex-wrap items-center gap-2">
       <span className="label">map markers</span>
       {guild.markers.map((m) => (
-        <Jump
+        <span
           key={m.markerId}
-          view="map"
-          focus={{ kind: 'map', id: m.markerId }}
-          title="Show this marker on the map"
-          quiet
-          className="num rounded-control border border-[var(--color-line-strong)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-[var(--color-signal)]"
+          className="num flex items-baseline gap-1.5 rounded-control border border-[var(--color-line-strong)] px-2 py-1 text-[11px] text-[var(--color-muted)]"
         >
-          #{m.icon} · {formatMapPos(posToMap(m.pos))}
-        </Jump>
+          #{m.icon}
+          <MapJump id={m.markerId} pos={m.pos} />
+        </span>
       ))}
     </div>
   )

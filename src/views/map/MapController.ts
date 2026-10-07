@@ -278,6 +278,8 @@ export class MapController {
   private unbind: (() => void)[] = []
   private tints = new Map<Guid, Tint>()
   private byGuild = false
+  /** The pals the Pals tab's filter lets through, or nothing for all. */
+  private palFilter?: ReadonlySet<string>
   /** Base build-radius rings, which are drawn shapes rather than markers. */
   private rings: { shape: Graphics; guildId?: Guid }[] = []
   private ring = new Graphics()
@@ -733,6 +735,7 @@ export class MapController {
 
     this.buildMarkers()
     this.applyTints()
+    this.applyPalFilter()
   }
 
   /**
@@ -759,6 +762,42 @@ export class MapController {
     for (const { shape, guildId } of this.rings) {
       shape.tint = pick(guildId, LAYER_STYLES.bases.color)
     }
+  }
+
+  /**
+   * Narrows the Pals layer to the pals another view is showing.
+   *
+   * Hidden rather than removed: the filter changes far more often than the
+   * save does, and a hidden sprite costs nothing to draw or to hit-test.
+   */
+  setPalFilter(ids: ReadonlySet<string> | undefined) {
+    this.palFilter = ids
+    if (this.mounted) this.applyPalFilter()
+  }
+
+  private applyPalFilter() {
+    for (const [entity, marker] of this.markerOf) {
+      if (entity.kind !== 'pals') continue
+      marker.visible = !this.palFilter || this.palFilter.has(entity.id)
+    }
+  }
+
+  /** How many pals the filter leaves on the map, or nothing with no filter. */
+  get palsShown(): number | undefined {
+    if (!this.palFilter) return undefined
+    let n = 0
+    for (const e of this.entities) {
+      if (e.kind === 'pals' && this.palFilter.has(e.id)) n++
+    }
+    return n
+  }
+
+  private filteredOut(e: MapEntity): boolean {
+    return (
+      e.kind === 'pals' &&
+      this.palFilter !== undefined &&
+      !this.palFilter.has(e.id)
+    )
   }
 
   /** The guilds that have anything on the map to be told apart by colour. */
@@ -1121,6 +1160,8 @@ export class MapController {
     const byOwner: MapHit[] = []
     const byContents: MapHit[] = []
     for (const entity of this.entities) {
+      // A pal the filter has hidden is not on the map to be found.
+      if (this.filteredOut(entity)) continue
       if (entity.label.toLowerCase().includes(q)) {
         byName.push({ entity })
       } else if (entity.owner?.toLowerCase().includes(q)) {

@@ -13,6 +13,8 @@
 
 import type { ReactNode } from 'react'
 
+import { formatMapPos, posToMap } from '../domain/coords.ts'
+import type { Vec3 } from '../domain/types.ts'
 import { cn } from '../lib/utils.ts'
 import { useUiStore, type Focus, type ViewId } from '../store/uiStore.ts'
 import { useHoverCard, type CardDescriptor } from './cards/hoverCard.ts'
@@ -76,5 +78,47 @@ export function Jump({
         →
       </span>
     </button>
+  )
+}
+
+/**
+ * A position that opens the map on whatever is standing there.
+ *
+ * Only for a position the map can show. The World Tree has a coordinate space
+ * and an image of its own, which this app does not draw, so something up there
+ * gets its coordinates and a word saying where they are — a link would open the
+ * map only for it to answer that the thing is not on it.
+ */
+export function MapJump({
+  id,
+  pos,
+  className,
+}: {
+  /** What the map knows the thing by: a pal, player or marker id. */
+  id: string
+  pos: Vec3 | undefined
+  className?: string
+}) {
+  const at = posToMap(pos)
+  if (!at) return <>—</>
+  if (at.map !== 'overworld') {
+    return (
+      <span
+        className={className}
+        title="In the World Tree, which has its own map and is not drawn here"
+      >
+        {formatMapPos(at)} · World Tree
+      </span>
+    )
+  }
+  return (
+    <Jump
+      view="map"
+      focus={{ kind: 'map', id }}
+      title="Show on the map"
+      className={className}
+    >
+      {formatMapPos(at)}
+    </Jump>
   )
 }
