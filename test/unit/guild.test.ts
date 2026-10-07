@@ -188,7 +188,7 @@ describe('over the mini fixture', () => {
 
   beforeAll(() => {
     const raw = JSON.parse(readFileSync(FIXTURE, 'utf8'))
-    index = buildSaveIndex(buildIndexes(raw, { source: 'json' }))
+    index = buildSaveIndex(buildIndexes(raw))
   })
 
   it('never reports the handle count as a member count', () => {

@@ -8,7 +8,7 @@ The UI kit only renders over HTTP — it fetches its `.jsx` files with XHR, whic
 
 **What changes:** every surface treatment. Colour, type, spacing, edges, depth, motion, and the shape of the header, rails and drawers.
 
-**What does not change:** the information architecture, the six views and their panes, the domain vocabulary, the copy, the data rules, the store, the worker, the virtualiser, and anything under `src/parse/`. No new dependencies.
+**What does not change:** the information architecture, the six views and their panes, the domain vocabulary, the copy, the data rules, the store, the worker, the virtualiser, and anything under `src/parse/`. No new dependencies — with one later exception: `@floating-ui/react-dom` (~3 KB gzipped) positions the hover cards in `src/components/cards/`. Placing a card that must flip and shift around the viewport edges, follow its anchor through scrolling and resizing, and do so for a virtual anchor at the pointer is the part of a tooltip worth not hand-rolling. Only the positioning core is used; the interaction layer is the app's own (`hoverCard.ts`), because one shared card serves every trigger and nothing in it is interactive.
 
 ## Decisions
 
@@ -48,10 +48,10 @@ There are no component tests (`test/` is domain-only), so `pnpm test` will stay 
 
 ```sh
 pnpm lint && pnpm typecheck && pnpm test    # must pass before each merge
-pnpm dev                                    # then drop test/fixtures/level.mini.json
+pnpm dev                                    # then drop data/Level.sav
 ```
 
-`test/fixtures/level.mini.json` is a redacted, committed Level.json subset, so every view can be driven and screenshotted with no real save present. Compare each screen against its counterpart in `ui_kits/save-viewer/`. Three things to check on every stage: it still renders with reference data unavailable (degraded mode, monogram tiles, raw ids), nothing below 11px crept back in, and — for the stages that add glass over scrolling content — the Pals grid still scrolls smoothly.
+Drive it with a real world from `data/` (gitignored): `Level.sav`, then the `Players/` folder, `LevelMeta.sav` and `LocalData.sav`. The app reads raw saves only, so the committed, redacted `test/fixtures/level.mini.json` is test data for the readers now, not something to drop into the app. Compare each screen against its counterpart in `ui_kits/save-viewer/`. Three things to check on every stage: it still renders with reference data unavailable (degraded mode, monogram tiles, raw ids), nothing below 11px crept back in, and — for the stages that add glass over scrolling content — the Pals grid still scrolls smoothly.
 
 ## The stages
 
@@ -185,7 +185,7 @@ Charts keep their hand-rolled SVG and pick up the tokens. Their bars and the his
 
 **Landed.** _Files:_ `src/views/map/MapView.tsx`, `src/views/map/MapController.ts`
 
-Search, layer filter, hover card, selection card and the loading and degraded notices are all glass `Panel`s — the one place the system's blur is unarguable, since the world genuinely is behind them. The map area itself becomes a framed screen: inset by 8px, hairline, four corner ticks. The layer list becomes a `Panel` titled **Filter** with `Checkbox` rows and counts, which is what it always was — the game's own name for that panel, and the reason `F` had somewhere to go.
+Search, layer filter, selection card and the loading and degraded notices are all glass `Panel`s — the one place the system's blur is unarguable, since the world genuinely is behind them. The hover card is the exception: it is the app-wide card from `src/components/cards/`, solid rather than glass, because small text over busy map art needs the contrast more than the card needs the blur. The map area itself becomes a framed screen: inset by 8px, hairline, four corner ticks. The layer list becomes a `Panel` titled **Filter** with `Checkbox` rows and counts, which is what it always was — the game's own name for that panel, and the reason `F` had somewhere to go.
 
 Two new keys per decision 9. `F` opens and closes the filter panel. `R` centres a base: the nearest one to what you are looking at on the first press, then the next in world order on each press after. That rule is deliberate — "nearest to wherever I just moved you" ping-pongs between two bases, where "nearest, then next" is predictable and eventually visits all of them. Both are guarded by the same `isTyping` check the global shortcuts use, so typing "for" in the map's search box does not close the panel and jump the world; verified by typing into the box and watching nothing move.
 

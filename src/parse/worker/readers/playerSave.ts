@@ -1,8 +1,8 @@
 /**
- * Reads a per-player save (`Players/<uid>.json`).
+ * Reads a per-player save (`Players/<uid>.sav`).
  *
- * These files are far simpler than `Level.json` — plain GVAS properties with
- * no `RawData` byte-blob decoding — but they carry the things `Level.json`
+ * These files are far simpler than `Level.sav` — plain GVAS properties with
+ * no `RawData` byte-blob decoding — but they carry the things `Level.sav`
  * structurally cannot: the player's real position, an absolute last-online
  * timestamp, their platform, tech points, paldex progress, and the container
  * ids that turn guessed inventory attribution into exact attribution.
@@ -68,6 +68,8 @@ const KNOWN_RECORD_FIELDS = new Set([
   'PalButcherCount',
   'FishingCountMap',
   'PalRankupCount',
+  'MutationCount',
+  'ArenaSoloClearCount',
   // Present and deliberately unread — bonus tables, flags and fixups with no
   // consumer. Listed so they do not generate noise.
   //
@@ -103,6 +105,10 @@ const KNOWN_RECORD_FIELDS = new Set([
   'FoundTreasureMapPointMap',
   'CampConqueredCount',
   'InvokeNPCNetworkEventMap',
+  // Seen in real saves from a later 2026 patch. The two counts above are read;
+  // this one maps area-barrier GUIDs to an unlocked flag, and nothing in the app
+  // has a name or a place for a barrier yet.
+  'AreaBarrierUnlockFlags',
 ])
 
 function countTrue(n: Node): number {
@@ -146,6 +152,12 @@ function readRecord(rd: Node, warn: Warnings): PlayerRecord {
     palsButchered: sumValues(rd?.PalButcherCount),
     fishCaught: sumValues(rd?.FishingCountMap),
     palsCondensed: sumValues(rd?.PalRankupCount),
+    mutations: int(rd?.MutationCount),
+    // Keyed by arena rank (`Bronze`, …). Absent rather than 0 on a save that
+    // predates the arena, which is what `undefined` means everywhere here.
+    arenaSoloClears: rd?.ArenaSoloClearCount
+      ? sumValues(rd.ArenaSoloClearCount)
+      : undefined,
   }
 }
 

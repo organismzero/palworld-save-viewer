@@ -5,14 +5,12 @@
  * exact on purpose, because the whole value of this milestone is that guessed
  * attribution becomes exact and the numbers are how you can tell.
  *
- * **This suite must never read `*_dps.json`.** The one in the reference set is
- * 244 MB; reading it would blow the vitest heap and the failure would look
- * like something else entirely. `sniff` is what prevents that in the app, and
- * the enumeration here mirrors it.
+ * **This suite never reads a `*_dps.sav`.** It is DPS storage, not a player
+ * save, and the player reader rejects it; `sniff` keeps it out of the app, and
+ * the enumeration in `load.ts` mirrors that.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -23,30 +21,29 @@ import { readPlayerSave } from '@/parse/worker/readers/playerSave.ts'
 import { buildSaveIndex } from '@/domain/index.ts'
 import { lastSeenBasis, lastSeenFor } from '@/domain/lastSeen.ts'
 import { Warnings } from '@/parse/warnings.ts'
-import { looksLikeDpsName } from '@/parse/sniff.ts'
+import { looksLikeDpsName, partition } from '@/parse/sniff.ts'
 import type { PlayerDetail, SaveIndex, SlimPayload } from '@/domain/types.ts'
+import {
+  PLAYERS_DIR,
+  dpsSaveNames,
+  hasLevel,
+  levelTree,
+  playerSaveNames,
+  playerTrees,
+} from './load.ts'
 
-const LEVEL_JSON = resolve(process.cwd(), 'data/Level.json')
-const PLAYERS_DIR = resolve(process.cwd(), 'data/Players')
-const hasData = existsSync(LEVEL_JSON) && existsSync(PLAYERS_DIR)
+const hasData = hasLevel && existsSync(PLAYERS_DIR)
 
 const EXPECTED = {
-  playerFiles: 10,
-  dpsIgnored: 1,
-  itemContainerLinks: 60,
-  charContainerLinks: 20,
+  playerFiles: 11,
+  /** Two players carry a DPS storage file beside their save. */
+  dpsIgnored: 2,
+  itemContainerLinks: 66,
+  charContainerLinks: 22,
   linkMisses: 0,
-  withTechnologyPoint: 9,
-  platforms: { Steam: 6, PS5: 2, Xbox: 2 },
+  withTechnologyPoint: 11,
+  platforms: { Steam: 7, PS5: 2, Xbox: 2 },
 } as const
-
-/** Mirrors `sniff`'s exclusion. Never stat-then-read a `_dps` file. */
-function playerFilePaths(): string[] {
-  return readdirSync(PLAYERS_DIR)
-    .filter((f) => f.endsWith('.json') && !looksLikeDpsName(f))
-    .sort()
-    .map((f) => join(PLAYERS_DIR, f))
-}
 
 describe.skipIf(!hasData)('golden: player saves', () => {
   let details: PlayerDetail[]
@@ -54,33 +51,42 @@ describe.skipIf(!hasData)('golden: player saves', () => {
   let index: SaveIndex
   let payload: SlimPayload
 
-  beforeAll(() => {
-    const raw = JSON.parse(readFileSync(LEVEL_JSON, 'utf8'))
-    payload = buildIndexes(raw, { source: 'json' })
+  let warnings: ReturnType<Warnings['list']>
+
+  beforeAll(async () => {
+    payload = buildIndexes(await levelTree())
     before = { ...payload.stats }
 
     const warn = new Warnings()
-    details = playerFilePaths().map((p) =>
-      readPlayerSave(
-        JSON.parse(readFileSync(p, 'utf8')),
-        p.split('/').pop()!,
-        warn,
-      ),
+    details = (await playerTrees()).map(({ name, tree }) =>
+      readPlayerSave(tree, name, warn),
     )
+    warnings = warn.list()
 
     mergePlayerDetails(payload, details, [])
     index = buildSaveIndex(payload)
   })
 
-  it('excludes the DPS storage file from enumeration', () => {
-    const all = readdirSync(PLAYERS_DIR).filter((f) => f.endsWith('.json'))
-    const dps = all.filter(looksLikeDpsName)
+  it('excludes the DPS storage files from enumeration', () => {
+    const dps = dpsSaveNames()
     expect(dps).toHaveLength(EXPECTED.dpsIgnored)
-    expect(playerFilePaths()).toHaveLength(EXPECTED.playerFiles)
+    expect(dps.every(looksLikeDpsName)).toBe(true)
+    expect(playerSaveNames()).toHaveLength(EXPECTED.playerFiles)
 
-    // And it is genuinely enormous — this is why the exclusion matters.
-    const bytes = statSync(join(PLAYERS_DIR, dps[0]!)).size
-    expect(bytes).toBeGreaterThan(100e6)
+    // And the app's own sniffer sets them aside the same way.
+    const files = [...dps, ...playerSaveNames()].map(
+      (name) => ({ name, size: 0 }) as File,
+    )
+    const parts = partition(files)
+    expect(parts.ignored.map((s) => s.file.name).sort()).toEqual(dps.sort())
+    expect(parts.savs).toHaveLength(EXPECTED.playerFiles)
+  })
+
+  it('knows every RecordData field the real saves carry', () => {
+    // The canary for a game update adding progression fields. Never asserted
+    // until the one that landed three at once, which is why it is here now.
+    if (warnings.length > 0) console.error('warnings:', warnings)
+    expect(warnings).toEqual([])
   })
 
   it('matches every player file to a player in the level', () => {
@@ -141,20 +147,20 @@ describe.skipIf(!hasData)('golden: player saves', () => {
   })
 
   it('upgrades attribution from guessed to exact', () => {
-    // Level alone can attribute 966 containers exactly (map objects claim
-    // them) and guess at the rest. Adding the player files converts 60 of
-    // those guesses into exact claims and halves what remains unattributed.
+    // Level alone can attribute 4,377 containers exactly (map objects claim
+    // them) and guess at the rest. Adding the player files turns every player
+    // inventory — six per player — into an exact claim, and leaves under a
+    // third as much unattributed.
     //
     // Note the "before" numbers reflect the *current* heuristic — single-slot
     // containers as pal gear. An earlier slot-shape rule labelled 290
-    // containers as some player's inventory, of which ground truth here shows
-    // only 26 actually were, so it was replaced rather than kept as a
-    // fallback. That rule is why an earlier estimate put this line at 60.
-    expect(before.attributedExact).toBe(966)
+    // containers as some player's inventory, of which ground truth showed only
+    // 26 actually were, so it was replaced rather than kept as a fallback.
+    expect(before.attributedExact).toBe(4377)
     expect(before.unattributedContainers).toBe(88)
 
-    expect(index.stats.attributedExact).toBe(1026)
-    expect(index.stats.unattributedContainers).toBe(30)
+    expect(index.stats.attributedExact).toBe(4377 + EXPECTED.itemContainerLinks)
+    expect(index.stats.unattributedContainers).toBe(27)
     expect(index.stats.playerDetails).toBe(EXPECTED.playerFiles)
     expect(index.stats.playersInLevel).toBe(EXPECTED.playerFiles)
 
@@ -185,16 +191,15 @@ describe.skipIf(!hasData)('golden: player saves', () => {
     ).toBe(true)
   })
 
-  it('is independent of the order player files arrive in', () => {
+  it('is independent of the order player files arrive in', async () => {
     // This is what justifies re-deriving ownership from scratch on every merge
     // rather than patching incrementally.
-    const forward = JSON.parse(readFileSync(LEVEL_JSON, 'utf8'))
-    const a = buildIndexes(forward, { source: 'json' })
+    // Two indexes of the same tree: `buildIndexes` reads it and never
+    // mutates it, and each merge mutates only its own payload.
+    const a = buildIndexes(await levelTree())
     mergePlayerDetails(a, details, [])
 
-    const b = buildIndexes(JSON.parse(readFileSync(LEVEL_JSON, 'utf8')), {
-      source: 'json',
-    })
+    const b = buildIndexes(await levelTree())
     mergePlayerDetails(b, [...details].reverse(), [])
 
     expect(a.containers).toEqual(b.containers)
@@ -204,14 +209,19 @@ describe.skipIf(!hasData)('golden: player saves', () => {
 
   it('grounds the clock model', () => {
     // The finding the entire last-seen design rests on: the guild's
-    // last_online_real_time is on the server-uptime clock, so its maximum is
-    // exactly the world uptime counter. If a patch breaks this, the model is
-    // wrong and this says so.
+    // last_online_real_time is on the server-uptime clock, so the player who
+    // was online when the save was written sits at the world uptime counter.
+    // Exactly on it in the first reference save; 16 ms short of it in the
+    // current one. Anything past a second either way means the model is
+    // wrong, and this says so.
     const guild = index.guilds.find((g) => g.type === 'Guild')!
     const maxTick = Math.max(
       ...guild.members.map((m) => m.lastOnlineTicks ?? 0),
     )
-    expect(maxTick).toBe(index.meta.worldUptimeTicks)
+    const TICKS_PER_SECOND = 10_000_000
+    expect(Math.abs(index.meta.worldUptimeTicks! - maxTick)).toBeLessThan(
+      TICKS_PER_SECOND,
+    )
     expect(index.meta.savedAtTicks).toBeGreaterThan(
       index.meta.worldUptimeTicks!,
     )
@@ -252,6 +262,7 @@ describe.skipIf(!hasData)('golden: player saves', () => {
   })
 
   it('keeps the payload small after merging', () => {
-    expect(JSON.stringify(payload).length).toBeLessThan(2.5e6)
+    // ~7.9 MB for the reference world; see the budget note in level.golden.
+    expect(JSON.stringify(payload).length).toBeLessThan(10e6)
   })
 })

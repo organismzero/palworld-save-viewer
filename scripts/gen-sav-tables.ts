@@ -6,8 +6,10 @@
  * update: `TYPE_HINTS` gains paths when a new struct appears, and
  * `CONCRETE_MODEL_CLASS` gains ids when new buildable objects do. A stale
  * table is not an error — the reader tolerates unknown ids — but it does mean
- * `Structure.concreteModelType` goes unset for new objects, which is exactly
- * the drift `test/golden/savPipeline.golden.test.ts` measures.
+ * `Structure.concreteModelType` goes unset for new objects. Nothing in the UI
+ * reads that field today, and nothing pins it: the `.sav`↔`.json` golden suite
+ * that used to measure the drift went with the `.json` path, so regenerate
+ * after a game update rather than waiting for a test to say so.
  *
  * Usage:
  *

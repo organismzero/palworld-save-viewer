@@ -260,8 +260,8 @@ uptime-at-save-time, which nothing records, so the honest position stays as it i
   decodes, and a `.sav` is compressed, so there is nothing to scan. This is the
   same concession `LocalData` already makes, and the authority stays inside the
   file: the reader checks `SaveData` is a `PalWorldBaseInfoSaveData` and rejects it
-  by name if not. The content marker is still worth adding to `MARKERS` for a
-  converted `LevelMeta.json`, which _can_ be sniffed.
+  by name if not. (A content marker for a converted `LevelMeta.json` was added
+  alongside; it went when the app stopped reading `.json` at all.)
 - **This is a bug fix, not only a feature.** `acceptSavs` treats every
   non-UID-named `.sav` as a level candidate and hands everything but the largest
   to the player reader, so dropping a real world folder — which always contains
@@ -492,7 +492,7 @@ the real save has reached a committed test file. Run it.
 - Snapshot version mismatch deletes and returns `undefined`.
 - `buildSaveIndex(snapshot.payload)` over `test/fixtures/level.mini.json`
   produces an index equal to the direct path — the same cross-check discipline
-  as `savPipeline.golden.test.ts`.
+  the `.sav`↔`.json` golden suite had, before `.json` support was removed.
 - `diff.ts` over two payloads derived from the committed fixture with
   programmatic mutations (bump a level, remove a pal, change an item count,
   add a structure), including the different-worlds guard.

@@ -336,6 +336,19 @@
   }
 }
 
+/* A hover card's cold open. Warm swaps between cards keep the popover open and
+   so do not replay it — see components/cards/hoverCard.ts. */
+[data-hover-card]:popover-open {
+  animation: pw-card-in var(--dur-fast) var(--ease-snap);
+}
+
+@keyframes pw-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
 @keyframes pw-panel-in {
   from {
     opacity: 0;

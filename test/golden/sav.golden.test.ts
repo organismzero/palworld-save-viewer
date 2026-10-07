@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 
 import { isDecodable, readContainer } from '@/parse/sav/container.ts'
 import { decodeSav } from '@/parse/sav/decode.ts'
+import { LEVEL_SAV } from './load.ts'
 
 const DATA = resolve(process.cwd(), 'data')
 const hasData = existsSync(DATA)
@@ -38,8 +39,8 @@ function savFiles(): string[] {
 const LEVEL = {
   format: 'PlM',
   type: 0x31,
-  uncompressedLength: 13_793_869,
-  compressedLength: 861_554,
+  uncompressedLength: 54_600_853,
+  compressedLength: 3_297_971,
   dataOffset: 12,
 } as const
 
@@ -51,10 +52,14 @@ describe.skipIf(!hasData)('golden: real .sav containers', () => {
   })
 
   it('reads Level.sav’s header exactly', () => {
-    const path = files.find((f) => f.endsWith('Level.sav'))
+    // `data/Level.sav` itself, by path: the walk also reaches older world
+    // snapshots under `data/`, whose headers are nothing to do with these.
+    const path = files.find((f) => f === LEVEL_SAV)
+    // Fail rather than pass vacuously: a moved file must not read as a pass.
+    expect(path).toBeDefined()
     if (!path) return
     // Only the first 24 bytes are needed, which is the point — the header is
-    // readable without loading 861 KB, let alone decompressing it.
+    // readable without loading 3.3 MB, let alone decompressing it.
     const container = readContainer(readFileSync(path).subarray(0, 24))
     expect(container.format).toBe(LEVEL.format)
     expect(container.type).toBe(LEVEL.type)
@@ -91,7 +96,11 @@ describe.skipIf(!hasData)('golden: real .sav containers', () => {
   })
 
   it('decompresses the real Level.sav to exactly the promised size', async () => {
-    const path = files.find((f) => f.endsWith('Level.sav'))
+    // `data/Level.sav` itself, by path: the walk also reaches older world
+    // snapshots under `data/`, whose headers are nothing to do with these.
+    const path = files.find((f) => f === LEVEL_SAV)
+    // Fail rather than pass vacuously: a moved file must not read as a pass.
+    expect(path).toBeDefined()
     if (!path) return
     const buf = readFileSync(path)
     const result = await decodeSav(

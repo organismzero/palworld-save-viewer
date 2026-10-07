@@ -9,13 +9,14 @@
  *
  * Player-built structures are the right probe: you cannot build somewhere you
  * have not been, so every one of them must land on explored ground. In the
- * reference save all 396 do, under the identity mapping and under no other.
+ * reference save all 3,429 do under the identity mapping. They cannot rule out
+ * the other orientations on their own — see the flip-and-transpose test — so
+ * the world's own scenery does that.
  *
- * Self-skips without `data/LocalData.sav` and `data/Level.json`.
+ * Self-skips without `data/LocalData.sav` and `data/Level.sav`.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { mapToPixel, savToMapAuto } from '@/domain/coords.ts'
@@ -27,11 +28,9 @@ import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
 import { readLocalData } from '@/parse/worker/readers/localData.ts'
 import { Warnings } from '@/parse/warnings.ts'
 import type { FogMask, LocalDataPayload, SlimPayload } from '@/domain/types.ts'
+import { LOCAL_SAV, hasLevel, levelTree } from './load.ts'
 
-const DATA = resolve(process.cwd(), 'data')
-const LOCAL_SAV = join(DATA, 'LocalData.sav')
-const LEVEL_JSON = join(DATA, 'Level.json')
-const hasBoth = existsSync(LOCAL_SAV) && existsSync(LEVEL_JSON)
+const hasBoth = existsSync(LOCAL_SAV) && hasLevel
 
 function arrayBufferOf(path: string): ArrayBuffer {
   const buf = readFileSync(path)
@@ -53,20 +52,18 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
     warnings = new Warnings()
     local = readLocalData(readGvas(decoded.gvas), 'LocalData.sav', warnings)
     overworld = local.fog.find((f) => f.map === 'overworld')!
-    level = buildIndexes(JSON.parse(readFileSync(LEVEL_JSON, 'utf8')), {
-      source: 'json',
-    })
+    level = buildIndexes(await levelTree())
   }, 120_000)
 
   it('decompresses Oodle to the size the header promised', async () => {
     const decoded = await decodeSav(arrayBufferOf(LOCAL_SAV))
     expect(decoded.ok).toBe(true)
     expect(decoded.container?.format).toBe('PlM')
-    expect(decoded.ok && decoded.gvas.length).toBe(5_540_626)
+    expect(decoded.ok && decoded.gvas.length).toBe(5_689_606)
   })
 
   it('reads every SaveData key without a warning', () => {
-    // 17 keys, all accounted for. A new one here is the first sign of a
+    // 22 keys, all accounted for. A new one here is the first sign of a
     // save-format change, which is the whole reason the warning exists.
     expect(warnings.list()).toEqual([])
     expect(local.warnings).toEqual([])
@@ -82,7 +79,7 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
   })
 
   it('agrees with the world about how much has been explored', () => {
-    expect(overworld.exploredFraction).toBeCloseTo(0.069, 3)
+    expect(overworld.exploredFraction).toBeCloseTo(0.3306, 4)
     // The World Tree is untouched in this save, and its mask says so with the
     // only two byte values it contains.
     expect(local.fog.find((f) => f.map === 'tree')!.exploredFraction).toBe(0)
@@ -100,7 +97,7 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
     const built = level.structures.filter(
       (s) => s.pos && s.buildPlayerUid !== undefined,
     )
-    expect(built.length).toBe(396)
+    expect(built.length).toBe(3429)
 
     const unexplored = built.filter((s) => {
       const at = savToMapAuto(s.pos!.x, s.pos!.y)
@@ -121,8 +118,9 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
   /**
    * The same probe, run against the seven other ways the texture could have
    * been laid out. Without this the test above proves far less than it looks:
-   * the explored region is a blob near the middle, and a wrong orientation can
-   * still catch a cluster of buildings by luck.
+   * in the reference save every built structure also lands on explored ground
+   * under `flipX` and `antitranspose`, because the bases sit where the
+   * explored region overlaps its own mirror images.
    */
   it('rules out every flip and transpose of the mask', () => {
     const N = overworld.size
@@ -145,7 +143,7 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
       .map((s) => savToMapAuto(s.pos!.x, s.pos!.y))
       .filter((at) => at.map === 'overworld')
       .map((at) => mapToPixel(at.mx, at.my, N, N))
-    expect(points.length).toBe(1504)
+    expect(points.length).toBe(7969)
 
     const score = (f: (x: number, y: number) => [number, number]) =>
       points.filter((p) => {
@@ -155,8 +153,9 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
       }).length / points.length
 
     const identity = score((x, y) => [x, y])
-    // Against a map that is only 6.9% explored, this is not a near-miss.
-    expect(identity).toBeGreaterThan(0.8)
+    // 0.985 in the reference save, against 0.946 for the closest wrong
+    // orientation (`antitranspose`) and 0.75 or less for the rest.
+    expect(identity).toBeGreaterThan(0.95)
     for (const [name, f] of orientations) {
       expect(`${name} ${score(f) < identity}`).toBe(`${name} true`)
     }
@@ -166,8 +165,8 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
     const byId = new Map(level.pals.map((p) => [p.instanceId, p]))
     const ids = local.presets.flatMap((p) => p.palIds)
 
-    expect(local.presets).toHaveLength(6)
-    expect(ids).toHaveLength(30)
+    expect(local.presets).toHaveLength(9)
+    expect(ids).toHaveLength(45)
     expect(ids.filter((id) => !byId.has(id))).toEqual([])
   })
 
@@ -204,8 +203,8 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
     ).toBeUndefined()
   })
 
-  it('reads the map pin the player placed', () => {
-    expect(local.markers).toHaveLength(1)
-    expect(local.markers[0]!.at.map).toBe('overworld')
+  it('reads the map pins the player placed', () => {
+    expect(local.markers).toHaveLength(2)
+    expect(local.markers.every((m) => m.at.map === 'overworld')).toBe(true)
   })
 })

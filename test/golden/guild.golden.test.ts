@@ -1,11 +1,9 @@
 /**
  * The M4 acceptance criteria, against a real save.
  *
- * Self-skips without `data/Level.json`, so CI stays green.
+ * Self-skips without `data/Level.sav`, so CI stays green.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
@@ -21,9 +19,7 @@ import {
 import { savToMapAuto } from '@/domain/coords.ts'
 import { WORK_TYPES } from '@/lib/color.ts'
 import type { SaveIndex } from '@/domain/types.ts'
-
-const LEVEL_JSON = resolve(process.cwd(), 'data/Level.json')
-const hasSave = existsSync(LEVEL_JSON)
+import { hasLevel as hasSave, levelTree } from './load.ts'
 
 /**
  * Measured from the reference save.
@@ -33,25 +29,24 @@ const hasSave = existsSync(LEVEL_JSON)
  * the shape of a name is as much as a public test may say about it.
  */
 const EXPECTED = {
-  members: 10,
+  members: 11,
   /** `memberCount` in the save — every pal handle, not a headcount. */
-  handles: 1108,
-  bases: 2,
-  campLevel: 13,
-  markers: 4,
-  pals: 1098,
-  structures: 395,
+  handles: 3974,
+  bases: 4,
+  campLevel: 23,
+  markers: 15,
+  pals: 3963,
+  structures: 3450,
   organizations: 7,
   /** Distinct passive assets across the whole roster. */
-  passives: 83,
+  passives: 100,
 } as const
 
 describe.skipIf(!hasSave)('golden: guild dashboard', () => {
   let index: SaveIndex
 
-  beforeAll(() => {
-    const raw = JSON.parse(readFileSync(LEVEL_JSON, 'utf8'))
-    index = buildSaveIndex(buildIndexes(raw, { source: 'json' }))
+  beforeAll(async () => {
+    index = buildSaveIndex(buildIndexes(await levelTree()))
   })
 
   it('renders one guild and hides seven empty organizations', () => {
@@ -136,7 +131,7 @@ describe.skipIf(!hasSave)('golden: guild dashboard', () => {
     )
   })
 
-  it('summarises all ten players and plots each of their positions', () => {
+  it('summarises every player and plots each of their positions', () => {
     const guild = playerGuilds(index)[0]!
     expect(index.players).toHaveLength(EXPECTED.members)
 

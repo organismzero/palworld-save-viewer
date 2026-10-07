@@ -7,9 +7,12 @@
  */
 
 import type { MountKind, PassiveEffect } from '../../refdata/refdata.ts'
-import type { Guid, SaveIndex } from '../../domain/types.ts'
+import type { Guid, Pal, SaveIndex } from '../../domain/types.ts'
+import type { Refdata } from '../../refdata/refdata.ts'
 import type { Where } from '../../domain/recommend.ts'
-import { element } from '../../lib/color.ts'
+import { WORK_TYPES, element } from '../../lib/color.ts'
+import type { PassiveText } from '../breed/passiveText.ts'
+import type { SpeciesText } from '../breed/speciesText.ts'
 import { serialiseParams } from '../../app/viewParams.ts'
 import { BREED_DEFAULTS, breedCodec } from '../breed/params.ts'
 
@@ -44,6 +47,17 @@ const EFFECT_LABEL: Record<string, string> = {
   RideJumpCount_Increase: 'Mounted jumps',
   LeanBackInvalid_ForPassiveSkill: 'Immune to flinch',
   KnockbackInvalid_ForPassiveSkill: 'Immune to knockback',
+  // Partner-skill effects, for the production purposes.
+  Fishing_ItemAddDrop: 'Fishing drops',
+  Fishing_EnemyAddDrop: 'Fished-pal drops',
+  Fishing_GoodTalentPalProbability: 'Talented catches',
+  Fishing_StartProgressAdd: 'Catch head start',
+  Fishing_SuccessAmountUp: 'Catch progress',
+  Fishing_FailedAmountDown: 'Slower gauge loss',
+  FishingSalvage_ItemDrop: 'Salvage drops',
+  FarmCropHarvestNumRate: 'Crop harvest',
+  FarmCropGrowupSpeed: 'Crop growth',
+  ItemCorruptionSpeedRate: 'Spoilage',
 }
 
 /** Types whose value is a count rather than a percentage. */
@@ -116,4 +130,28 @@ export function breedHref(
     ),
   )
   return `#/breed?${qs}`
+}
+
+/** How many species and how many of your own pals each list shows. */
+export const TOP = 5
+export const MINE = 3
+
+/** Everything a section needs, passed as one so the call sites stay legible. */
+export interface Ctx {
+  index: SaveIndex
+  data: Refdata
+  pool: string[]
+  pals: readonly Pal[]
+  where: (pal: Pal) => Where
+  ownerUid: Guid | undefined
+  text: SpeciesText
+  passives: PassiveText
+}
+
+export function workName(data: Refdata, id: string): string {
+  return (
+    data.work.find((w) => w.id === id)?.display ??
+    WORK_TYPES.find((w) => w.id === id)?.display ??
+    id
+  )
 }

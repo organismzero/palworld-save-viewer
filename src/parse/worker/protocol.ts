@@ -14,26 +14,22 @@ import type { Phase } from './buildIndexes.ts'
 export type { Phase } from './buildIndexes.ts'
 
 export type ToWorker =
-  /** Raw file bytes; transfer the buffer so this costs nothing to send. */
-  | { t: 'parseJson'; id: number; buf: ArrayBuffer }
+  /**
+   * A world's `Level.sav`, decompressed and read as GVAS in the worker. Transfer
+   * the buffer so this costs nothing to send.
+   */
+  | { t: 'parseSav'; id: number; buf: ArrayBuffer }
   /**
    * A whole folder's worth of player saves in one message. Batched so a
    * ten-file drop costs one payload round-trip rather than ten.
    */
-  | {
-      t: 'parsePlayerJson'
-      id: number
-      files: { fileName: string; buf: ArrayBuffer }[]
-    }
-  /** Raw `.sav`: decompressed and read as GVAS in the worker. */
-  | { t: 'parseSav'; id: number; buf: ArrayBuffer }
   | {
       t: 'parsePlayerSav'
       id: number
       files: { fileName: string; buf: ArrayBuffer }[]
     }
   /**
-   * The client's `LocalData`, in either format. One file, not a batch: it
+   * The client's `LocalData`. One file, not a batch: it
    * describes a single client, so there is never more than one to read.
    */
   | { t: 'parseLocal'; id: number; fileName: string; buf: ArrayBuffer }

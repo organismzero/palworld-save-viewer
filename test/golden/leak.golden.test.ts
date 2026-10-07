@@ -31,6 +31,8 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { looksLikeDpsName } from '@/parse/sniff.ts'
+import { gvasReplacer } from '../../scripts/readSav.ts'
+import { LEVEL_SAV, levelTree, playerTrees } from './load.ts'
 
 const ROOT = process.cwd()
 const DATA = resolve(ROOT, 'data')
@@ -51,22 +53,39 @@ function committedTestFiles(): string[] {
 }
 
 /**
- * The save corpus to check against. **Never reads `*_dps.json`** — the one in
- * the reference set is 244 MB and would blow the heap, and the failure would
- * look like something else entirely.
+ * The save corpus to check against: the world and every player save, read from
+ * the raw `.sav` files and serialised the way the fixtures are, so a committed
+ * identifier and the save's own spelling of it compare as text. Never a
+ * `*_dps.sav`, which is not a player save and which `load.ts` never lists.
+ *
+ * Any converted `.json` still lying in `data/` from before the app went
+ * `.sav`-only is added too. Nothing else reads those files any more, but they
+ * are a different, older snapshot of the same world, and identifiers from it
+ * are just as real — a test written against that snapshot could still carry
+ * one.
+ *
+ * One known blind spot: 64-bit integers come out of the binary reader as
+ * doubles, so a platform account id is rounded in the corpus. A committed copy
+ * made by the same reader matches; one typed in by hand from the exact value
+ * would not. The legacy `.json`, where present, carries the exact digits.
  *
  * `LocalData.sav` is deliberately absent, and adding it would buy nothing: the
  * only identifiers it carries are the pal instance ids in its party presets,
- * every one of which resolves against `Level.json` and is therefore already in
- * this corpus. Including it would mean an async Oodle decode for zero extra
- * coverage. If a future field in that file ever names something of its own,
+ * every one of which resolves against the level and is therefore already in
+ * this corpus. If a future field in that file ever names something of its own,
  * that changes and it belongs here.
  */
-function saveCorpus(): string {
+async function saveCorpus(): Promise<string> {
   const parts: string[] = []
-  const level = join(DATA, 'Level.json')
-  if (existsSync(level)) parts.push(readFileSync(level, 'utf8'))
+  if (existsSync(LEVEL_SAV)) {
+    parts.push(JSON.stringify(await levelTree(), gvasReplacer))
+    for (const { tree } of await playerTrees()) {
+      parts.push(JSON.stringify(tree, gvasReplacer))
+    }
+  }
 
+  const legacyLevel = join(DATA, 'Level.json')
+  if (existsSync(legacyLevel)) parts.push(readFileSync(legacyLevel, 'utf8'))
   const players = join(DATA, 'Players')
   if (existsSync(players)) {
     for (const f of readdirSync(players)) {
@@ -76,6 +95,9 @@ function saveCorpus(): string {
   }
   return parts.join('\n').toLowerCase()
 }
+
+/** Read before the suite is collected, since `it.each` needs the answer. */
+const corpus = hasData ? await saveCorpus() : ''
 
 const HYPHENATED =
   /(?<![0-9a-fA-F])[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![0-9a-fA-F])/g
@@ -179,12 +201,10 @@ function realNames(corpusRaw: string): string[] {
 const bareOf = (s: string) => s.replace(/-/g, '').toLowerCase()
 
 describe.skipIf(!hasData)('golden: committed tests leak no save data', () => {
-  const corpus = saveCorpus()
-
   /**
    * The corpus with every hyphen removed, built once and only if needed.
    *
-   * ~75 MB of string, so it is worth not making unless a candidate identifier
+   * Tens of megabytes of string, so it is worth not making unless a candidate identifier
    * actually reaches the third check — but it is what lets a bare UID in a
    * test file be recognised against a save that writes it hyphenated.
    */

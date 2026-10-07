@@ -82,6 +82,15 @@ const KNOWN_SAVE_DATA_FIELDS = new Set([
   'Local_ShowedCutsceneFlag',
   'Local_IsBuildMenuChecked',
   'Local_IgnoreMaskBossSpawnerNames',
+  // Added by a later 2026 patch; present and deliberately unread, with no
+  // consumer yet. LocalData is supplementary by design — most users will not
+  // have it — so if any of these is ever read, it may enrich a view but must
+  // not become the only source of anything.
+  'Local_WarpPointUnlockFlag',
+  'Local_MaxFriendshipPalIds',
+  'Local_UnlockedOnUIBuildObjectBlueprintList',
+  'Local_ItemQuickMoveExceptionIDList',
+  'Local_ShowSkyIslandCloudOnWorldMapUI',
 ])
 
 /** The game's map names, mapped onto ours. */
@@ -101,9 +110,8 @@ function countTrue(n: Node): number {
 /**
  * Extracts the alpha channel of one `MaskTextureData`.
  *
- * The byte array arrives as a `Uint8Array` from the binary reader but as a
- * plain number array when the tree came from a converted `.json`, so both are
- * accepted. A length that is not four bytes times a square is a shape this
+ * The byte array arrives as a `Uint8Array` from the binary reader. A plain
+ * number array is accepted too, which is how unit tests build one inline. A length that is not four bytes times a square is a shape this
  * reader does not understand, and it says so rather than rendering nonsense
  * over the map.
  */

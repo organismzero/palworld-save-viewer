@@ -130,7 +130,8 @@ const CHOOSE: number[][] = (() => {
   return c
 })()
 
-function choose(n: number, k: number): number {
+/** `C(n, k)` for `n` up to the largest pool two parents can present. */
+export function choose(n: number, k: number): number {
   if (k < 0 || n < 0 || k > n) return 0
   return CHOOSE[n]![k] ?? 0
 }

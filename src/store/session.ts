@@ -48,7 +48,9 @@ import { useSaveStore, type PlayerFileState } from './saveStore.ts'
 // 2: carries `levelMeta`. A restored session used to lose it, so the save's own
 // clock reading and its in-game day vanished on reopen — which matters more now
 // that metadata is usually added in a gesture of its own.
-export const SNAPSHOT_VERSION = 2
+// 3: `meta.source` is gone with the `.json` path, and a player record carries
+// `mutations` and `arenaSoloClears`. An old snapshot would restore without them.
+export const SNAPSHOT_VERSION = 3
 
 const KEY = 'current'
 const PREF_KEY = 'psv.remember'

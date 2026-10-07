@@ -2,7 +2,7 @@
  * One player, in depth.
  *
  * The interesting design problem here is what to do about the half of a
- * player's data that `Level.json` simply does not contain. Their inventory,
+ * player's data that `Level.sav` simply does not contain. Their inventory,
  * true position and paldex progress live in `Players/<uid>.sav`, which is a
  * separate file. Rendering an empty inventory would be a lie; hiding the
  * section would hide the fact that there is more to see. So the gap is shown
@@ -14,7 +14,8 @@ import { useMemo, useState } from 'react'
 import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { playerSummary } from '../../domain/guild.ts'
-import { palName, palTooltip } from '../../domain/palText.ts'
+import { palName } from '../../domain/palText.ts'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
@@ -207,15 +208,13 @@ export function PlayerDetailPanel({
                 {topPals.map((pal) => {
                   const info = data?.species[pal.characterId.toLowerCase()]
                   return (
-                    <li
+                    <CardTrigger
                       key={pal.instanceId}
-                      // The row shows a name, an IV bar and a level; everything
-                      // else about the pal was previously a click away.
-                      title={palTooltip(
-                        pal,
-                        info,
-                        (a) => data?.passives[a.toLowerCase()],
-                      )}
+                      as="li"
+                      // The row shows a name, an IV bar and a level; the card
+                      // carries everything else about the pal.
+                      card={{ kind: 'pal', pal }}
+                      focusable
                       className="flex items-center gap-2"
                     >
                       <GameIcon
@@ -237,7 +236,7 @@ export function PlayerDetailPanel({
                       <span className="num w-8 shrink-0 text-right text-[11px] text-[var(--color-muted)]">
                         {pal.level}
                       </span>
-                    </li>
+                    </CardTrigger>
                   )
                 })}
               </ul>

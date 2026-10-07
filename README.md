@@ -43,16 +43,18 @@ Seven views, switchable with the tabs or the number keys:
   fewer pals wins. Gender is checked against the pals actually held, alternate
   routes of the same length are offered, and when there is no path it says which
   specific parent is out of reach rather than only "no route".
-- **Builds** — which pals to carry and which to station, by purpose: a
-  breeding base, a work base for chosen jobs, a fight against any pal, or
-  travel. Split into party, base and breeding farm, because a passive that acts
-  on you only counts in the party and one that acts on a building only counts at
-  a base — and that split comes from the game's own passive data, as does every
-  ranking here. Each list pairs the best species there are with the best of your
-  own pals, and a species you lack links to Breed with the right passives
-  already picked.
+  Its second mode, **Pick a pair**, works the other way round: choose two of
+  the pals in that same pool and it shows the child they make and every set of
+  passives it can inherit, ranked for a purpose (fighting by default, or working
+  a base, travel or a breeding base) with the chance of each and of "this or
+  better". Pals that cannot pair with the first pick, because they are the same
+  gender or have no recorded gender, are dimmed rather than hidden. The child's
+  IVs are not predicted.
+- **Builds** — which pals to carry and which to station, by purpose: a breeding base, a work base for chosen jobs, a fight against any pal, travel, fishing and salvaging, a food production base, a cake base for any of the five cake tiers, or a ranch resources base. Split into party, base and breeding farm, because a passive that acts on you only counts in the party and one that acts on a building only counts at a base — and that split comes from the game's own passive data, as does every ranking here. Each list pairs the best species there are with the best of your own pals, and a species you lack links to Breed with the right passives already picked. The production purposes rank by partner skills and Ranch drops, since almost no rollable passive touches fishing, crops or ranching; the cake base lists the chosen cake's ingredients and where each one comes from — which pals drop it at a Ranch, which crop to grow, or what to mill or butcher.
 
 Press <kbd>⌘K</kbd> to search pals, items, players and bases from anywhere.
+
+Hovering almost anything named — a pal, species, passive, item, player, guild member, active skill, element, work type, base or structure — opens an in-game-style card with its stats and details, on the map as well. Keyboard focus opens the same card, and screen readers get its text as the trigger's description.
 
 ## Using it
 
@@ -68,15 +70,15 @@ inferred to exact, positions become real rather than last-jump estimates, and
 paldex progress, technology points and true last-online times appear. Without
 it the app says so rather than guessing silently.
 
-JSON converted by
+Raw `.sav` files are all it reads. JSON converted by
 [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools)
-works too, and the two paths produce the same result — a golden test asserts
-that entity for entity against a real world.
+used to work too; it is no longer accepted, because the raw save is read
+directly and the conversion step only cost time.
 
 | Key                       | What it does                       |
 | ------------------------- | ---------------------------------- |
 | <kbd>⌘K</kbd>             | Search pals, items, players, bases |
-| <kbd>1</kbd>–<kbd>5</kbd> | Switch view                        |
+| <kbd>1</kbd>–<kbd>7</kbd> | Switch view                        |
 | <kbd>?</kbd>              | Keyboard shortcuts                 |
 | <kbd>Esc</kbd>            | Close whatever is open             |
 
@@ -122,9 +124,7 @@ afterwards.
 
 ## Limitations
 
-Things that are true today and worth knowing before filing a bug. Counts come
-from the reference save this project is developed against — a 10-player
-dedicated-server world.
+Things that are true today and worth knowing before filing a bug. Counts come from the reference save this project is developed against — an 11-player dedicated-server world.
 
 - **Fog of war is one client's, not the server's.** The explored-area mask
   lives in `LocalData.sav`, which the game keeps beside the client rather than
@@ -140,7 +140,7 @@ dedicated-server world.
 - **Container capacity is not in the save.** Only occupied slots are stored, so
   an inventory grid's empty cells are a floor on the real size, not the
   capacity. Gaps between items are real. The UI says so.
-- **The map's Dungeons layer is always empty.** All 149 dungeons parse, but
+- **The map's Dungeons layer is always empty.** All 142 dungeons parse, but
   `DungeonSaveData` carries no transform of its own — a position would have to
   be derived from each dungeon's nested map objects, which is not implemented.
 - **World Tree entities are not drawn on the overworld map.** They live in a
@@ -149,8 +149,7 @@ dedicated-server world.
 - **Guild `last_online_real_time` is not a wall clock.** Its epoch is
   unidentified and it stops while the server is down, so without player saves
   the app shows "1.5d of uptime ago" rather than inventing a date.
-- **351 of 1,317 containers cannot be attributed from a level save alone**, and
-  88 of those resolve to no owner at all. Loading player saves fixes most of
+- **222 of 4,599 containers cannot be attributed from a level save alone**, and 88 of those resolve to no owner at all. Loading player saves fixes most of
   it; the rest appear under "Unattributed storage" rather than being hidden.
 
 ## How `.sav` reading works
@@ -163,13 +162,13 @@ clean-room Kraken decompressor.
 
 Every save in the reference set is `PlM`, including per-player files. An 861 KB
 `Level.sav` decompresses to 13.8 MB of GVAS in about 25 ms, and the binary
-reader in `src/parse/sav/` turns that into exactly the tree a converted `.json`
-parses to. Both paths then run the same indexer, which is what makes them
-checkable against each other rather than merely similar.
+reader in `src/parse/sav/` turns that into a tree shaped exactly like
+PalworldSaveTools' JSON export — the shape the readers and the committed test
+fixtures are written against.
 
 `ooz-wasm` is GPL-3.0-or-later, which is why this project is too — see
-[Licence](#licence). Both it and the GVAS reader are dynamically imported, so a
-session that only opens `.json` never downloads either.
+[Licence](#licence). Both it and the GVAS reader are dynamically imported, so
+the drop zone and landing screen never pay for them.
 
 Two lookup tables — struct type hints and map-object model classes — are
 generated from a PalworldSaveTools checkout by `pnpm gen:sav-tables`. They
@@ -205,6 +204,7 @@ pnpm dev
 src/
   app/         shell, drop zone, command palette, dialogs, error boundaries
   components/  the design system — primitives, controls, icons, charts, slots
+    cards/     the hover cards: one shared layer, one body per kind of thing
   domain/      the slim model, coordinate transform, per-view selectors
   fonts/       the two self-hosted typefaces, with their OFL licences
   lib/         formatting, the element palette, class-name helpers
@@ -213,7 +213,7 @@ src/
     worker/    the parse worker and the readers that build the domain model
   refdata/     runtime game data and art, slimmed and cached in IndexedDB
   store/       zustand stores: save, refdata, UI
-  views/       map, pals, bases, guild, breed
+  views/       map, pals, bases, guild, breed, builds
 ```
 
 A save is parsed in a worker that retains the ~170 MB raw tree; what crosses to
@@ -257,8 +257,8 @@ real data, put a save there:
 
 ```
 data/Level.sav     # the raw save — read directly
-data/Level.json    # the same world converted, so the two paths can be compared
-data/Players/      # per-player saves, either extension
+data/LevelMeta.sav # the world's name and in-game day
+data/Players/      # per-player saves, <uid>.sav
 data/LocalData.sav # your client's own file: fog of war, map pins, progress
 ```
 
@@ -268,9 +268,10 @@ the server, so it will not be in a server save folder. On Windows look under
 name, and one world's copy makes no sense against another's, so it is dropped
 separately and merges onto whatever world is already open.
 
-Only `Level.sav` is needed to use the app. The converted `.json` is what lets
-the cross-check in `savPipeline.golden.test.ts` work, so keep both if you
-intend to change anything under `src/parse/sav/`.
+Only `Level.sav` is needed to use the app, and `LocalData.sav` only ever adds
+to what the others show — no view depends on it. The golden tests read every
+one of these files that is present and skip the rest. `pnpm fixture` rebuilds
+the committed, redacted `test/fixtures/level.mini.json` from `data/Level.sav`.
 
 ### Configuration
 

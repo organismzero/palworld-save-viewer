@@ -6,6 +6,7 @@ import {
   containerLocation,
   searchItems,
   storageTotals,
+  type ItemHit,
 } from '../../domain/bases.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type {
@@ -16,6 +17,10 @@ import type {
   Structure,
 } from '../../domain/types.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
+import {
+  useHoverCard,
+  type CardDescriptor,
+} from '../../components/cards/hoverCard.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import {
   CONTAINER_COLUMNS,
@@ -404,6 +409,7 @@ function SourceRail({
                     source.kind === 'base' && source.baseId === base.baseId
                   }
                   title={baseNames.get(base.baseId) ?? 'Base'}
+                  card={{ kind: 'base', id: base.baseId }}
                   lines={[
                     `${count(structures.length)} structures · ${totals.containers} chests`,
                     `${workers} workers · ${compact(totals.items)} items`,
@@ -467,15 +473,22 @@ function RailButton({
   active,
   title,
   lines,
+  card,
   onClick,
 }: {
   active: boolean
   title: string
   lines: string[]
+  card?: CardDescriptor
   onClick: () => void
 }) {
   return (
-    <ListRow selected={active} onClick={onClick} className="items-start py-1.5">
+    <ListRow
+      selected={active}
+      onClick={onClick}
+      card={card}
+      className="items-start py-1.5"
+    >
       <span className="min-w-0 flex-1">
         <span className="block truncate leading-tight">{title}</span>
         {lines.map((l) => (
@@ -748,7 +761,12 @@ function StructureRow({
     : undefined
 
   return (
-    <ListRow selected={selected} onClick={onSelect} className="h-full pl-6">
+    <ListRow
+      selected={selected}
+      onClick={onSelect}
+      card={{ kind: 'structure', id: structure.instanceId }}
+      className="h-full pl-6"
+    >
       <GameIcon path={info?.icon} name={name} size={22} />
       <span className="min-w-0 flex-1">
         <span className="block truncate leading-tight">{name}</span>
@@ -1124,24 +1142,14 @@ function ItemSearch({
                 </div>
                 {hits.map((hit) => (
                   <div key={hit.staticId}>
-                    <button
-                      type="button"
+                    <ItemHitButton
+                      hit={hit}
                       onClick={() =>
                         setExpanded((e) =>
                           e === hit.staticId ? undefined : hit.staticId,
                         )
                       }
-                      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
-                    >
-                      <span className="truncate text-sm">{hit.name}</span>
-                      <span className="num ml-auto shrink-0 text-xs">
-                        {count(hit.total)}
-                      </span>
-                      <span className="label shrink-0">
-                        {hit.places.length} place
-                        {hit.places.length === 1 ? '' : 's'}
-                      </span>
-                    </button>
+                    />
 
                     {expanded === hit.staticId && (
                       <ul className="border-t border-[var(--color-line-faint)] bg-[rgb(3_9_13/0.4)]">
@@ -1187,5 +1195,36 @@ function ItemSearch({
         </div>
       )}
     </div>
+  )
+}
+
+/** A search hit, whose hover card is the item it found. */
+function ItemHitButton({
+  hit,
+  onClick,
+}: {
+  hit: ItemHit
+  onClick: () => void
+}) {
+  const hover = useHoverCard({
+    kind: 'item',
+    staticId: hit.staticId,
+    count: hit.total,
+    places: hit.places.length,
+  })
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      {...hover}
+      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
+    >
+      <span className="truncate text-sm">{hit.name}</span>
+      <span className="num ml-auto shrink-0 text-xs">{count(hit.total)}</span>
+      <span className="label shrink-0">
+        {hit.places.length} place
+        {hit.places.length === 1 ? '' : 's'}
+      </span>
+    </button>
   )
 }

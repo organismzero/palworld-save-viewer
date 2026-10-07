@@ -18,11 +18,18 @@ export function GameIcon({
   name,
   elementName,
   size = 44,
+  eager,
 }: {
   path?: string
   name: string
   elementName?: string
   size?: number
+  /**
+   * Fetch now rather than on scroll. For hover cards: a card is on screen for
+   * a second or two, and a lazy image inside a popover can arrive after it has
+   * gone.
+   */
+  eager?: boolean
 }) {
   const url = iconUrl(path)
   // Remembering *which* URL failed, rather than a boolean plus an effect to
@@ -41,7 +48,7 @@ export function GameIcon({
       alt=""
       width={size}
       height={size}
-      loading="lazy"
+      loading={eager ? 'eager' : 'lazy'}
       decoding="async"
       onError={() => setFailedUrl(url)}
       className="shrink-0 object-contain"

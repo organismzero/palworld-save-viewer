@@ -17,10 +17,14 @@ const B = 'bbbbbbbb'.padEnd(32, '0')
 /** Shares `A`'s first eight characters, so the prefix is ambiguous. */
 const A2 = `aaaaaaaa${'1'.padEnd(24, '1')}`
 
+const P1 = 'cccccccc-1111-1111-1111-111111111111'
+const P2 = 'dddddddd-2222-2222-2222-222222222222'
+
 function codecFor(uids: string[], palOwners: string[] = uids) {
   return breedCodec({
     playerByUid: new Map(uids.map((u) => [u, {}])),
     palsByOwner: new Map(palOwners.map((u) => [u, []])),
+    palById: new Map([P1, P2].map((id) => [id, {}])),
   } as unknown as SaveIndex)
 }
 
@@ -44,8 +48,49 @@ describe('breedCodec', () => {
       includeMembers: [],
       passives: ['legend', 'swift'],
       noSpares: true,
+      mode: 'plan' as const,
+      pairA: undefined,
+      pairB: undefined,
+      purpose: 'fight' as const,
     }
     expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('round-trips a pair', () => {
+    const value = {
+      ...BREED_DEFAULTS,
+      mode: 'pair' as const,
+      pairA: P1,
+      pairB: P2,
+      purpose: 'work' as const,
+    }
+    expect(roundTrip(value)).toEqual(value)
+  })
+
+  it('opens a link from before pairs in plan mode', () => {
+    const decoded = codec.decode(
+      new URLSearchParams('t=anubis'),
+      BREED_DEFAULTS,
+    )
+    expect(decoded.mode).toBe('plan')
+    expect(decoded.purpose).toBe('fight')
+  })
+
+  it('keeps the pair out of a plan link', () => {
+    const out = codec.encode(
+      { ...BREED_DEFAULTS, pairA: P1, purpose: 'work' },
+      BREED_DEFAULTS,
+    )
+    expect(out.m).toBeUndefined()
+    expect(out.a).toBeUndefined()
+    expect(out.for).toBeUndefined()
+  })
+
+  it('ignores a purpose that ranks nothing', () => {
+    expect(
+      codec.decode(new URLSearchParams('m=pair&for=fishing'), BREED_DEFAULTS)
+        .purpose,
+    ).toBe('fight')
   })
 
   it('will not carry “nothing else” with nothing to be exact about', () => {
@@ -136,8 +181,10 @@ describe('breedCodec', () => {
     // four identical chips on four duplicate React keys, announcing that the
     // four-slot limit had been reached.
     expect(
-      codec.decode(new URLSearchParams('pv=legend,Legend,LEGEND'), BREED_DEFAULTS)
-        .passives,
+      codec.decode(
+        new URLSearchParams('pv=legend,Legend,LEGEND'),
+        BREED_DEFAULTS,
+      ).passives,
     ).toEqual(['legend'])
   })
 

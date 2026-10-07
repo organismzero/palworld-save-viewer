@@ -10,62 +10,57 @@
  * moving is the signal, and a fuzzy assertion would hide it.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it, beforeAll } from 'vitest'
 
 import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
 import { buildSaveIndex, ivTotal, speciesCounts } from '@/domain/index.ts'
 import { savToMapAuto } from '@/domain/coords.ts'
 import type { SaveIndex } from '@/domain/types.ts'
+import { hasLevel as hasSave, levelTree } from './load.ts'
 
-const LEVEL_JSON = resolve(process.cwd(), 'data/Level.json')
-const hasSave = existsSync(LEVEL_JSON)
-
-/** Measured from the reference save. */
+/**
+ * Measured from the reference save: a well-built 2026 world, eleven players in
+ * one guild across four bases. Re-pinned when the reference moved to a newer
+ * game version — every count grew, most of them several times over, and none
+ * of the readers needed to change to follow it.
+ */
 const EXPECTED = {
-  characters: 1108,
-  players: 10,
-  pals: 1098,
+  characters: 3974,
+  players: 11,
+  pals: 3963,
   /**
    * Distinct species *after* stripping the `BOSS_` prefix. The raw
-   * `CharacterID` values number 140, because alphas are stored as a separate
+   * `CharacterID` values number 383, because alphas are stored as a separate
    * `BOSS_Foo` id alongside the ordinary `Foo`; collapsing them is the point.
    */
-  species: 116,
-  speciesRaw: 140,
-  structures: 1504,
-  /**
-   * 967 map objects carry an `ItemContainer` module, but one of them — an
-   * `Expedition` object — has a zero-GUID `target_container_id`, which is not
-   * a real link and is dropped. 966 chests actually resolve.
-   */
-  chestStructures: 966,
-  containers: 1317,
-  orphanContainers: 351,
-  charContainers: 32,
+  species: 272,
+  speciesRaw: 383,
+  structures: 8795,
+  /** Map objects whose `ItemContainer` module resolves to a real container. */
+  chestStructures: 4377,
+  containers: 4599,
+  orphanContainers: 222,
+  charContainers: 29,
   guilds: 1,
   organizations: 7,
-  bases: 2,
-  dungeons: 149,
-  dynamicItems: 221,
+  bases: 4,
+  dungeons: 142,
+  dynamicItems: 549,
 } as const
 
-describe.skipIf(!hasSave)('golden: real Level.json', () => {
+describe.skipIf(!hasSave)('golden: real Level.sav', () => {
   let index: SaveIndex
   let parseMs = 0
   let indexMs = 0
   let payloadBytes = 0
 
-  beforeAll(() => {
-    const text = readFileSync(LEVEL_JSON, 'utf8')
-
+  beforeAll(async () => {
     let t = performance.now()
-    const raw = JSON.parse(text)
+    const raw = await levelTree()
     parseMs = performance.now() - t
 
     t = performance.now()
-    const payload = buildIndexes(raw, { source: 'json' })
+    const payload = buildIndexes(raw)
     indexMs = performance.now() - t
 
     payloadBytes = JSON.stringify(payload).length
@@ -99,7 +94,7 @@ describe.skipIf(!hasSave)('golden: real Level.json', () => {
     }
     // The gap between the raw and collapsed counts is exactly the number of
     // alpha species that *also* occur in ordinary form — those are the ones
-    // that merge. Alpha-only species (13 here) still contribute a species
+    // that merge. Alpha-only species (32 here) still contribute a species
     // each, so the gap is smaller than the alpha species count.
     const plain = new Set(
       index.pals.filter((p) => !p.isBoss).map((p) => p.characterId),
@@ -249,14 +244,15 @@ describe.skipIf(!hasSave)('golden: real Level.json', () => {
   })
 
   it('parses within budget and produces a small payload', () => {
-    // Reference save measures ~270 ms to parse and ~1.85 MB of payload. The
-    // budgets below are headroom over that, and exist to catch a regression
-    // that starts dragging the raw tree across the worker boundary — the
-    // payload is three orders of magnitude smaller than the 74 MB input and
-    // must stay that way.
-    expect(parseMs).toBeLessThan(2000)
-    expect(indexMs).toBeLessThan(2000)
-    expect(payloadBytes).toBeLessThan(2.5e6)
+    // The reference save takes ~1.5 s to decompress and read on its own and
+    // ~3 s under a parallel golden run, and its payload measures ~7.8 MB. The
+    // budgets are headroom over that. The payload one is the one that matters:
+    // it exists to catch a regression that starts dragging the raw tree across
+    // the worker boundary, and the tree behind a 55 MB GVAS file is far larger
+    // than any number here.
+    expect(parseMs).toBeLessThan(10_000)
+    expect(indexMs).toBeLessThan(5_000)
+    expect(payloadBytes).toBeLessThan(10e6)
   })
 
   it('reports no parse warnings for a healthy save', () => {
@@ -269,7 +265,7 @@ describe.skipIf(!hasSave)('golden: real Level.json', () => {
 })
 
 describe.skipIf(hasSave)('golden: skipped', () => {
-  it('needs data/Level.json — see README', () => {
+  it('needs data/Level.sav — see README', () => {
     expect(hasSave).toBe(false)
   })
 })

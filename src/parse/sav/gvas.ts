@@ -1,10 +1,10 @@
 /**
- * A decompressed GVAS archive → the same tree `Level.json` parses to.
+ * A decompressed GVAS archive → the tree every reader takes.
  *
- * The output is deliberately interchangeable with `JSON.parse(levelJson)`:
- * `buildIndexes` takes either without knowing which it got, which is what
- * makes the two paths verifiable against each other rather than merely
- * similar.
+ * The shape is PalworldSaveTools' JSON export, which this app once read
+ * directly. The `.json` path is gone, but the shape stays: the readers, the
+ * committed test fixtures and the property accessors in `parse/gvas.ts` are all
+ * written against it.
  */
 
 import { FArchiveReader } from './farchive.ts'

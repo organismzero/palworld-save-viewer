@@ -107,7 +107,7 @@ describe('over the mini fixture', () => {
 
   beforeAll(() => {
     const raw = JSON.parse(readFileSync(FIXTURE, 'utf8'))
-    index = buildSaveIndex(buildIndexes(raw, { source: 'json' }))
+    index = buildSaveIndex(buildIndexes(raw))
   })
 
   const nameOfStructure = (s: Structure) => s.mapObjectId

@@ -46,6 +46,8 @@ import {
 } from '../../components/primitives.tsx'
 import { Button, Checkbox, SelectControl } from '../../components/controls.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
+import { memberRole } from '../../lib/roles.ts'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 
 /**
  * Guild and player dashboard.
@@ -241,7 +243,7 @@ function GuildHero({
         </dl>
       </Panel>
 
-      <MemberStrip index={index} guild={guild} />
+      <MemberStrip guild={guild} />
       <Markers guild={guild} />
     </header>
   )
@@ -273,40 +275,6 @@ function Metric({
   )
 }
 
-/**
- * Guild roles, and how each one looks.
- *
- * One table because the two places that showed a role had drifted apart: the
- * player cards hard-coded "master" for the admin and rendered a pill only for
- * roles below 3 — so members and unassigned players showed nothing at all —
- * while the member strip coloured only the admin and ignored `role === 1`
- * entirely. Now both read from here.
- *
- * `signal` is normally reserved for UI chrome rather than data, and the master
- * is the deliberate exception: there is exactly one per guild, and it is the
- * one role worth spending the accent colour on.
- */
-const ROLES: Record<number, { name: string; tone: PillTone; hint: string }> = {
-  1: {
-    name: 'master',
-    tone: 'signal',
-    hint: 'Guild master — founded or inherited the guild, and can disband it.',
-  },
-  2: {
-    name: 'officer',
-    tone: 'warn',
-    hint: 'Officer — elevated permissions over the guild and its bases.',
-  },
-  3: { name: 'member', tone: 'neutral', hint: 'Member of the guild.' },
-  4: {
-    name: 'unassigned',
-    tone: 'neutral',
-    hint: 'No role recorded for this player in the guild data.',
-  },
-}
-
-const roleOf = (role: number | undefined) => ROLES[role ?? 4] ?? ROLES[4]!
-
 /** The same tones as `Pill`, as a ring for the member avatars. */
 const RING_TONES: Record<PillTone, string> = {
   signal: 'border-[var(--color-signal)] text-[var(--color-signal)]',
@@ -316,29 +284,24 @@ const RING_TONES: Record<PillTone, string> = {
   danger: 'border-[var(--color-danger)]/70 text-[var(--color-danger)]',
 }
 
-function MemberStrip({ index, guild }: { index: SaveIndex; guild: Guild }) {
+function MemberStrip({ guild }: { guild: Guild }) {
   if (guild.members.length === 0) return null
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       {guild.members.map((m) => {
-        const player = index.playerByUid.get(m.playerUid)
-        // The admin flag and the role field are separate records and can
-        // disagree; treat either as master so the strip and the cards agree.
-        const role =
-          guild.adminPlayerUid === m.playerUid ? ROLES[1]! : roleOf(m.role)
+        const role = memberRole(guild, m.playerUid)
         return (
-          <span
+          <CardTrigger
             key={m.playerUid}
-            title={`${m.name} · ${role.name}${
-              player ? ` · level ${player.level}` : ''
-            }`}
+            card={{ kind: 'player', uid: m.playerUid }}
+            focusable
             className={cn(
               'flex h-8 w-8 items-center justify-center rounded-full border font-mono text-[11px] uppercase',
               RING_TONES[role.tone],
             )}
           >
             {m.name.slice(0, 2)}
-          </span>
+          </CardTrigger>
         )
       })}
     </div>
@@ -438,12 +401,19 @@ function Players({
               onSelect={() => onSelect(m.player!)}
             />
           ) : (
-            <Panel key={m.uid} padded>
-              <div className="text-sm">{m.name}</div>
-              <p className="label mt-2">
-                in the guild record, but no character in this save
-              </p>
-            </Panel>
+            <CardTrigger
+              key={m.uid}
+              as="div"
+              card={{ kind: 'player', uid: m.uid }}
+              focusable
+            >
+              <Panel padded>
+                <div className="text-sm">{m.name}</div>
+                <p className="label mt-2">
+                  in the guild record, but no character in this save
+                </p>
+              </Panel>
+            </CardTrigger>
           ),
         )}
       </div>
@@ -466,7 +436,7 @@ function PlayerCard({
 }) {
   const { data } = useRefdataStore()
   const { player } = summary
-  const role = summary.isAdmin ? ROLES[1]! : roleOf(summary.role)
+  const role = memberRole(guild, player.playerUid)
 
   const detail = index.playerDetails.find(
     (d) => d.playerUid === player.playerUid,
@@ -690,7 +660,12 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
           <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
             {passives.map((p) => (
               <div key={p.asset} className="flex items-center gap-2">
-                <PassiveChip name={p.name} rank={p.rank} />
+                <PassiveChip
+                  id={p.asset}
+                  name={p.name}
+                  rank={p.rank}
+                  focusable
+                />
                 <span className="num ml-auto text-xs text-[var(--color-muted)]">
                   {count(p.count)}
                 </span>

@@ -99,7 +99,7 @@ export interface Player {
 }
 
 /* -------------------------------------------------------------------------
-   Player saves — everything only `Players/<uid>.json` knows
+   Player saves — everything only `Players/<uid>.sav` knows
    ------------------------------------------------------------------------- */
 
 export type PlayerPlatform = 'Steam' | 'PS5' | 'Xbox' | 'Mac' | 'Unknown'
@@ -136,6 +136,10 @@ export interface PlayerRecord {
   fishCaught: number
   /** Sum of `PalRankupCount` — pals put through the condenser. */
   palsCondensed: number
+  /** `MutationCount`. Absent on saves older than the field. */
+  mutations?: number
+  /** Sum of `ArenaSoloClearCount` over every rank. Absent on older saves. */
+  arenaSoloClears?: number
 }
 
 export interface PlayerDetail {
@@ -270,7 +274,7 @@ export interface Container {
   /** Which of a player's six containers this is, once a player save says so. */
   ownerSlot?: PlayerContainerSlot
   /**
-   * Containers do not record their owner, so attribution from `Level.json`
+   * Containers do not record their owner, so attribution from `Level.sav`
    * alone is guesswork. A loaded player save upgrades its six containers to
    * `exact`; everything else stays `inferred` and the UI says so.
    */
@@ -409,8 +413,6 @@ export interface SaveMeta {
   worldUptimeTicks?: number
   /** `GameTimeSaveData.GameDateTimeTicks` — in-world time. */
   gameTimeTicks?: number
-  /** Which path produced this tree; both yield an identical `SaveIndex`. */
-  source: 'json' | 'sav'
 }
 
 /* -------------------------------------------------------------------------

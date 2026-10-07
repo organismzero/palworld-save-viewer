@@ -38,9 +38,7 @@ describe('toSlim', () => {
   let index: SaveIndex
 
   beforeAll(() => {
-    payload = buildIndexes(JSON.parse(readFileSync(FIXTURE, 'utf8')), {
-      source: 'json',
-    })
+    payload = buildIndexes(JSON.parse(readFileSync(FIXTURE, 'utf8')))
     index = buildSaveIndex(payload)
   })
 
@@ -71,8 +69,8 @@ describe('toSlim', () => {
 
   /**
    * The round-trip that matters: a restored session must be indistinguishable
-   * from a freshly parsed one. Same cross-check discipline as
-   * `savPipeline.golden.test.ts`, at fixture scale so it runs in CI.
+   * from a freshly parsed one, checked key by key at fixture scale so it runs
+   * in CI.
    */
   it('rebuilds an index equal to the direct path', () => {
     const restored = buildSaveIndex(structuredClone(toSlim(index)))

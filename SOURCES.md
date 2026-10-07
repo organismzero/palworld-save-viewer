@@ -30,12 +30,12 @@ _compressor_.
 
 `src/parse/sav/` reads the container header, decompresses all three formats
 (`PlM` via `ooz-wasm`, `PlZ` and `CNK` via the browser's own
-`DecompressionStream`), and parses the GVAS archive into the same tree that a
-converted `.json` produces. `test/golden/savPipeline.golden.test.ts` asserts
-both paths yield an identical `SaveIndex` from the same world.
+`DecompressionStream`), and parses the GVAS archive into a tree shaped like
+PalworldSaveTools' JSON export, which is what the readers are written against.
+The app once accepted that JSON too; it now reads raw saves only.
 
-The Oodle WASM and the GVAS reader are dynamically imported, so a session that
-only ever opens `.json` never downloads either.
+The Oodle WASM and the GVAS reader are dynamically imported, so the landing
+screen never downloads either.
 
 ## Game data and art
 
@@ -48,16 +48,16 @@ At runtime the app fetches reference data and art from
 caches it in your browser's IndexedDB. Exactly eight data files are fetched,
 projected down to the fields the app uses before caching:
 
-| File                      | Used for                                                         |
-| ------------------------- | ---------------------------------------------------------------- |
-| `characters.json`         | pal names, elements, rarity, work, icons, base stats, mount kind |
-| `skills.json`             | passive names, ranks, descriptions and effects; active skills    |
-| `work_suitability.json`   | work-type display names                                          |
-| `fast_travel_points.json` | landmarks, and naming bases by nearest one                       |
-| `items.json`              | item names, icons, rarity, weight, stacks                        |
-| `world.json`              | structure names and icons                                        |
-| `pal_exp_table.json`      | the levelling curve behind player XP bars                        |
-| `breedingdata.json`       | combi ranks and the unique breeding combos                       |
+| File                      | Used for                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| `characters.json`         | pal names, elements, rarity, work, icons, base stats, mount kind, partner skills, Ranch drops     |
+| `skills.json`             | passive names, ranks, descriptions and effects; partner-skill effects; active skills; element art |
+| `work_suitability.json`   | work-type display names                                                                           |
+| `fast_travel_points.json` | landmarks, and naming bases by nearest one                                                        |
+| `items.json`              | item names, icons, rarity, weight, stacks, descriptions, food                                     |
+| `world.json`              | structure names and icons                                                                         |
+| `pal_exp_table.json`      | the levelling curve behind player XP bars                                                         |
+| `breedingdata.json`       | combi ranks and the unique breeding combos                                                        |
 
 `breedingdata.json` is the one projected most aggressively: 7.1 MB on disk down
 to ~67 KB cached. Only two of its six sections are read — the per-species combi
@@ -75,13 +75,14 @@ a bad or moved file costs breeding paths rather than every name and icon in the
 app. If cold start ever needs defending, this is the file to move behind a
 lazy `loadBreeding()` under its own IndexedDB key.
 
-The Builds view's recommendations are computed from these same files — base
-stats and work levels from `characters.json`, passive effect types, values and
-targets and active-skill power from `skills.json`. **One table is typed in by
-hand:** the element chart in `src/domain/typeChart.ts`, because none of the
-fetched files carry it. It records only which element beats which; the ×2 and
-×0.5 multipliers applied to it are this project's assumption, and the view
-says so.
+The Builds view's recommendations are computed from these same files — base stats and work levels from `characters.json`, passive and partner-skill effect types, values and targets and active-skill power from `skills.json`. Partner-skill effects are the level-1 values. What a pal drops at a Ranch is not a field anywhere: it is read out of the species' description ("Sometimes drops Milk when assigned to Ranch") by matching `items.json` names, longest first, in `src/refdata/gameText.ts`.
+
+Passive inheritance odds are the one input not in any fetched file. They are `Combi_PassiveInheritNum` and `Combi_PassiveRandomAddNum`, two weight arrays in the game's `BP_PalGameSetting`, as described in `tylercamp/palcalc`'s `README-PALWORLD-MECHANICS.md`, and they are held as constants in `src/domain/passives.ts`. The route planner applies them pessimistically, assuming the two parents' other passives never overlap. Pick-a-pair mode (`src/domain/pairOutcomes.ts`) applies the same arrays to two actual pals, so the overlap is known and the odds are exact under that rule. Its ranking reuses the Builds view's passive scoring.
+
+**Two tables are typed in by hand**, because none of the fetched files carry them:
+
+- The element chart in `src/domain/typeChart.ts`. It records only which element beats which; the ×2 and ×0.5 multipliers applied to it are this project's assumption, and the view says so.
+- The cake recipes in `src/domain/recipes.ts`. The cakes themselves are items, with their breeding effects in their descriptions, but no recipe is in the data. Beside them is the one ingredient chain the data cannot state, Flour milled from Wheat; every other ingredient's source — Ranch drop, crop with a seed item, or meat butchered from the species its id names — is looked up in the fetched data.
 
 Plus `game_data/icons/**` on demand — one request per icon actually shown —
 and `assets/maps/T_WorldMap.webp`, which is baked into 341 tiles across five
@@ -122,6 +123,7 @@ PalworldSaveTools is itself downstream of
 
 - [`ooz-wasm`](https://github.com/SnosMe/ooz-wasm) — GPL-3.0-or-later (see above)
 - [Pixi.js](https://pixijs.com/) — MIT
+- [Floating UI](https://floating-ui.com/) (`@floating-ui/react-dom`) — MIT; positions the hover cards
 
 ## Fonts
 
@@ -147,8 +149,7 @@ belonged to the design this one replaced.
 
 ## Privacy
 
-Save files — raw `.sav` and converted `.json` alike — are decompressed and
-parsed entirely in a Web Worker on your own machine, and are never uploaded
+Save files are decompressed and parsed entirely in a Web Worker on your own machine, and are never uploaded
 anywhere. There is no server, no account, no analytics and no telemetry.
 
 The only network requests the app makes are for the game reference data and art

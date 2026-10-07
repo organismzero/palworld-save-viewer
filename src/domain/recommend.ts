@@ -53,7 +53,15 @@ import { against, strongAgainst } from './typeChart.ts'
    Purposes
    ------------------------------------------------------------------------- */
 
-export type GoalId = 'breeding' | 'work' | 'fight' | 'travel'
+export type GoalId =
+  | 'breeding'
+  | 'work'
+  | 'fight'
+  | 'travel'
+  | 'fishing'
+  | 'food'
+  | 'cake'
+  | 'ranch'
 
 /** Where a pal does its job for a purpose. */
 export type Side = 'party' | 'base' | 'farm'
@@ -99,6 +107,22 @@ export const BREEDING_WORK = [
   'EmitFlame',
   'Transport',
 ] as const
+
+/**
+ * The jobs a food base starts with: grow it, gather it, ranch it, cook it and
+ * keep it cold. The view lets them be changed.
+ */
+export const FOOD_WORK = [
+  'Seeding',
+  'Watering',
+  'Collection',
+  'MonsterFarm',
+  'EmitFlame',
+  'Cool',
+] as const
+
+/** A ranch base's one job. */
+export const RANCH_WORK = ['MonsterFarm'] as const
 
 /** What a pal working at a base wants, for the jobs it has been given. */
 function workerWants(
@@ -191,6 +215,22 @@ export function sidesFor(goal: GoalId, input: GoalInput): SideSpec[] {
             want('KnockbackInvalid_ForPassiveSkill', 1, ON_PAL),
           ],
         },
+      ]
+    // Fishing, salvaging and the three production bases are carried by partner
+    // skills and ranch drops, not by anything a pal can roll: no displayable
+    // passive touches fishing, crops or what a Ranch yields. So the party side
+    // for fishing wants nothing, and says so, and the bases want what any
+    // worker wants for the jobs they do.
+    case 'fishing':
+      return [{ side: 'party', want: [], extra: [] }]
+    case 'food':
+    case 'ranch':
+      return [{ side: 'base', ...workerWants(input.work) }]
+    case 'cake':
+      return [
+        { side: 'base', ...workerWants(input.work) },
+        // A cake does its work in a Breeding Farm's chest.
+        { side: 'farm', want: [want('BreedSpeed', 1, ON_PAL)], extra: [] },
       ]
     case 'travel':
       return [
@@ -698,4 +738,199 @@ export function carriersOf(
 /** Lowercased species ids among these pals. */
 export function speciesHeld(pals: readonly Pal[]): Set<string> {
   return new Set(pals.map((p) => p.characterId.toLowerCase()))
+}
+
+/* -------------------------------------------------------------------------
+   Partner skills and ranch drops
+   ------------------------------------------------------------------------- */
+
+/**
+ * Partner-skill effects each production purpose looks for, grouped the way the
+ * view shows them. `sign` is `-1` where less is better (hunger, spoilage).
+ *
+ * All from `SpeciesInfo.partnerEffects` — typed effect data, not the prose —
+ * and all at the partner skill's level 1.
+ */
+export const PARTNER_WANTS = {
+  fishing: [
+    want('Fishing_ItemAddDrop', 1, ON_YOU),
+    want('Fishing_EnemyAddDrop', 1, ON_YOU),
+    want('Fishing_GoodTalentPalProbability', 1, ON_YOU),
+    want('Fishing_StartProgressAdd', 1, ON_YOU),
+    want('Fishing_SuccessAmountUp', 1, ON_YOU),
+    want('Fishing_FailedAmountDown', 1, ON_YOU),
+  ],
+  salvage: [want('FishingSalvage_ItemDrop', 1, ON_YOU)],
+  crops: [
+    want('FarmCropHarvestNumRate', 1, ON_BASE),
+    want('FarmCropGrowupSpeed', 1, ON_BASE),
+  ],
+  hunger: [want('FullStomatch_Decrease', -1, ON_BASE)],
+  ranchRank: [want('WorkSuitabilityAddRank_MonsterFarm', 1, ON_BASE)],
+  spoilage: [want('ItemCorruptionSpeedRate', -1, ON_YOU)],
+} as const satisfies Record<string, readonly Want[]>
+
+export interface PartnerRow {
+  id: string
+  /** The species' partner effects that matched, in the order wanted. */
+  effects: PassiveEffect[]
+}
+
+function matchedEffects(
+  data: Refdata,
+  speciesId: string,
+  wants: readonly Want[],
+): PassiveEffect[] {
+  const effects = data.species[speciesId]?.partnerEffects ?? []
+  const out: PassiveEffect[] = []
+  for (const w of wants) {
+    const e = effects.find(
+      (x) =>
+        x.type === w.type &&
+        w.targets.includes(x.target) &&
+        Math.sign(x.value) !== -w.sign,
+    )
+    if (e) out.push(e)
+  }
+  return out
+}
+
+/**
+ * Species whose partner skill does something wanted, best first.
+ *
+ * Ordered by how many of the wanted effects it has, then by the size of its
+ * first one. The effects are different kinds — more fishing drops, a head start
+ * on the minigame — so their values are never added together; the rows show
+ * each one instead.
+ */
+export function bestPartners(
+  data: Refdata,
+  pool: readonly string[],
+  wants: readonly Want[],
+  limit: number,
+): PartnerRow[] {
+  const rows: PartnerRow[] = []
+  for (const id of pool) {
+    const effects = matchedEffects(data, id, wants)
+    if (effects.length > 0) rows.push({ id, effects })
+  }
+  return rows
+    .sort(
+      (a, b) =>
+        b.effects.length - a.effects.length ||
+        Math.abs(b.effects[0]!.value) - Math.abs(a.effects[0]!.value) ||
+        a.id.localeCompare(b.id),
+    )
+    .slice(0, limit)
+}
+
+export interface OwnedPartner extends OwnedRow {
+  effects: PassiveEffect[]
+}
+
+/** The player's pals of those species, the one to hand first. */
+export function ownedPartners(
+  data: Refdata,
+  pals: readonly Pal[],
+  where: (pal: Pal) => Where,
+  wants: readonly Want[],
+  spec: SideSpec,
+  limit: number,
+): OwnedPartner[] {
+  const rows: OwnedPartner[] = []
+  for (const pal of pals) {
+    const effects = matchedEffects(data, pal.characterId.toLowerCase(), wants)
+    if (effects.length === 0) continue
+    rows.push({
+      pal,
+      effects,
+      where: where(pal),
+      passiveScore: palPassiveScore(pal, data.passives, spec),
+    })
+  }
+  const order: Record<Where, number> = {
+    party: 0,
+    base: 1,
+    palbox: 2,
+    unknown: 3,
+  }
+  return rows
+    .sort(
+      (a, b) =>
+        b.effects.length - a.effects.length ||
+        order[a.where] - order[b.where] ||
+        b.pal.rank - a.pal.rank ||
+        b.pal.level - a.pal.level,
+    )
+    .slice(0, limit)
+}
+
+/**
+ * Species that drop an item when they work a Ranch.
+ *
+ * Ranked as ranch workers — Ranching level, then work speed, then how cheaply
+ * they eat — since a drop only happens while the pal is working the Ranch.
+ */
+export function ranchProducers(
+  data: Refdata,
+  pool: readonly string[],
+  itemId: string,
+  limit: number,
+): WorkerRow[] {
+  const key = itemId.toLowerCase()
+  const droppers = pool.filter((id) =>
+    data.species[id]?.ranchDrops?.includes(key),
+  )
+  return bestWorkers(data, droppers, 'MonsterFarm', limit)
+}
+
+/** The player's pals that drop it, ranked as ranch workers. */
+export function ownedProducers(
+  data: Refdata,
+  pals: readonly Pal[],
+  where: (pal: Pal) => Where,
+  itemId: string,
+  spec: SideSpec,
+  limit: number,
+): OwnedWorker[] {
+  const key = itemId.toLowerCase()
+  return ownedWorkers(
+    data,
+    pals.filter((p) =>
+      data.species[p.characterId.toLowerCase()]?.ranchDrops?.includes(key),
+    ),
+    where,
+    'MonsterFarm',
+    spec,
+    limit,
+  )
+}
+
+/**
+ * Every item any pal in the pool drops at a Ranch, with who drops it.
+ *
+ * `food` picks the food drops (for the food base) or everything else (for the
+ * ranch base).
+ */
+export function ranchDropItems(
+  data: Refdata,
+  pool: readonly string[],
+  food: boolean,
+): { item: string; species: string[] }[] {
+  const by = new Map<string, string[]>()
+  for (const id of pool) {
+    for (const item of data.species[id]?.ranchDrops ?? []) {
+      if (Boolean(data.items[item]?.food) !== food) continue
+      by.set(item, [...(by.get(item) ?? []), id])
+    }
+  }
+  return [...by]
+    .map(([item, species]) => ({ item, species }))
+    .sort(
+      (a, b) =>
+        b.species.length - a.species.length ||
+        (data.items[a.item]?.name ?? a.item).localeCompare(
+          data.items[b.item]?.name ?? b.item,
+        ),
+    )
 }

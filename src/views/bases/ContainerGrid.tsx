@@ -13,6 +13,7 @@ import { slotGridSize, slotsByIndex } from '../../domain/bases.ts'
 import type { Container, ItemStack, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ItemSlot, type SlotContents } from '../../components/ItemSlot.tsx'
+import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Pill } from '../../components/primitives.tsx'
 import { IconButton } from '../../components/controls.tsx'
 import { count } from '../../lib/format.ts'
@@ -137,12 +138,6 @@ function contentsFor(
     stack,
     info: data?.items[stack.staticId.toLowerCase()],
     dynamic,
-    // Resolved here rather than in `ItemSlot`, which is deliberately
-    // store-free. An item's passives are the per-instance detail worth
-    // hovering for, and raw ids like `PAL_ALLAttack_down1` said nothing.
-    passiveNames: dynamic?.passives.map(
-      (a) => data?.passives[a.toLowerCase()]?.name ?? a,
-    ),
   }
 }
 
@@ -167,15 +162,18 @@ function ItemList({ container }: { container: Container }) {
           .map(([staticId, n]) => {
             const info = data?.items[staticId.toLowerCase()]
             return (
-              <div
+              <CardTrigger
                 key={staticId}
+                as="div"
+                card={{ kind: 'item', staticId, count: n }}
+                focusable
                 className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
               >
                 <span className="truncate">{info?.name ?? staticId}</span>
                 <span className="num shrink-0 text-[var(--color-muted)]">
                   {count(n)}
                 </span>
-              </div>
+              </CardTrigger>
             )
           })}
       </div>

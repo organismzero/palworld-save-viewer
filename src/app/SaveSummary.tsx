@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
 import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
-import { palTooltip } from '../domain/palText.ts'
+import { CardTrigger } from '../components/cards/CardTrigger.tsx'
 import {
   bytes,
   count,
@@ -20,6 +20,7 @@ import {
 import { useSaveStore, type PlayerFileState } from '../store/saveStore.ts'
 import { Button } from '../components/controls.tsx'
 import { useFilePicker } from './filePicker.tsx'
+import { memberRole } from '../lib/roles.ts'
 import {
   ElementBadge,
   IVBar,
@@ -256,11 +257,16 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 const pos = detail?.pos ?? player?.pos
 
                 return [
-                  <span className="flex items-center gap-2">
+                  // Raw like the rest of this view: no reference data.
+                  <CardTrigger
+                    card={{ kind: 'player', uid: m.playerUid, raw: true }}
+                    focusable
+                    className="flex items-center gap-2"
+                  >
                     {seen?.onlineAtSave && <OnlineDot />}
                     {m.name}
-                  </span>,
-                  ROLE_NAMES[m.role ?? 4] ?? '—',
+                  </CardTrigger>,
+                  memberRole(guild, m.playerUid).name,
                   detail ? detail.platform : <RawId>—</RawId>,
                   player?.level ?? '—',
                   index.palsByOwner.get(m.playerUid)?.length ?? 0,
@@ -279,7 +285,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
           <section className="mb-10">
             <SectionHeading
               title="Progression"
-              hint="from player saves — not present in Level.json"
+              hint="from player saves — not present in Level.sav"
             />
             <Table
               head={[
@@ -293,6 +299,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 'dungeons',
                 'fish',
                 'condensed',
+                'mutated',
+                'arena',
                 'crafted',
                 'recipes',
               ]}
@@ -301,7 +309,12 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 .map((d) => {
                   const player = index.playerByUid.get(d.playerUid)
                   return [
-                    player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>,
+                    <CardTrigger
+                      card={{ kind: 'player', uid: d.playerUid, raw: true }}
+                      focusable
+                    >
+                      {player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>}
+                    </CardTrigger>,
                     d.record.palsCaught,
                     d.record.speciesCaught,
                     d.record.paldexUnlocked,
@@ -312,6 +325,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                       (d.record.fixedDungeonsCleared ?? 0),
                     d.record.fishCaught,
                     d.record.palsCondensed,
+                    d.record.mutations ?? '—',
+                    d.record.arenaSoloClears ?? '—',
                     count(d.record.itemsCrafted),
                     d.unlockedRecipes.length,
                   ]
@@ -330,7 +345,12 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               ...STATUS_ORDER.map((k) => STATUS_LABELS[k]),
             ]}
             rows={index.players.map((p) => [
-              p.name,
+              <CardTrigger
+                card={{ kind: 'player', uid: p.playerUid, raw: true }}
+                focusable
+              >
+                {p.name}
+              </CardTrigger>,
               p.level,
               p.hp ? p.hp.toFixed(0) : '—',
               ...STATUS_ORDER.map((k) => p.statusPoints[k] ?? 0),
@@ -393,12 +413,16 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
               .slice(0, 10)
               .map((p) => [
                 // No refdata in this view by design — it reports what the save
-                // says, raw ids and all. `palTooltip` degrades to exactly that.
-                <span title={palTooltip(p)} className="flex items-center gap-2">
+                // says, raw ids and all, and a `raw` card does the same.
+                <CardTrigger
+                  card={{ kind: 'pal', pal: p, raw: true }}
+                  focusable
+                  className="flex items-center gap-2"
+                >
                   <MonogramTile name={p.characterId} size={26} />
                   {p.isBoss && <Pill tone="danger">alpha</Pill>}
                   {p.characterId}
-                </span>,
+                </CardTrigger>,
                 p.nickname ?? '—',
                 p.level,
                 <span className="flex items-center gap-2">
@@ -739,13 +763,6 @@ function LastSeenCell({
     )
   }
   return <>—</>
-}
-
-const ROLE_NAMES: Record<number, string> = {
-  1: 'master',
-  2: 'officer',
-  3: 'member',
-  4: '—',
 }
 
 /** Kept for the element pip's import to stay meaningful in future views. */
