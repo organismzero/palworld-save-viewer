@@ -219,33 +219,26 @@ Not checked by hand: "Copy as text" (the headless browser has no clipboard, as w
 
 ## Phase 8 — Builds
 
-### 8a. Make the footnote true — done
+Done. 8c went with the utility tray, and 8b was removed before any of this: partner skills are typed effects, scored for the fishing, food, cake and ranch purposes, and shown in the species hover card on every row.
 
-The Fight footnote said level, IVs and condensing order your pals, and only `ownedPartners` read a rank field. `rank` is the condenser stars; `rankAttack`, `rankHp`, `rankDefence` and `rankCraftSpeed` are soul enhancements, a different thing the original item ran together. `ownedFighters` now breaks ties on level, condenser rank, attack and health souls, then attack IV; `ownedWorkers` on work-speed souls, then condenser rank. `ownedMounts` is unchanged, since nothing in the save makes the same mount faster. The footnote names all four, and `recommend.test.ts` pins each tie-break.
+- **8a. Make the footnote true.** `rank` is the condenser stars; `rankAttack`, `rankHp`, `rankDefence` and `rankCraftSpeed` are soul enhancements, a different thing the original item ran together. `ownedFighters` breaks ties on level, condenser rank, attack and health souls, then attack IV; `ownedWorkers` on work-speed souls, then condenser rank. The footnote names all four and `recommend.test.ts` pins each tie-break.
+- **8d. Pool the guild.** The "also count" controls from Breed, under the same link keys (`gp`, `gb`, `gm`), from the same `stockFor` with no breeding table. The picker is now `src/views/breed/PoolPicker.tsx`. A pal that is not the selected player's is tagged with whose it is, and `breedHref` carries the pool across.
+- **8e. Fight improvements.** `opponentPool` adds tower and raid bosses to the opponent list. `OwnedFighter.learnedMoves` flags a strong move that is learned and not equipped, from `learnedNotEquipped` in `palState.ts`, which the Pals drawer now uses too. "Longer lists" in the rail raises every list from 5 and 3 to 12 and 8 (`more=1`).
+- **8f. Party loadout.** `partyAdvice` and `mountGaps` in `recommend.ts`; `src/views/builds/Party.tsx`. Fight shows who stays and who to swap for whom, with a reason taken from `FIGHT_ORDER`, the same list the ranking sorts by. Travel shows, per kind of mount, whether the fastest on offer is carried.
+- **8g. Condense.** A ninth purpose. `condensePlan` in `src/domain/condense.ts`: for each species held more than once, the one to keep and the rest, with any duplicate that already has stars or souls called out.
 
-### 8c. Element chart — S **(tray)**
+Where this departs from the plan as written:
 
-Draw `typeChart.BEATS` as the matrix it is, with the selected player's element coverage from `elementDistribution` overlaid as counts per row. It lives in the utility tray as a reference tab rather than under Fight, so it is reachable from every view. The ×2 and ×0.5 assumption the footnote warns about becomes inspectable.
+- **The opponent pool is not "every species with a paldex number".** That set is 303 against the breeding table's 304 and adds oil-rig and quest variants, not bosses. Tower and raid bosses have no paldex number; they are found by their `gym_` and `raid_` ids, one per name and element set. Alphas and rampaging pals are left out: 371 rows that repeat the ordinary species.
+- **"Show more" is one switch for the tab, not a control per list.** There are a dozen lists on a page, and one that is longer than the rest is rarely what is wanted.
+- **The party strip keeps the party's size.** It pairs off who is carried against the same number from the top of the ranking and does not fill empty slots.
+- **Condense counts only the selected player's own pals**, whatever is ticked under "also count", and says nothing about how far the duplicates go. The cost of a star is not in the game data this app reads.
 
-### 8d. Pool the guild — S
+Found on the way:
 
-Builds reads one player's pals. Add the "also from" toggle Breed has, reusing `buildStock`'s `includeMembers`, and mark borrowed rows with the owner's name.
+- **Condenser stars were one too many everywhere.** The save's `Rank` counts from one, so a one-star pal read "★2" and a finished one "★5". `condenserStars` in `palText.ts` converts, and the CSV's `condenser_rank` column now holds stars.
 
-### 8e. Fight improvements — M
-
-- Opponent pool: every species with a `zukan` number, not only breedable ones (`speciesPool` uses the breeding table and falls back to zukan only when that failed to load), so tower bosses and alphas that do not breed appear.
-- `masteredWaza` read for owned fighters: a strong skill the pal already knows but has not equipped is flagged "learned, not equipped". The Pals drawer already derives this list; share the function.
-- Show more on the `TOP`/`MINE` caps in `buildsText.ts`.
-
-### 8f. Party loadout — M
-
-Under Fight and Travel, a "your party now" strip from `PlayerDetail.otomoContainerId` via `locator()`, compared against the recommendation: which slots the advice would change and why.
-
-### 8g. Condense goal — M
-
-A ninth purpose, **Condense**: for each species held more than once, the best instance to keep (by IV total, passives, ranks) and the duplicates that would feed it, with the rank fields shown. Uses `palsByCharacterId` and the per-stat condensing fields, which today appear only in the CSV export. Rows jump to Pals.
-
-8b (show partner skills on species rows) is removed: partner skills are now typed effects, scored for the fishing, food, cake and ranch purposes, and shown in the species hover card on every row.
+Not seen in the reference save: a "not equipped" flag on a fighter (none of the players' top fighters has an unused strong move), and the party strip without a player save.
 
 ---
 
@@ -279,7 +272,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
-5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. ~~**Phase 7**~~, done. Then what remains of **Phase 8**. Each phase is independently shippable.
+5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. ~~**Phase 7**~~ and ~~**Phase 8**~~, done. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 

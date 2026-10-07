@@ -45,7 +45,6 @@ import {
   speciesHeld,
   speciesPool,
   strongSkills,
-  type GoalId,
   type SideSpec,
 } from '../../domain/recommend.ts'
 import { strongAgainst, STRONG, WEAK } from '../../domain/typeChart.ts'
@@ -92,11 +91,17 @@ import {
   TwoLists,
   WorkSections,
 } from './parts.tsx'
-import { BUILDS_DEFAULTS, buildsCodec, type BuildsParams } from './params.ts'
+import {
+  BUILDS_DEFAULTS,
+  buildsCodec,
+  type BuildsGoal,
+  type BuildsParams,
+} from './params.ts'
+import { Condense } from './Condense.tsx'
 import { FightParty, TravelParty } from './Party.tsx'
 import { Cake, CakePicker, Fishing, Food, Ranch } from './ProductionBuilds.tsx'
 
-const GOALS: { id: GoalId; label: string; hint: string }[] = [
+const GOALS: { id: BuildsGoal; label: string; hint: string }[] = [
   {
     id: 'breeding',
     label: 'Breeding base',
@@ -125,13 +130,18 @@ const GOALS: { id: GoalId; label: string; hint: string }[] = [
     label: 'Ranch base',
     hint: 'Who drops which materials',
   },
+  {
+    id: 'condense',
+    label: 'Condense',
+    hint: 'Which duplicate to keep',
+  },
 ]
 
 /** The purposes carried by partner skills and ranch drops. */
-const PRODUCTION: readonly GoalId[] = ['fishing', 'food', 'cake', 'ranch']
+const PRODUCTION: readonly BuildsGoal[] = ['fishing', 'food', 'cake', 'ranch']
 
 /** The purposes whose jobs can be picked in the rail. */
-const JOB_GOALS: readonly GoalId[] = ['breeding', 'work', 'food', 'ranch']
+const JOB_GOALS: readonly BuildsGoal[] = ['breeding', 'work', 'food', 'ranch']
 
 /** The jobs a work base starts with, before any are picked. */
 const WORK_DEFAULT = ['Mining', 'Deforest']
@@ -326,6 +336,9 @@ export function BuildsView({ index }: { index: SaveIndex }) {
             {params.goal === 'food' && <Food ctx={ctx} work={work} />}
             {params.goal === 'cake' && <Cake ctx={ctx} cake={params.cake} />}
             {params.goal === 'ranch' && <Ranch ctx={ctx} work={work} />}
+            {params.goal === 'condense' && (
+              <Condense ctx={ctx} more={params.more} />
+            )}
             <Footnote
               goal={params.goal}
               player={player}
@@ -886,11 +899,32 @@ function Footnote({
   player,
   pooled,
 }: {
-  goal: GoalId
+  goal: BuildsGoal
   player?: Player
   /** Whether anyone else's pals are being counted. */
   pooled: boolean
 }) {
+  if (goal === 'condense') {
+    return (
+      <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
+        <p>
+          Only {player ? `${player.name}’s` : 'this player’s'} own pals are
+          counted here, whoever else is ticked on the left: a guildmate’s
+          duplicate is not yours to condense. The one to keep is chosen on IV
+          total, then on its passives by the game’s own rank for each, then on
+          the stars and souls already in it, then on level.
+        </p>
+        <p className="mt-2">
+          How many duplicates a star costs is not in the game data this app
+          reads, so a row says how many there are to feed and not how far they
+          will go. Nor is what becomes of a fed pal’s own stars and souls, which
+          is why a duplicate that has either is called out and not simply
+          counted.
+        </p>
+      </section>
+    )
+  }
+
   return (
     <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>

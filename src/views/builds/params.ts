@@ -23,8 +23,14 @@ import {
   type ParamCodec,
 } from '../../app/viewParams.ts'
 
+/**
+ * What the tab is being asked. Eight of them are purposes `recommend.ts` ranks
+ * for; the ninth reads the player's own duplicates and ranks nothing.
+ */
+export type BuildsGoal = GoalId | 'condense'
+
 export interface BuildsParams {
-  goal: GoalId
+  goal: BuildsGoal
   /** Work type ids. Empty means the goal's own default set. */
   work: string[]
   /** Lowercased species id of the pal being fought. */
@@ -61,7 +67,7 @@ export const BUILDS_DEFAULTS: BuildsParams = {
   includeMembers: [],
 }
 
-const GOALS: readonly GoalId[] = [
+const GOALS: readonly BuildsGoal[] = [
   'breeding',
   'work',
   'fight',
@@ -70,6 +76,7 @@ const GOALS: readonly GoalId[] = [
   'food',
   'cake',
   'ranch',
+  'condense',
 ]
 
 export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
@@ -95,7 +102,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       return out
     },
     decode(raw, d) {
-      const goal = raw.get('g') as GoalId | null
+      const goal = raw.get('g') as BuildsGoal | null
       return {
         goal: goal && GOALS.includes(goal) ? goal : d.goal,
         work: [...new Set(list(raw, 'w'))].sort(),

@@ -39,6 +39,15 @@ describe('buildsCodec', () => {
     expect(codec.encode(BUILDS_DEFAULTS, BUILDS_DEFAULTS)).toEqual({})
   })
 
+  it('round-trips the ninth purpose and the longer lists', () => {
+    expect(roundTrip({ goal: 'condense', more: true })).toMatchObject({
+      goal: 'condense',
+      more: true,
+    })
+    const got = codec.decode(new URLSearchParams('g=nope'), BUILDS_DEFAULTS)
+    expect(got.goal).toBe(BUILDS_DEFAULTS.goal)
+  })
+
   it('round-trips the opponent list’s elements', () => {
     expect(roundTrip({ elements: ['Fire', 'Ice'] }).elements).toEqual(['Fire', 'Ice']) // prettier-ignore
     const got = codec.decode(new URLSearchParams('el=fire,nope'), BUILDS_DEFAULTS) // prettier-ignore
