@@ -83,6 +83,8 @@ IV inheritance is a thinner model than the passive one. The same asset holds `Co
 
 The hatch estimate takes offspring sex as an even coin flip for every species, which is also an assumption: `src/domain/breeding.ts`, `applyGender`.
 
+**Egg size and incubation time are not available**, so the Breed view says nothing about either. Checked on 2026-10-08 against every file under `resources/game_data/` in the mirror: `characters.json` has no egg, incubation or hatch field on a species (its `stats` stop at `rarity`, `size` and the combat and movement figures), `breedingdata.json`'s `pal_info` holds only name, `combi_rank`, `rarity`, `ignore_combi` and icon, and `items.json` lists the 56 egg items (`PalEgg_<Element>_01` to `_05`) as plain materials with nothing tying a species to a tier or a tier to a time. `tylercamp/palcalc` infers egg size from `rarity` by comparing against paldb.cc, for three sizes only, and says in its own source that the mapping was not found in game data. That is a guess about a guess, so it is not used here. Offspring sex ratio is absent for the same reason, which is why the hatch estimate takes it as even.
+
 **Two tables are typed in by hand**, because none of the fetched files carry them:
 
 - The element chart in `src/domain/typeChart.ts`. It records only which element beats which; the ×2 and ×0.5 multipliers applied to it are this project's assumption, and the view says so.

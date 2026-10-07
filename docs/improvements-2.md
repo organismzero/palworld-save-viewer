@@ -196,37 +196,24 @@ Not seen in the reference save: the damaged link in the triage (no base has a da
 
 ## Phase 7 — Breed
 
-### 7a. Gender in the egg estimate — M
+Done. 7d and 7e went with the utility tray.
 
-The per-step "needs both genders" pill already ships, from `step.selfPair`. The arithmetic does not: `expectedEggs` is passive-only. Add a gender factor: a self-pair step needs both sexes from its own hatches, so its expected hatches roughly double; a step whose parent species is in `Stock.singleGender` for the needed sex is flagged "only males held" or "only females held". Fold both into the plan total. The plan footnote's gender sentence is rewritten to state the arithmetic rather than say "expect more".
+- **7a. Sex in the egg estimate.** `applyGender` in `src/domain/breeding.ts` runs over a finished step list. An egg that must come out one sex, because it is paired with a held pal that exists in one sex only or with another bred pal, counts as two hatches; one then paired with its own kind counts as three. The step that pays is the one that makes the egg, and it carries `gender` saying why and for which later step. `BreedingPlan.expectedEggs` includes it and `genderEggs` is that share, so a species-only plan can show a hatch count too.
+- **7b. Child IV forecast.** `src/domain/ivForecast.ts`. Pick a pair shows each parent's IVs, the mean of a hatch, and the chance of matching the better parent, per stat and for all three. A plan shows the mean IVs of each step, carried down through eggs that do not exist yet, which is exact because the mean is linear in the parents' values. Among pals equal on IV total, `ownedNode` now prefers one that is not sick or hurt, then the one with more souls in it.
+- **7c. Borrow list.** "Who to ask" under the steps, one line per owner, with "Copy as text". `borrowGroups` and `borrowText` in `src/views/breed/ownerText.ts`.
+- **7f. Species list filters.** Element, reachable, not held, nearest first, in the link as `le`, `lr`, `ln` and `ls` and stripped from a saved path. `filterSpecies` in `src/views/breed/speciesFilter.ts`. The element pips are now `src/components/ElementToggles.tsx`, used by Pals, the species list, the pair picker and the Builds opponent list.
+- **7g. Egg and incubation.** Spiked and stopped: the mirror has no egg size or incubation time for a species. What was checked is in `SOURCES.md`.
 
-Tests: `breeding.test.ts` cases for a self-pair route and a single-gender stock, asserting the factor against the passive-only figure.
+Where this departs from the plan as written:
 
-### 7b. Child IV forecast — M
+- **The cost of sex lands on the step that makes the egg, not on the self-pair step.** The plan said a self-pair step's hatches "roughly double". Nothing extra is hatched at the step that uses the pair; it is the step before it that has to be run until it has given a male and a female, and that is three good hatches on average, not two. The old "needs both genders" pill sat on the wrong step and is gone.
+- **Two bred parents of different species cost a hatch too.** The plan named self-pairs and single-sex stock. Any pair of bred pals has to differ in sex, so the cheaper of the two is counted twice.
+- **Sex corrects the estimate and not the route.** The search still minimises eggs and passive odds. Putting sex in the search would multiply its state space to change a route that rarely changes.
+- **The IV weights are 3:2:1, from the game's files.** The rest of the model is `tylercamp/palcalc`'s reading of about 190 hatches, and the 0 to 100 range for a fresh roll is this project's assumption. Both screens say it is a model.
+- **"Sum of per-stat ranks" was read as the four soul ranks.** They do not pass down, so they come after health and only break a tie.
+- **Builds and the pair picker get the element filter only.** Reach and "not held" are about what can be bred; an opponent is met and the picker lists pals already held.
 
-Start in Pick-a-pair, where both parents are concrete: from their `ivHp/ivAttack/ivDefense`, show an expected and best-case band for the egg, labelled as a model with its assumption stated. `PairPane`'s footnote, `pairOutcomes.ts` and the README all say IVs are not predicted and must change with it.
-
-Then per plan step. Parent choice in `ownedNode` already prefers own pals, then the higher IV total; add a tie-break on the sum of per-stat ranks and on health (`sickness`, `physicalHealth` absent first). This only affects species-only plans: with passives selected, the search pins the parent.
-
-### 7c. Borrow list — S
-
-`BreedingPlan.borrowed` shows today as a count pill, a summary sentence and a pill on each borrowed parent. Add a list grouped by owner: "ask Waffle for Foxparks ♀ and Gumoss ♂", with a "copy as text" button, so the pooled plan is something you can paste to a guildmate.
-
-### 7d. Plan tracker — M **(tray)**
-
-Per-step "done" checkboxes. The original key, `psv.plans.<fileName>.<target>`, cannot work: every save is named `Level.sav` and a save carries no world identity. Ticks live on a saved breeding path instead, keyed by the step's child species and parent pair, since step numbers shift as the plan shortens. When a later save loads, `BreedStep.progress` re-matches what is held and the tracker reconciles: a step whose `meets` is true is shown done regardless, and ticks for steps no longer in the plan are dropped. The footnote asking the user to "save and reload after each generation" is replaced by a line naming which steps the current save already satisfies.
-
-### 7e. Search feedback — S **(tray)**
-
-`PassiveHeader` prints a static sentence while the search runs. Show elapsed time from the `ms` `usePassiveSearch` already captures and nothing displays, a cancel button that terminates the worker, and a visible banner when `truncated` is set rather than a clause in the footnote.
-
-### 7f. Species list filters — S
-
-Element, reachable only, not yet owned, sort by generations (`reach.depth`). Same controls on the Builds opponent list. The Pick-a-pair pal picker lists pals rather than species; it gets the element filter only.
-
-### 7g. Egg and incubation — spike
-
-Refdata carries no egg size or incubation time. Check whether the PalworldSaveTools mirror exposes them; if so add a projection and show the egg size per step and the wall-clock cost with and without incubation passives. If not, record that in SOURCES.md and stop.
+Not checked by hand: "Copy as text" (the headless browser has no clipboard, as with Copy link), and the hatch estimate on a plan with passives selected, which is covered by `applyGender`'s unit test.
 
 ---
 
@@ -292,7 +279,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
-5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. Then **Phase 7** and what remains of **Phase 8**, in that order. Each phase is independently shippable.
+5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. ~~**Phase 7**~~, done. Then what remains of **Phase 8**. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 
