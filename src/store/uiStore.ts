@@ -39,9 +39,9 @@ export interface Notice {
 }
 
 /** The utility tray's sheets. */
-export type TrayTab = 'passives' | 'paths'
+export type TrayTab = 'passives' | 'paths' | 'types'
 
-const TRAY_TABS: readonly TrayTab[] = ['passives', 'paths']
+const TRAY_TABS: readonly TrayTab[] = ['passives', 'paths', 'types']
 const TRAY_KEY = 'psv.tray'
 
 interface TrayPref {

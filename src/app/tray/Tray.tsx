@@ -20,6 +20,7 @@ import { Button, IconButton, SegmentBar } from '../../components/controls.tsx'
 import { useEscape } from '../../components/drawer.ts'
 import { PassiveSheet } from './PassiveSheet.tsx'
 import { SavedPaths } from './SavedPaths.tsx'
+import { TypeChart } from './TypeChart.tsx'
 
 /** Ties the sheet tabs to the panel they drive, for `aria-controls`. */
 const TRAY_TABS = 'tray'
@@ -28,6 +29,7 @@ const TRAY_PANEL = 'tray-panel'
 const TABS: { id: TrayTab; label: string }[] = [
   { id: 'passives', label: 'passives' },
   { id: 'paths', label: 'paths' },
+  { id: 'types', label: 'types' },
 ]
 
 export function Tray({ index }: { index: SaveIndex }) {
@@ -104,6 +106,7 @@ export function Tray({ index }: { index: SaveIndex }) {
       >
         {tab === 'passives' && <PassiveSheet index={index} />}
         {tab === 'paths' && <SavedPaths index={index} />}
+        {tab === 'types' && <TypeChart index={index} />}
       </div>
     </aside>
   )
