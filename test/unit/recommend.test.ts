@@ -429,6 +429,67 @@ describe('owned pals', () => {
     expect(rows[0]!.strongMoves).toEqual(['Fireball'])
   })
 
+  // The Fight footnote says condensing orders your pals. For a long time
+  // nothing read the field, so each tie-break is pinned here: delete one from
+  // the sort and the matching test fails.
+  it('breaks a fighter tie on condenser rank, then souls, then attack IV', () => {
+    const fight = side('fight', {
+      ...INPUT,
+      opponentElements: ['Leaf'],
+      attackElements: ['Fire'],
+    })
+    const order = (...pals: Pal[]) =>
+      ownedFighters(DATA, pals, nowhere, ['Leaf'], fight, 5).map((r) => r.pal)
+
+    const plain = pal('Flame')
+    const condensed = pal('Flame', { rank: 2 })
+    expect(order(plain, condensed)).toEqual([condensed, plain])
+
+    const souled = pal('Flame', { rankAttack: 3, rankHp: 1 })
+    expect(order(plain, souled)).toEqual([souled, plain])
+    // Condensing lifts every stat, so it outranks any number of souls.
+    expect(order(souled, pal('Flame', { rank: 1 }))[1]).toBe(souled)
+
+    const keen = pal('Flame', { ivAttack: 90 })
+    expect(order(plain, keen)).toEqual([keen, plain])
+    expect(order(keen, souled)).toEqual([souled, keen])
+  })
+
+  it('still puts level ahead of anything condensing can do', () => {
+    const fight = side('fight', {
+      ...INPUT,
+      opponentElements: ['Leaf'],
+      attackElements: ['Fire'],
+    })
+    const high = pal('Flame', { level: 50 })
+    const starred = pal('Flame', { level: 10, rank: 4 })
+    const rows = ownedFighters(
+      DATA,
+      [starred, high],
+      nowhere,
+      ['Leaf'],
+      fight,
+      5,
+    )
+    expect(rows.map((r) => r.pal)).toEqual([high, starred])
+  })
+
+  it('breaks a worker tie on work-speed souls, then condenser rank', () => {
+    const base = side('work', { ...INPUT, work: ['Mining'] }, 1)
+    const order = (...pals: Pal[]) =>
+      ownedWorkers(DATA, pals, nowhere, 'Mining', base, 5).map((r) => r.pal)
+
+    const plain = pal('Miner')
+    const souled = pal('Miner', { rankCraftSpeed: 2 })
+    const condensed = pal('Miner', { rank: 3 })
+    expect(order(plain, souled)).toEqual([souled, plain])
+    expect(order(plain, condensed)).toEqual([condensed, plain])
+    expect(order(condensed, souled)).toEqual([souled, condensed])
+    // Neither outranks a passive that actually changes work speed.
+    const keen = pal('Miner', { passives: ['Artisan'] })
+    expect(order(condensed, keen)).toEqual([keen, condensed])
+  })
+
   it('finds where a pal is from the containers the save names', () => {
     const idx = {
       bases: [{ workerContainerId: 'w' }],

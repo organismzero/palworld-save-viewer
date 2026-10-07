@@ -606,6 +606,14 @@ export interface OwnedWorker extends OwnedRow {
   level: number
 }
 
+/**
+ * The player's pals for one job, best first.
+ *
+ * Work level, then passives, then the two things in the save that make the
+ * same pal work faster: its work-speed soul enhancements and its condenser
+ * rank. Pal level is last because it does nothing for work speed; it is only
+ * there so the order is stable.
+ */
 export function ownedWorkers(
   data: Refdata,
   pals: readonly Pal[],
@@ -630,6 +638,8 @@ export function ownedWorkers(
       (a, b) =>
         b.level - a.level ||
         b.passiveScore - a.passiveScore ||
+        b.pal.rankCraftSpeed - a.pal.rankCraftSpeed ||
+        b.pal.rank - a.pal.rank ||
         b.pal.level - a.pal.level,
     )
     .slice(0, limit)
@@ -644,9 +654,12 @@ export interface OwnedFighter extends OwnedRow {
 /**
  * The player's pals for a fight, best first.
  *
- * Matchup first, as for species, then passives, then level. The save has the
- * level and IVs but the game's damage formula is in no table, so they order the
- * list rather than feed an invented number.
+ * Matchup first, as for species, then passives, then what the save says about
+ * this particular pal: its level, its condenser rank, its attack and health
+ * soul enhancements, and its attack IV, in that order. The game's damage
+ * formula is in no table, so they order the list rather than feed an invented
+ * number — and the order is the rough size of each one's effect, not a claim
+ * about how they combine.
  */
 export function ownedFighters(
   data: Refdata,
@@ -673,6 +686,8 @@ export function ownedFighters(
         byMatchup(a.fight, b.fight) ||
         b.passiveScore - a.passiveScore ||
         b.pal.level - a.pal.level ||
+        b.pal.rank - a.pal.rank ||
+        b.pal.rankAttack + b.pal.rankHp - (a.pal.rankAttack + a.pal.rankHp) ||
         (b.pal.ivAttack ?? 0) - (a.pal.ivAttack ?? 0),
     )
     .slice(0, limit)

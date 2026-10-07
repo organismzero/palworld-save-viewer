@@ -764,9 +764,9 @@ function Footnote({ goal, player }: { goal: GoalId; player?: Player }) {
           The element chart is the one thing here not read from the data, which
           does not carry it. Its ×{STRONG} and ×{WEAK} are an assumption, as is
           multiplying them across a two-element pal, and the opponent is assumed
-          to fight with its own elements. Level, IVs and condensing are in the
-          save, but the damage formula is not, so they order your pals rather
-          than feed a number.
+          to fight with its own elements. Level, condensing, soul enhancements
+          and the attack IV are in the save, but the damage formula is not, so
+          they order your pals, in that order, rather than feed a number.
         </p>
       )}
       {PRODUCTION.includes(goal) && (

@@ -321,9 +321,9 @@ Refdata carries no egg size or incubation time. Check whether the PalworldSaveTo
 
 ## Phase 8 — Builds
 
-### 8a. Make the footnote true — S
+### 8a. Make the footnote true — done
 
-The Fight footnote in `BuildsView` says level, IVs and condensing order your pals, and the doc comment on `ownedFighters` repeats it. Only `ownedPartners` reads a rank field. Add to the sort chains in `recommend.ts`: `ownedFighters` `rankAttack + rankHp` after passive score; `ownedWorkers` `rankCraftSpeed` then `ivAttack`; `ownedMounts` IV total after level. Tests in `recommend.test.ts` pin each tie-break.
+The Fight footnote said level, IVs and condensing order your pals, and only `ownedPartners` read a rank field. `rank` is the condenser stars; `rankAttack`, `rankHp`, `rankDefence` and `rankCraftSpeed` are soul enhancements, a different thing the original item ran together. `ownedFighters` now breaks ties on level, condenser rank, attack and health souls, then attack IV; `ownedWorkers` on work-speed souls, then condenser rank. `ownedMounts` is unchanged, since nothing in the save makes the same mount faster. The footnote names all four, and `recommend.test.ts` pins each tie-break.
 
 ### 8c. Element chart — S **(tray)**
 
@@ -378,7 +378,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 ## Implementation order
 
 1. ~~**The utility tray**~~, done. It took 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
-2. **8a** on its own: it is a correctness fix to a claim the app makes today.
+2. ~~**8a**~~, done.
 3. **The rest of Phase 1.** All small, all user-visible, no design decisions beyond 1l.
 4. **0a and 0e, then Phase 2, then Phase 3.** Links first because they make every later addition reachable; the drawer additions because they are the cheapest new value in the document.
 5. **0b and 0f, then Phase 5** (5a–5e), **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
