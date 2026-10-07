@@ -119,31 +119,19 @@ Found on the way: a character that has never moved records its position as exact
 
 ## Phase 3 — Surface what is parsed: Pals
 
-### 3a. Drawer additions — M
+Done. The shared logic is `src/domain/palState.ts` (where a pal is kept, what condition it is in, its level in a job) and `src/views/pals/filter.ts` (the grid's filter and sort, moved out of the view so it can be tested). Tests are `palState.test.ts`, `palsParams.test.ts` and the export cases in `names.test.ts`.
 
-Moves (equipped and learned) and the per-pal work bonus are already in the drawer, as is a sickness pill. What remains, in this order after the existing rows:
+- **3a. Drawer.** New rows: progress to the next level, soul enhancements by stat, **kept in** (party and slot, palbox page and slot, or the base, which links to Bases), guild, and a **condition** block with what it is working at, health, sickness, sanity, hunger and trust. Work suitability goes through `workLevel()`, the rule Builds uses: none of the 21 work bonuses in the reference save sits on a job its species lacks, so a bonus alone does not make a job.
+- **3b. Card badge.** The worst condition, first in the badge column: dying, injured, sick, starving or low sanity. The hover card lists all of them.
+- **3c. Filters and sorts.** Gender, maximum level, a job at a minimum level, "needs attention", party preset (shown with client data), and two owners that are not players: base workers and nobody. Sorts add HP, species and owner, and any sort can be reversed. The text filter matches a passive's display name.
+- **3d. Export.** IV total, elements, health, hunger, sanity, friendship, current work, caught date, location, equipped and learned moves, and one column per job.
 
-- **Where**: resolve `containerId` through `charContainerById` → `ownerSlot` and `ownerBaseId` to "Party · slot 2", "Palbox", or "Base 3 workers". Use `locator()` from `recommend.ts`, extended to return the base id and slot as well as the `Where` kind.
-- **Condition**: `fullStomach`, `sanity`, `friendship` as HUD meters (existing meter primitive), `physicalHealth`, `currentWork` as text. Hide the block when every field is absent.
-- **Experience**: a bar from `levelProgress(level, exp, table)` using `ExpLevel.palTotal`. Guild already does this for players.
-- **Condensing**: the four per-stat ranks beside the star, from `rankAttack/rankDefence/rankHp/rankCraftSpeed`.
-- **Work suitability, one function**: the drawer computes the bonus inline and shows any `base + bonus > 0`, while `workLevel()` in `recommend.ts` returns 0 when the species base is 0. Decide which is right and use one.
-- **Guild**: `groupId` resolved to the guild name.
-- **HP** stays a bare number; the maximum is a formula the app does not carry.
+What the save turned out not to support, and what was done instead:
 
-### 3b. Card badges — S
-
-A condition badge on the card when `physicalHealth`, `sickness`, or a hunger or sanity value below a threshold is present: "dying", "sick", "starving", "depressed". Thresholds are the game's own state boundaries where known, otherwise a plain "low" with the number in the drawer.
-
-### 3c. Filters and sorts — M
-
-`src/views/pals/params.ts` gains: `gender`, `maxLevel`, `work: { id, min }`, `attention: boolean`, `preset?: string`, `dir: 'asc' | 'desc'`, and `owner` accepts two sentinel values, `none` (no owner) and `base` (worker rosters). Sort keys add `hp`, `species`, `owner`. The rail gets the controls; the existing `clearAll` covers them. The preset filter reads `LocalDataPayload.presets` and is shown only when client data is loaded. The text filter also matches passive display names; today it matches raw asset ids, so typing "Artisan" finds nothing.
-
-Tests: there are no pals codec tests yet; add `test/unit/palsParams.test.ts`.
-
-### 3d. Export columns — S
-
-`palColumns` in `exportRows.ts` already has the four rank columns, sickness, position and guild. Add IV total, elements, caught date, location, work suitability (one column per job with the bonus applied), equipped and learned moves, hunger, sanity, friendship, health, current work.
+- **Hunger and friendship are numbers, not meters.** A pal's full stomach differs by species and the reference data carries no maximum; friendship is a running total of points. Sanity is the only one with a scale, and the save leaves it out at 100, so only 12 pals in the reference save have a value.
+- **"Starving" is an empty stomach, and "low sanity" is below 50.** The first is the game's own boundary. The second is ours, and the number is always shown beside the flag.
+- **The four per-stat ranks are soul enhancements**, not condensing, so they are a row of their own, labelled so.
+- **Most pals have no "kept in" without a player save.** `Level.sav` records which container a pal is in, but not whose party or palbox it is; only the 53 base workers resolve from the level alone. The row is hidden otherwise.
 
 ---
 
@@ -329,7 +317,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 1. ~~**The utility tray**~~, done. It took 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
-4. ~~**0a and 0e, then Phase 2**~~, done. **Phase 3** is next: the drawer additions are the cheapest new value in the document.
+4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
 5. **0b and 0f, then Phase 5** (5a–5e), **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.

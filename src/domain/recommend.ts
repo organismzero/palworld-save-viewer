@@ -46,7 +46,7 @@ import type {
   PassiveInfo,
   Refdata,
 } from '../refdata/refdata.ts'
-import type { Guid, Pal, SaveIndex } from './types.ts'
+import type { Pal } from './types.ts'
 import { against, strongAgainst } from './typeChart.ts'
 
 /* -------------------------------------------------------------------------
@@ -553,53 +553,15 @@ export function bestMounts(
    The player's own pals
    ------------------------------------------------------------------------- */
 
-export type Where = 'party' | 'palbox' | 'base' | 'unknown'
+import { workLevel, type Where } from './palState.ts'
 
-/**
- * Where each pal is right now, as far as the save says.
- *
- * Built once per index. A worker roster is recognised from the base that points
- * at it, which is exact; party and palbox come from a player save naming its
- * containers, or failing that from the container's own inferred slot.
- */
-export function locator(index: SaveIndex): (pal: Pal) => Where {
-  const workers = new Set<Guid>()
-  for (const b of index.bases) {
-    if (b.workerContainerId) workers.add(b.workerContainerId)
-  }
-  const party = new Set<Guid>()
-  const palbox = new Set<Guid>()
-  for (const p of index.playerDetails) {
-    if (p.otomoContainerId) party.add(p.otomoContainerId)
-    if (p.palboxContainerId) palbox.add(p.palboxContainerId)
-  }
-
-  return (pal) => {
-    const id = pal.containerId
-    if (!id) return 'unknown'
-    if (workers.has(id)) return 'base'
-    if (party.has(id)) return 'party'
-    if (palbox.has(id)) return 'palbox'
-    const cc = index.charContainerById.get(id)
-    if (cc?.ownerBaseId || cc?.ownerSlot === 'workers') return 'base'
-    if (cc?.ownerSlot === 'party') return 'party'
-    if (cc?.ownerSlot === 'palbox') return 'palbox'
-    return 'unknown'
-  }
-}
+export { locator, workLevel, type Where } from './palState.ts'
 
 export interface OwnedRow {
   pal: Pal
   where: Where
   /** Its passives scored against the side it would work on. */
   passiveScore: number
-}
-
-/** A pal's level in a job: its species' level plus any the save has added. */
-export function workLevel(data: Refdata, pal: Pal, workId: string): number {
-  const base = data.species[pal.characterId.toLowerCase()]?.work?.[workId] ?? 0
-  if (base <= 0) return 0
-  return base + (pal.workSuitabilityBonus[workId] ?? 0)
 }
 
 export interface OwnedWorker extends OwnedRow {

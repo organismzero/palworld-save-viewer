@@ -20,10 +20,7 @@ Seven views, switchable with the tabs or the number keys:
   structures, world objects, loot chests, pals and fast-travel points as
   independently toggleable layers, with hover names, click-to-inspect and a
   live coordinate readout.
-- **Pals** — every pal you own in a virtualised grid. Filter by element, level,
-  IV total, owner, alpha/rare/nicknamed; sort by IV, level, rarity or capture
-  date; click through to a detail drawer with passives, work suitability and an
-  IV percentile against your own collection.
+- **Pals** — every pal in the save in a virtualised grid. Filter by name or passive, element, level range, IV total, owner (a player, base workers, or nobody), gender, a job at a minimum level, and "needs attention", which finds the sick, injured, starving and low-sanity ones; sort by IV, level, HP, rarity, capture date, name, species or owner, either way up. Click through to a detail drawer with passives, work suitability, moves, where the pal is kept, its condition, progress to the next level, and an IV percentile against your own collection.
 - **Bases** — a three-pane storage explorer. Bases (named by nearest landmark,
   because the game's own name is a Japanese placeholder), the structures in
   them with a top-down plan and who built each one, and any container's

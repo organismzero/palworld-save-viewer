@@ -26,7 +26,17 @@
 import type { Column } from '../lib/export.ts'
 import type { Refdata } from '../refdata/refdata.ts'
 import { containerLocation, type ItemHit } from './bases.ts'
-import { baseNames, itemName, speciesName, structureName } from './names.ts'
+import { WORK_TYPES } from '../lib/color.ts'
+import { ticksToDate } from '../lib/format.ts'
+import { ivTotal } from './index.ts'
+import {
+  baseNames,
+  itemName,
+  skillName,
+  speciesName,
+  structureName,
+} from './names.ts'
+import { placeText, placer, workLevel } from './palState.ts'
 import { palName } from './palText.ts'
 import { formatMapPos, posToMap } from './coords.ts'
 import type { Container, Pal, SaveIndex } from './types.ts'
@@ -49,6 +59,14 @@ export function palColumns(
 ): Column<Pal>[] {
   const owner = (uid: string | undefined) =>
     uid ? (index.playerByUid.get(uid)?.name ?? uid) : ''
+  const place = placer(index)
+  const bases = baseNames(index, refdata)
+  const elements = (p: Pal) => {
+    const info = refdata?.species[p.characterId.toLowerCase()]
+    return [info?.element1, info?.element2].filter(Boolean).join('; ')
+  }
+  const moves = (ids: string[]) =>
+    ids.map((id) => skillName(refdata, id)).join('; ')
 
   return [
     { header: 'name', value: (p) => palName(p, refdata?.species[p.characterId.toLowerCase()]) }, // prettier-ignore
@@ -62,6 +80,8 @@ export function palColumns(
     { header: 'iv_hp', value: (p) => p.ivHp },
     { header: 'iv_attack', value: (p) => p.ivAttack },
     { header: 'iv_defense', value: (p) => p.ivDefense },
+    { header: 'iv_total', value: (p) => ivTotal(p) },
+    { header: 'elements', value: (p) => elements(p) },
     { header: 'condenser_rank', value: (p) => p.rank },
     { header: 'rank_attack', value: (p) => p.rankAttack },
     { header: 'rank_defence', value: (p) => p.rankDefence },
@@ -74,7 +94,25 @@ export function palColumns(
     { header: 'owner', value: (p) => owner(p.ownerPlayerUid) },
     { header: 'guild', value: (p) => (p.groupId ? (index.guildById.get(p.groupId)?.name ?? '') : '') }, // prettier-ignore
     { header: 'sickness', value: (p) => p.sickness },
+    { header: 'health', value: (p) => p.physicalHealth },
+    { header: 'hunger', value: (p) => p.fullStomach },
+    // Left out of the save at full, so an empty cell here means 100.
+    { header: 'sanity', value: (p) => p.sanity },
+    { header: 'friendship', value: (p) => p.friendship },
+    { header: 'current_work', value: (p) => p.currentWork },
+    { header: 'caught', value: (p) => ticksToDate(p.ownedTime)?.toISOString() }, // prettier-ignore
+    { header: 'location', value: (p) => placeText(place(p), (id) => bases.get(id)) }, // prettier-ignore
     { header: 'position', value: (p) => (p.pos ? formatMapPos(posToMap(p.pos)) : '') }, // prettier-ignore
+    { header: 'moves_equipped', value: (p) => moves(p.equipWaza) },
+    { header: 'moves_learned', value: (p) => moves(p.masteredWaza) },
+    // One column per job, always all of them and always in the game's order,
+    // so two exports line up whatever the pals in them can do. Empty without
+    // reference data: a level is the species' plus the pal's, and the species'
+    // half is not in the save.
+    ...WORK_TYPES.map((t): Column<Pal> => ({
+      header: `work_${t.id.toLowerCase()}`,
+      value: (p) => (refdata ? workLevel(refdata, p, t.id) || '' : ''),
+    })),
     { header: 'instance_id', value: (p) => p.instanceId },
   ]
 }

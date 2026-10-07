@@ -13,7 +13,18 @@ import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
+import { useSaveStore } from '../../store/saveStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
+import {
+  LOW_SANITY,
+  conditions,
+  placeText,
+  placer,
+  spaced,
+  workLevel,
+} from '../../domain/palState.ts'
+import { levelProgress } from '../../domain/guild.ts'
+import { baseNames } from '../../domain/names.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Jump } from '../../components/Jump.tsx'
@@ -23,16 +34,21 @@ import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import { useViewParams } from '../../app/viewParams.ts'
 import {
+  OWNER_BASE,
+  OWNER_NONE,
   PALS_DEFAULTS,
   palsCodec,
+  type GenderFilter,
   type PalsParams,
   type SortKey,
 } from './params.ts'
+import { filterPals, isFiltered } from './filter.ts'
 import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
   Field,
   IVBar,
+  Meter,
   Panel,
   PassiveChip,
   Pill,
@@ -95,6 +111,8 @@ export function PalsView({ index }: { index: SaveIndex }) {
   )
 
   const { query, elements, minLevel, minIv, owner, flags, sort } = params
+  const { maxLevel, gender, work, workMin, attention, preset, reversed } =
+    params
   const patch = (p: Partial<PalsParams>) =>
     setParams((prev) => ({ ...prev, ...p }))
 
@@ -138,45 +156,31 @@ export function PalsView({ index }: { index: SaveIndex }) {
     return () => observer.disconnect()
   }, [])
 
-  const named = (p: Pal) =>
-    data?.species[p.characterId.toLowerCase()]?.name ?? p.characterId
+  const place = useMemo(() => placer(index), [index])
+  const localData = useSaveStore((s) => s.localData)
+  const presets = localData?.presets ?? []
+  const presetIds = useMemo(() => {
+    const found = localData?.presets.find((p) => p.name === params.preset)
+    return found ? new Set(found.palIds) : undefined
+  }, [localData, params.preset])
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const out = index.pals.filter((p) => {
-      if (p.level < minLevel) return false
-      if (ivTotal(p) < minIv) return false
-      if (flags.boss && !p.isBoss) return false
-      if (flags.rare && !p.isRare) return false
-      if (flags.named && !p.nickname) return false
-      if (owner && p.ownerPlayerUid !== owner) return false
-      // Elements come from reference data. Until it has arrived the test
-      // cannot be made, and failing every pal for it emptied the grid and said
-      // "no pals match" about a filter that had not been applied yet.
-      if (elements.size && data) {
-        const info = data.species[p.characterId.toLowerCase()]
-        const own = [info?.element1, info?.element2].filter(Boolean) as string[]
-        if (!own.some((e) => elements.has(e))) return false
-      }
-      if (q) {
-        const hay = `${p.characterId} ${p.nickname ?? ''} ${named(p)} ${p.passives.join(' ')}`
-        if (!hay.toLowerCase().includes(q)) return false
-      }
-      return true
-    })
+  const filtered = useMemo(
+    () =>
+      filterPals(index.pals, params, {
+        index,
+        data,
+        place,
+        preset: presetIds,
+      }),
+    [index, params, data, place, presetIds],
+  )
 
-    const cmp: Record<SortKey, (a: Pal, b: Pal) => number> = {
-      iv: (a, b) => ivTotal(b) - ivTotal(a),
-      level: (a, b) => b.level - a.level,
-      name: (a, b) => named(a).localeCompare(named(b)),
-      caught: (a, b) => (b.ownedTime ?? 0) - (a.ownedTime ?? 0),
-      rarity: (a, b) =>
-        (data?.species[b.characterId.toLowerCase()]?.rarity ?? 0) -
-        (data?.species[a.characterId.toLowerCase()]?.rarity ?? 0),
-    }
-    return out.sort(cmp[sort])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index.pals, query, elements, minLevel, minIv, owner, flags, sort, data])
+  // The sliders' top end is whatever this world has reached, so a save from a
+  // version with a higher cap is not clipped at the number written here.
+  const topLevel = useMemo(
+    () => index.pals.reduce((m, p) => Math.max(m, p.level), 60),
+    [index],
+  )
 
   const rows = Math.ceil(filtered.length / columns)
   // The React Compiler lint cannot verify TanStack Virtual's returned
@@ -196,17 +200,10 @@ export function PalsView({ index }: { index: SaveIndex }) {
       // Sort and selection are not filters; "clear all filters" should not
       // silently re-sort the grid or close the detail drawer.
       sort: prev.sort,
+      reversed: prev.reversed,
       selectedId: prev.selectedId,
     }))
-  const dirty =
-    query ||
-    elements.size ||
-    minLevel > 1 ||
-    minIv > 0 ||
-    owner ||
-    flags.boss ||
-    flags.rare ||
-    flags.named
+  const dirty = isFiltered(params)
 
   return (
     <div className="flex h-full">
@@ -244,8 +241,17 @@ export function PalsView({ index }: { index: SaveIndex }) {
           label="minimum level"
           value={minLevel}
           min={1}
-          max={60}
+          max={topLevel}
           onChange={setMinLevel}
+        />
+        {/* Stored as 0 for "no ceiling" and shown at the top of its range, so
+            an untouched slider and a cleared one are the same thing. */}
+        <RangeControl
+          label="maximum level"
+          value={maxLevel > 0 ? Math.min(maxLevel, topLevel) : topLevel}
+          min={1}
+          max={topLevel}
+          onChange={(v) => patch({ maxLevel: v >= topLevel ? 0 : v })}
         />
         <RangeControl
           label="minimum IV total"
@@ -266,10 +272,72 @@ export function PalsView({ index }: { index: SaveIndex }) {
               value: p.playerUid,
               label: p.name,
             })),
+            { value: OWNER_BASE, label: 'Base workers' },
+            { value: OWNER_NONE, label: 'No owner' },
           ]}
         />
 
+        <SelectControl
+          label="gender"
+          value={gender}
+          onChange={(v) => patch({ gender: v as GenderFilter })}
+          options={[
+            { value: '', label: 'Either' },
+            { value: 'Female', label: 'Female' },
+            { value: 'Male', label: 'Male' },
+          ]}
+        />
+
+        <div className="space-y-2">
+          <SelectControl
+            label="can do"
+            value={work}
+            onChange={(v) => patch({ work: v })}
+            options={[
+              { value: '', label: 'Any job' },
+              ...WORK_TYPES.map((t) => ({
+                value: t.id,
+                label:
+                  data?.work.find((w) => w.id === t.id)?.display ?? t.display,
+              })),
+            ]}
+          />
+          {work && (
+            <RangeControl
+              label="at level"
+              value={workMin}
+              min={1}
+              max={5}
+              onChange={(v) => patch({ workMin: v })}
+            />
+          )}
+        </div>
+
+        {/* Only with the client's own save: presets live in LocalData.sav and
+            nowhere else. A preset named in a link stays listed without it, so
+            the filter that is narrowing the grid can be seen and cleared. */}
+        {(presets.length > 0 || preset) && (
+          <SelectControl
+            label="party preset"
+            value={preset}
+            onChange={(v) => patch({ preset: v })}
+            options={[
+              { value: '', label: 'Any' },
+              ...presets.map((p) => ({ value: p.name, label: p.name })),
+              ...(preset && !presets.some((p) => p.name === preset)
+                ? [{ value: preset, label: `${preset} (not loaded)` }]
+                : []),
+            ]}
+          />
+        )}
+
         <div className="space-y-1.5">
+          <Checkbox
+            checked={attention}
+            onChange={(on) => patch({ attention: on })}
+            label="Needs attention"
+            className="w-full"
+          />
           {(
             [
               ['boss', 'Alphas only'],
@@ -331,11 +399,22 @@ export function PalsView({ index }: { index: SaveIndex }) {
               options={[
                 { value: 'iv', label: 'IV total' },
                 { value: 'level', label: 'Level' },
+                { value: 'hp', label: 'HP' },
                 { value: 'rarity', label: 'Rarity' },
                 { value: 'caught', label: 'Recently caught' },
                 { value: 'name', label: 'Name' },
+                { value: 'species', label: 'Species' },
+                { value: 'owner', label: 'Owner' },
               ]}
             />
+            <IconButton
+              label={reversed ? 'Sorted in reverse' : 'Reverse the order'}
+              size={28}
+              aria-pressed={reversed}
+              onClick={() => patch({ reversed: !reversed })}
+            >
+              {reversed ? '↑' : '↓'}
+            </IconButton>
           </div>
         </div>
 
@@ -416,6 +495,7 @@ function PalCard({
   const owner = pal.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)?.name
     : undefined
+  const state = conditions(pal)[0]
 
   const name = palName(pal, info)
   const species = info?.name ?? pal.characterId
@@ -512,6 +592,13 @@ function PalCard({
           elementName={info?.element1}
           size={48}
         />
+        {/* First, and only the worst: of everything a card can say, "this one
+            is dying" is the thing that should not lose a fight for space. */}
+        {state && (
+          <Pill tone={state.tone} title={state.detail}>
+            {state.label}
+          </Pill>
+        )}
         {pal.isBoss && <Pill tone="danger">alpha</Pill>}
         {pal.isRare && <Pill tone="warn">rare</Pill>}
         {pal.rank > 0 && <Pill title={CONDENSER_RANK_HELP}>★{pal.rank}</Pill>}
@@ -545,23 +632,52 @@ function PalDetail({
     ? index.playerByUid.get(pal.ownerPlayerUid)
     : undefined
 
-  // Species base plus the pal's own bonus, in the game's work order.
-  const work = pal
-    ? WORK_TYPES.flatMap((t) => {
-        const base = info?.work?.[t.id] ?? 0
-        const bonus = pal.workSuitabilityBonus[t.id] ?? 0
-        if (base + bonus <= 0) return []
-        const ref = data?.work.find((w) => w.id === t.id)
-        return [
-          {
-            id: t.id,
-            display: ref?.display ?? t.display,
-            icon: ref?.icon,
-            level: base + bonus,
-            bonus,
-          },
-        ]
-      })
+  // Species base plus the pal's own bonus, in the game's work order, by the
+  // same rule Builds ranks workers with.
+  const work =
+    pal && data
+      ? WORK_TYPES.flatMap((t) => {
+          const level = workLevel(data, pal, t.id)
+          if (level <= 0) return []
+          const ref = data.work.find((w) => w.id === t.id)
+          return [
+            {
+              id: t.id,
+              display: ref?.display ?? t.display,
+              icon: ref?.icon,
+              level,
+              bonus: pal.workSuitabilityBonus[t.id] ?? 0,
+            },
+          ]
+        })
+      : []
+
+  const place = useMemo(() => placer(index), [index])
+  const bases = useMemo(() => baseNames(index, data), [index, data])
+  const at = pal ? place(pal) : undefined
+  // "Base 3", without the landmark: the row is 300px wide, and the full label
+  // is on the link's own card.
+  const where = at
+    ? placeText(at, (id) => bases.get(id)?.split(' · ')[0])
+    : undefined
+  const guild = pal?.groupId ? index.guildById.get(pal.groupId) : undefined
+  const state = pal ? conditions(pal) : []
+  const toNext = pal
+    ? levelProgress(
+        pal.level,
+        pal.exp,
+        data?.expTable.map((r) => ({ level: r.level, total: r.palTotal })),
+      )
+    : undefined
+  const souls = pal
+    ? (
+        [
+          ['HP', pal.rankHp],
+          ['attack', pal.rankAttack],
+          ['defence', pal.rankDefence],
+          ['work speed', pal.rankCraftSpeed],
+        ] as const
+      ).filter(([, n]) => n > 0)
     : []
 
   // "Top 3% of your Kitsunebi" is far more useful than a bare number.
@@ -647,7 +763,11 @@ function PalDetail({
         {pal.isBoss && <Pill tone="danger">alpha</Pill>}
         {pal.isRare && <Pill tone="warn">rare</Pill>}
         {pal.gender && <Pill>{pal.gender}</Pill>}
-        {pal.sickness && <Pill tone="danger">{pal.sickness}</Pill>}
+        {state.map((c) => (
+          <Pill key={c.id} tone={c.tone}>
+            {c.detail ? `${c.label} · ${c.detail}` : c.label}
+          </Pill>
+        ))}
       </div>
 
       <div className="mt-4">
@@ -663,7 +783,33 @@ function PalDetail({
             }
           />
         )}
-        <Field label="level" value={String(pal.level)} />
+        <Field
+          label="level"
+          value={
+            toNext === undefined ? (
+              String(pal.level)
+            ) : (
+              <span className="flex items-center justify-end gap-2">
+                {pal.level}
+                <Meter
+                  value={Math.round(toNext * 100)}
+                  tone="xp"
+                  height={6}
+                  showValue={false}
+                  className="w-20"
+                />
+                <span className="text-[var(--color-muted)]">
+                  {Math.round(toNext * 100)}%
+                </span>
+              </span>
+            )
+          }
+          title={
+            toNext === undefined
+              ? undefined
+              : `${Math.round(toNext * 100)}% of the way to level ${pal.level + 1}`
+          }
+        />
         <Field label="hp" value={pal.hp ? pal.hp.toFixed(0) : '—'} />
         <Field
           label="IV total"
@@ -682,6 +828,13 @@ function PalDetail({
             label="condensed"
             value={`★${pal.rank}`}
             title={CONDENSER_RANK_HELP}
+          />
+        )}
+        {souls.length > 0 && (
+          <Field
+            label="souls"
+            value={souls.map(([stat, n]) => `${stat} +${n}`).join(' · ')}
+            title="Soul enhancements from the Statue of Power, by stat"
           />
         )}
         <Field
@@ -721,7 +874,29 @@ function PalDetail({
             )
           }
         />
+        {where && at && (
+          <Field
+            label="kept in"
+            value={
+              at.where === 'base' && at.baseId ? (
+                <Jump
+                  view="bases"
+                  focus={{ kind: 'base', id: at.baseId }}
+                  card={{ kind: 'base', id: at.baseId }}
+                  title="Open this base in Bases"
+                >
+                  {where}
+                </Jump>
+              ) : (
+                where
+              )
+            }
+          />
+        )}
+        {guild && <Field label="guild" value={guild.name} />}
       </div>
+
+      <Condition pal={pal} />
 
       {pal.passives.length > 0 && (
         <>
@@ -787,6 +962,77 @@ function PalDetail({
         ids={pal.masteredWaza.filter((w) => !pal.equipWaza.includes(w))}
       />
     </aside>
+  )
+}
+
+/**
+ * How the pal is doing: what it is working at, how fed, how sane, how attached.
+ *
+ * Absent altogether when the save records none of it, which is the usual case
+ * for a pal in a palbox. Sanity is the only one drawn as a bar, because it is
+ * the only one with a scale: the save holds it as a number out of 100 and
+ * leaves it out at full. Hunger has no maximum anywhere in the data, and
+ * friendship is a running total of points, so both are printed as they are.
+ */
+function Condition({ pal }: { pal: Pal }) {
+  const { data } = useRefdataStore()
+  const job = pal.currentWork
+    ? (data?.work.find((w) => w.id === pal.currentWork)?.display ??
+      WORK_TYPES.find((w) => w.id === pal.currentWork)?.display ??
+      spaced(pal.currentWork))
+    : undefined
+
+  if (
+    !job &&
+    !pal.physicalHealth &&
+    !pal.sickness &&
+    pal.fullStomach === undefined &&
+    pal.sanity === undefined &&
+    pal.friendship === undefined
+  ) {
+    return null
+  }
+
+  return (
+    <>
+      <div className="label mt-5 mb-2">condition</div>
+      <div>
+        {job && <Field label="working at" value={job} />}
+        {pal.physicalHealth && (
+          <Field label="health" value={spaced(pal.physicalHealth)} />
+        )}
+        {pal.sickness && (
+          <Field label="sickness" value={spaced(pal.sickness)} />
+        )}
+        {pal.sanity !== undefined && (
+          <Field
+            label="sanity"
+            value={
+              <Meter
+                value={pal.sanity}
+                tone={pal.sanity < LOW_SANITY ? 'danger' : 'stamina'}
+                height={14}
+                className="w-32"
+              />
+            }
+          />
+        )}
+        {pal.fullStomach !== undefined && (
+          <Field
+            label="hunger"
+            value={Math.round(pal.fullStomach)}
+            title="How full it is. The save records no maximum; it differs by species."
+          />
+        )}
+        {pal.friendship !== undefined && (
+          <Field
+            label="trust"
+            value={count(pal.friendship)}
+            title="Friendship points earned with its owner"
+          />
+        )}
+      </div>
+    </>
   )
 }
 

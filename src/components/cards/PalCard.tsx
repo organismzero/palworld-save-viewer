@@ -1,6 +1,7 @@
 import type { Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ivTotal } from '../../domain/index.ts'
+import { conditions } from '../../domain/palState.ts'
 import { palName } from '../../domain/palText.ts'
 import { GameIcon } from '../GameIcon.tsx'
 import { PassiveChip, Pill } from '../primitives.tsx'
@@ -105,11 +106,21 @@ export function PalCard({
       <PartnerSkill info={info} />
       <WorkLevels info={info} data={data} bonus={pal.workSuitabilityBonus} />
 
-      {pal.sickness && (
-        <p className="text-xs text-[var(--color-danger)]">
-          Sick: {pal.sickness}
+      {conditions(pal).map((c) => (
+        <p
+          key={c.id}
+          className={
+            c.tone === 'danger'
+              ? 'text-xs text-[var(--color-danger)] first-letter:uppercase'
+              : 'text-xs text-[var(--color-gold)] first-letter:uppercase'
+          }
+        >
+          {c.detail ? `${c.label}: ${c.detail}` : c.label}
+          {c.id === 'sanity' &&
+            pal.sanity !== undefined &&
+            ` (${Math.round(pal.sanity)} of 100)`}
         </p>
-      )}
+      ))}
     </CardFrame>
   )
 }

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { containerRows, itemHitRows } from '@/domain/exportRows.ts'
+import { containerRows, itemHitRows, palColumns } from '@/domain/exportRows.ts'
 import {
   baseNames,
   itemName,
@@ -16,7 +16,7 @@ import {
   speciesName,
   structureName,
 } from '@/domain/names.ts'
-import type { SaveIndex } from '@/domain/types.ts'
+import type { Pal, SaveIndex } from '@/domain/types.ts'
 import type { Refdata } from '@/refdata/refdata.ts'
 
 const BASE = 'base0000'
@@ -104,5 +104,69 @@ describe('export rows', () => {
     const [row] = itemHitRows(index, refdata, hits as never)
     expect(row?.where).toBe('Test Chest')
     expect(row?.detail).toMatch(/^Base 1 · near /)
+  })
+})
+
+describe('pal export columns', () => {
+  const pal = {
+    instanceId: 'pal00000',
+    characterId: 'TestPal',
+    level: 12,
+    ivHp: 10,
+    ivAttack: 20,
+    ivDefense: 30,
+    passives: [],
+    equipWaza: ['TestBeam'],
+    masteredWaza: ['TestBeam', 'Unknown'],
+    workSuitabilityBonus: { Mining: 1 },
+    fullStomach: 80,
+    physicalHealth: 'MinorInjury',
+    currentWork: 'Mining',
+    containerId: 'workers0',
+    slotIndex: 2,
+  } as unknown as Pal
+
+  const world = {
+    ...index,
+    bases: [{ ...base, workerContainerId: 'workers0' }],
+    playerByUid: new Map(),
+    guildById: new Map(),
+    playerDetails: [],
+    charContainerById: new Map(),
+  } as unknown as SaveIndex
+
+  const withData = {
+    ...refdata,
+    species: {
+      testpal: { name: 'Test Pal', element1: 'Fire', work: { Mining: 2 } },
+    },
+  } as unknown as Refdata
+
+  const row = (data: Refdata | undefined) =>
+    Object.fromEntries(
+      palColumns(world, data).map((c) => [c.header, c.value(pal)]),
+    )
+
+  it('adds what the drawer shows: totals, state, place, moves and jobs', () => {
+    const r = row(withData)
+    expect(r.iv_total).toBe(60)
+    expect(r.elements).toBe('Fire')
+    expect(r.health).toBe('MinorInjury')
+    expect(r.hunger).toBe(80)
+    expect(r.current_work).toBe('Mining')
+    expect(r.location).toMatch(/^Base 1/)
+    expect(r.moves_equipped).toBe('Test Beam')
+    expect(r.moves_learned).toBe('Test Beam; Unknown')
+    // Species level 2 plus the pal's own 1.
+    expect(r.work_mining).toBe(3)
+    expect(r.work_cool).toBe('')
+  })
+
+  it('keeps every column, with the job levels empty, without game data', () => {
+    const r = row(undefined)
+    expect(Object.keys(r)).toEqual(Object.keys(row(withData)))
+    expect(r.work_mining).toBe('')
+    expect(r.elements).toBe('')
+    expect(r.location).toBe('Base 1')
   })
 })
