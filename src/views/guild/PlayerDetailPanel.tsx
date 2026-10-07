@@ -13,7 +13,7 @@ import { useMemo, useRef, useState } from 'react'
 
 import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
-import { playerSummary } from '../../domain/guild.ts'
+import { builtBy, playerSummary } from '../../domain/guild.ts'
 import { palName } from '../../domain/palText.ts'
 import { Jump, MapJump } from '../../components/Jump.tsx'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
@@ -64,8 +64,7 @@ export function PlayerDetailPanel({
   // Their own build history, by structure type — a fingerprint of what this
   // player actually does in the world.
   const built = new Map<string, number>()
-  for (const s of index.structures) {
-    if (s.buildPlayerUid !== player.playerUid) continue
+  for (const s of builtBy(index).get(player.playerUid) ?? []) {
     built.set(s.mapObjectId, (built.get(s.mapObjectId) ?? 0) + 1)
   }
 

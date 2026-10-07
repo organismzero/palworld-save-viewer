@@ -9,12 +9,18 @@
  * radii are 0–3px, so nothing here is a rounded card.
  */
 
-import type { CSSProperties, ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 
 import { element, passiveTier } from '../lib/color.ts'
 import { useHoverCard, type HoverTrigger } from './cards/hoverCard.ts'
 import { cn } from '../lib/utils.ts'
 import { count } from '../lib/format.ts'
+import {
+  nextSort,
+  sortOrder,
+  type SortKey,
+  type SortState,
+} from '../lib/sortRows.ts'
 
 /**
  * The game's menu panel: translucent glass, a hairline edge, a diagonal sheen
@@ -538,6 +544,10 @@ export function OnlineDot({ size = 8 }: { size?: number }) {
  *
  * `onRowClick` and `selectedIndex` are optional, and a table without them paints
  * no hover at all — a read-only read-out should not suggest it can be clicked.
+ * Both speak in the caller's row numbers, whatever order the rows are shown in.
+ *
+ * `sort` makes the headings buttons. It carries a plain value per cell, since
+ * the cells themselves are nodes and cannot be compared.
  */
 export function Table({
   head,
@@ -545,29 +555,66 @@ export function Table({
   align,
   onRowClick,
   selectedIndex,
+  sort,
 }: {
   head: ReactNode[]
   rows: ReactNode[][]
+  sort?: {
+    /** One value per cell, in the same shape as `rows`. */
+    keys: SortKey[][]
+    /** The order the table opens in. Without it, the order given. */
+    initial?: SortState
+  }
   /** Columns rendered in the mono/numeric voice. Defaults to all but the first. */
   align?: (i: number) => boolean
   onRowClick?: (i: number) => void
   selectedIndex?: number
 }) {
   const isNum = align ?? ((i: number) => i > 0)
+  const [state, setState] = useState(sort?.initial)
+  const order = sortOrder(sort?.keys ?? rows.map(() => []), sort && state)
   return (
     <div className="overflow-x-auto rounded-panel border border-[var(--color-line)]">
       <table className="w-full min-w-max border-collapse text-sm">
         <thead>
           <tr className="border-b border-[var(--color-line)]">
-            {head.map((h, i) => (
-              <th key={i} className="label px-4 py-2.5 text-left">
-                {h}
-              </th>
-            ))}
+            {head.map((h, i) => {
+              const on = sort && state?.column === i
+              return (
+                <th
+                  key={i}
+                  aria-sort={
+                    on ? (state.desc ? 'descending' : 'ascending') : undefined
+                  }
+                  className="label px-4 py-2.5 text-left"
+                >
+                  {sort ? (
+                    <button
+                      type="button"
+                      onClick={() => setState(nextSort(sort.keys, state, i))}
+                      // Inherits the label's own case and tracking: a heading
+                      // that can be sorted is still a heading.
+                      className={cn(
+                        'inline-flex items-baseline gap-1 tracking-[inherit] uppercase [font:inherit] hover:text-[var(--color-text)]',
+                        on && 'text-[var(--color-text)]',
+                      )}
+                    >
+                      {h}
+                      <span aria-hidden className="w-2 text-[9px]">
+                        {on ? (state.desc ? '▼' : '▲') : ''}
+                      </span>
+                    </button>
+                  ) : (
+                    h
+                  )}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => {
+          {order.map((i) => {
+            const row = rows[i]!
             const selected = selectedIndex === i
             return (
               <tr

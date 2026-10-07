@@ -13,7 +13,16 @@
 
 import type { ElementName } from '../lib/color.ts'
 import { ELEMENTS } from '../lib/color.ts'
-import type { Guild, Pal, Player, SaveIndex } from './types.ts'
+import { ONLINE_EPSILON_TICKS } from './lastSeen.ts'
+import type {
+  Guid,
+  Guild,
+  Pal,
+  Player,
+  PlayerRecord,
+  SaveIndex,
+  Structure,
+} from './types.ts'
 
 /** What the dashboard needs to know about a species, and nothing more. */
 export interface SpeciesLookup {
@@ -220,6 +229,29 @@ export function passiveFrequency(
    Per-player
    ------------------------------------------------------------------------- */
 
+const BUILT = new WeakMap<SaveIndex, Map<Guid, Structure[]>>()
+
+/**
+ * What each player placed, worked out once per save.
+ *
+ * Every player card and the open player panel used to walk all ten thousand
+ * structures for themselves, on every render.
+ */
+export function builtBy(index: SaveIndex): Map<Guid, Structure[]> {
+  let out = BUILT.get(index)
+  if (!out) {
+    out = new Map()
+    for (const s of index.structures) {
+      if (!s.buildPlayerUid) continue
+      const list = out.get(s.buildPlayerUid)
+      if (list) list.push(s)
+      else out.set(s.buildPlayerUid, [s])
+    }
+    BUILT.set(index, out)
+  }
+  return out
+}
+
 export interface PlayerSummary {
   player: Player
   pals: Pal[]
@@ -237,10 +269,7 @@ export function playerSummary(
   guild: Guild | undefined,
 ): PlayerSummary {
   const pals = index.palsByOwner.get(player.playerUid) ?? []
-  let built = 0
-  for (const s of index.structures) {
-    if (s.buildPlayerUid === player.playerUid) built += 1
-  }
+  const built = builtBy(index).get(player.playerUid)?.length ?? 0
   return {
     player,
     pals,
@@ -305,4 +334,57 @@ export function busiestPlayer(index: SaveIndex): Player | undefined {
     }
   }
   return best
+}
+
+/* -------------------------------------------------------------------------
+   The contribution board
+   ------------------------------------------------------------------------- */
+
+export interface Contribution {
+  uid: Guid
+  name: string
+  /** Absent for someone in the guild record with no character in the save. */
+  player?: Player
+  online: boolean
+  /**
+   * How far behind the save this member was last on, in ticks of the server's
+   * uptime clock. The one clock every member has, so the one a column can be
+   * ordered by; it is a lower bound on real time and never a date.
+   */
+  awayTicks?: number
+  built: number
+  pals: number
+  /** From their player save. Absent when it has not been loaded. */
+  record?: PlayerRecord
+}
+
+/**
+ * One row per member: who they are, when they were last on, and what they have
+ * done and left behind.
+ *
+ * Driven off the guild's own member list, so someone with no character record
+ * still gets a row.
+ */
+export function contributions(index: SaveIndex, guild: Guild): Contribution[] {
+  const uptime = index.meta.worldUptimeTicks
+  const built = builtBy(index)
+  const records = new Map(
+    index.playerDetails.map((d) => [d.playerUid, d.record]),
+  )
+  return guild.members.map((m) => {
+    const awayTicks =
+      uptime !== undefined && m.lastOnlineTicks !== undefined
+        ? Math.max(0, uptime - m.lastOnlineTicks)
+        : undefined
+    return {
+      uid: m.playerUid,
+      name: m.name,
+      player: index.playerByUid.get(m.playerUid),
+      online: awayTicks !== undefined && awayTicks <= ONLINE_EPSILON_TICKS,
+      awayTicks,
+      built: built.get(m.playerUid)?.length ?? 0,
+      pals: index.palsByOwner.get(m.playerUid)?.length ?? 0,
+      record: records.get(m.playerUid),
+    }
+  })
 }

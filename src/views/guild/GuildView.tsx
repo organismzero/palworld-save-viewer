@@ -46,6 +46,7 @@ import {
 } from '../../components/primitives.tsx'
 import { Checkbox, SelectControl } from '../../components/controls.tsx'
 import { MapJump } from '../../components/Jump.tsx'
+import { ContributionBoard } from './Board.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 import { memberRole } from '../../lib/roles.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
@@ -126,6 +127,13 @@ export function GuildView({ index }: { index: SaveIndex }) {
           />
 
           <Players
+            index={index}
+            guild={guild}
+            selected={openPlayer}
+            onSelect={setOpenPlayer}
+          />
+
+          <ContributionBoard
             index={index}
             guild={guild}
             selected={openPlayer}
@@ -371,7 +379,14 @@ function Players({
         out.push({ uid: p.playerUid, name: p.name, player: p })
       }
     }
-    return out.sort((a, b) => (b.player?.level ?? 0) - (a.player?.level ?? 0))
+    return out
+      .sort((a, b) => (b.player?.level ?? 0) - (a.player?.level ?? 0))
+      .map((m) => ({
+        ...m,
+        // Here and not in the card, so a render that changes nothing about the
+        // save does not sum every member's pals again.
+        summary: m.player ? playerSummary(index, m.player, guild) : undefined,
+      }))
   }, [index, guild])
 
   if (members.length === 0) return null
@@ -384,12 +399,12 @@ function Players({
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {members.map((m) =>
-          m.player ? (
+          m.player && m.summary ? (
             <PlayerCard
               key={m.uid}
               index={index}
               guild={guild}
-              summary={playerSummary(index, m.player, guild)}
+              summary={m.summary}
               selected={selected?.playerUid === m.uid}
               onSelect={() => onSelect(m.player!)}
             />

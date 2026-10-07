@@ -314,33 +314,51 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 'crafted',
                 'recipes',
               ]}
-              rows={[...index.playerDetails]
-                .sort((a, b) => b.record.palsCaught - a.record.palsCaught)
-                .map((d) => {
-                  const player = index.playerByUid.get(d.playerUid)
-                  return [
-                    <CardTrigger
-                      card={{ kind: 'player', uid: d.playerUid, raw: true }}
-                      focusable
-                    >
-                      {player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>}
-                    </CardTrigger>,
-                    d.record.palsCaught,
-                    d.record.speciesCaught,
-                    d.record.paldexUnlocked,
-                    d.record.bossesDefeated,
-                    d.record.towerBossesDefeated,
-                    d.record.relicsFound ?? '—',
-                    (d.record.normalDungeonsCleared ?? 0) +
-                      (d.record.fixedDungeonsCleared ?? 0),
-                    d.record.fishCaught,
-                    d.record.palsCondensed,
-                    d.record.mutations ?? '—',
-                    d.record.arenaSoloClears ?? '—',
-                    count(d.record.itemsCrafted),
-                    d.unlockedRecipes.length,
-                  ]
-                })}
+              sort={{
+                keys: index.playerDetails.map((d) => [
+                  index.playerByUid.get(d.playerUid)?.name.toLowerCase(),
+                  d.record.palsCaught,
+                  d.record.speciesCaught,
+                  d.record.paldexUnlocked,
+                  d.record.bossesDefeated,
+                  d.record.towerBossesDefeated,
+                  d.record.relicsFound,
+                  (d.record.normalDungeonsCleared ?? 0) +
+                    (d.record.fixedDungeonsCleared ?? 0),
+                  d.record.fishCaught,
+                  d.record.palsCondensed,
+                  d.record.mutations,
+                  d.record.arenaSoloClears,
+                  d.record.itemsCrafted,
+                  d.unlockedRecipes.length,
+                ]),
+                initial: { column: 1, desc: true },
+              }}
+              rows={index.playerDetails.map((d) => {
+                const player = index.playerByUid.get(d.playerUid)
+                return [
+                  <CardTrigger
+                    card={{ kind: 'player', uid: d.playerUid, raw: true }}
+                    focusable
+                  >
+                    {player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>}
+                  </CardTrigger>,
+                  d.record.palsCaught,
+                  d.record.speciesCaught,
+                  d.record.paldexUnlocked,
+                  d.record.bossesDefeated,
+                  d.record.towerBossesDefeated,
+                  d.record.relicsFound ?? '—',
+                  (d.record.normalDungeonsCleared ?? 0) +
+                    (d.record.fixedDungeonsCleared ?? 0),
+                  d.record.fishCaught,
+                  d.record.palsCondensed,
+                  d.record.mutations ?? '—',
+                  d.record.arenaSoloClears ?? '—',
+                  count(d.record.itemsCrafted),
+                  d.unlockedRecipes.length,
+                ]
+              })}
             />
           </section>
         )}

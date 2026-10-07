@@ -11,6 +11,8 @@ import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
+  builtBy,
+  contributions,
   elementDistribution,
   guildTotals,
   levelHistogram,
@@ -22,7 +24,7 @@ import {
 import { buildIndexes } from '@/parse/worker/buildIndexes.ts'
 import { buildSaveIndex, playerGuilds } from '@/domain/index.ts'
 import { WORK_TYPES } from '@/lib/color.ts'
-import type { Pal, SaveIndex } from '@/domain/types.ts'
+import type { Guild, Pal, SaveIndex } from '@/domain/types.ts'
 
 const FIXTURE = resolve(process.cwd(), 'test/fixtures/level.mini.json')
 
@@ -212,5 +214,56 @@ describe('over the mini fixture', () => {
         .length,
     )
     if (summary.best) expect(summary.pals).toContain(summary.best)
+  })
+})
+
+describe('the contribution board', () => {
+  const ANN = 'a'.repeat(32)
+  const BOB = 'b'.repeat(32)
+  const GONE = 'c'.repeat(32)
+  const MINUTE = 60 * 10_000_000
+
+  const guild = {
+    members: [
+      { playerUid: ANN, name: 'Ann', lastOnlineTicks: 1000 * MINUTE },
+      { playerUid: BOB, name: 'Bob', lastOnlineTicks: 400 * MINUTE },
+      { playerUid: GONE, name: 'Gone' },
+    ],
+  } as unknown as Guild
+
+  const index = {
+    meta: { worldUptimeTicks: 1000 * MINUTE },
+    structures: [
+      { buildPlayerUid: ANN, mapObjectId: 'Wall' },
+      { buildPlayerUid: ANN, mapObjectId: 'Bed' },
+      { buildPlayerUid: BOB, mapObjectId: 'Wall' },
+      { mapObjectId: 'Rock' },
+    ],
+    playerByUid: new Map([
+      [ANN, { playerUid: ANN, name: 'Ann', level: 40 }],
+      [BOB, { playerUid: BOB, name: 'Bob', level: 12 }],
+    ]),
+    palsByOwner: new Map([[ANN, [pal(1), pal(2)]]]),
+    playerDetails: [{ playerUid: ANN, record: { palsCaught: 77 } }],
+  } as unknown as SaveIndex
+
+  it('counts what each player built, once per save', () => {
+    const built = builtBy(index)
+    expect(built.get(ANN)).toHaveLength(2)
+    expect(built.get(BOB)).toHaveLength(1)
+    expect(builtBy(index)).toBe(built)
+  })
+
+  it('gives every member a row, with how long they have been away', () => {
+    const [ann, bob, gone] = contributions(index, guild)
+    expect(ann).toMatchObject({ online: true, awayTicks: 0, built: 2, pals: 2 })
+    expect(ann!.record?.palsCaught).toBe(77)
+    expect(bob).toMatchObject({ online: false, awayTicks: 600 * MINUTE, built: 1, pals: 0 }) // prettier-ignore
+    // In the guild record, with no character and no clock.
+    expect(gone).toMatchObject({ name: 'Gone', player: undefined, awayTicks: undefined, built: 0 }) // prettier-ignore
+  })
+
+  it('leaves the record out for a member whose save is not loaded', () => {
+    expect(contributions(index, guild)[1]!.record).toBeUndefined()
   })
 })

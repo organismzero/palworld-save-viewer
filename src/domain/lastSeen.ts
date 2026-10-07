@@ -41,7 +41,7 @@ export interface LastSeen {
  * How close to the world clock counts as "still connected". One minute; the
  * reference save has exactly one player inside it.
  */
-const ONLINE_EPSILON_TICKS = 60 * 10_000_000
+export const ONLINE_EPSILON_TICKS = 60 * 10_000_000
 
 export function lastSeenFor(
   /**
