@@ -211,10 +211,13 @@
 
   /* The one filled state in the system: an active tab, a selected menu entry, a
      ticked checkbox, a primary button. Everything else is a hairline. */
+  /* Mixed towards the deep blue, not towards white: white text sits on this at
+     15px, and the brighter fill it used to be gave it 2.4:1 at the top edge.
+     These two stops are 4.7:1 and 5.6:1. */
   --surface-select-fill: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--color-select) 82%, white),
-    color-mix(in srgb, var(--color-select) 88%, black)
+    color-mix(in srgb, var(--color-select) 45%, var(--color-select-deep)),
+    color-mix(in srgb, var(--color-select) 25%, var(--color-select-deep))
   );
   /* Selected rows fill left-to-right so long rows stay readable. */
   --surface-row-selected: linear-gradient(

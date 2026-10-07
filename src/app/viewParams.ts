@@ -40,6 +40,15 @@ import { useUiStore, type ViewId } from '../store/uiStore.ts'
 export interface ParamCodec<T> {
   encode: (value: T, defaults: T) => Record<string, string>
   decode: (raw: URLSearchParams, defaults: T) => T
+  /**
+   * What a link named that this save does not have, as noun phrases: "a
+   * player", "a pal".
+   *
+   * `decode` resolves a foreign or ambiguous id to nothing, which is right, but
+   * on its own it is also silent: the link opens, the thing it was about is
+   * simply not selected, and nothing says why. This is the other half.
+   */
+  missing?: (raw: URLSearchParams) => string[]
 }
 
 /** `#/pals?q=x&el=fire` → `{ view: 'pals', qs: 'q=x&el=fire' }`. */
@@ -96,6 +105,27 @@ export function resolveShortId(
   return found
 }
 
+/** Whether `key` names an id that does not resolve to exactly one of `ids`. */
+export function unresolved(
+  raw: URLSearchParams,
+  key: string,
+  ids: Iterable<Guid>,
+): boolean {
+  const short = raw.get(key)
+  return Boolean(short) && resolveShortId(short ?? undefined, ids) === undefined
+}
+
+/** "This link names a player and a pal that are not in this save." */
+export function missingNotice(things: readonly string[]): string | undefined {
+  const unique = [...new Set(things)]
+  if (unique.length === 0) return undefined
+  const named =
+    unique.length === 1
+      ? unique[0]
+      : `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`
+  return `This link names ${named} that ${unique.length === 1 ? 'is' : 'are'} not in this save.`
+}
+
 /* -------------------------------------------------------------------------
    The hook
    ------------------------------------------------------------------------- */
@@ -136,7 +166,22 @@ export function useViewParams<T extends object>(
   })
 
   const publishParams = useUiStore((s) => s.publishParams)
+  const notify = useUiStore((s) => s.notify)
   const epoch = useUiStore((s) => s.paramsEpoch)
+
+  // Worked out at mount, from the same string the decode below reads. It cannot
+  // wait for the effect: the publish effect runs first and rewrites that string
+  // to the cleaned-up encoding, with the unresolved id already gone.
+  const [missingAtMount] = useState(() =>
+    missingNotice(
+      codec.missing?.(
+        new URLSearchParams(useUiStore.getState().viewParams[view] ?? ''),
+      ) ?? [],
+    ),
+  )
+  useEffect(() => {
+    if (missingAtMount) notify(missingAtMount, { tone: 'warn' })
+  }, [missingAtMount, notify])
 
   const [value, setValue] = useState<T>(() => {
     // `codec` directly, not the ref: this runs once, on mount, and the
@@ -165,14 +210,14 @@ export function useViewParams<T extends object>(
   const firstEpoch = useRef(epoch)
   useEffect(() => {
     if (epoch === firstEpoch.current) return
-    setValue(
-      codecRef.current.decode(
-        new URLSearchParams(useUiStore.getState().viewParams[view] ?? ''),
-        defaults,
-      ),
+    const raw = new URLSearchParams(
+      useUiStore.getState().viewParams[view] ?? '',
     )
+    const missing = missingNotice(codecRef.current.missing?.(raw) ?? [])
+    if (missing) notify(missing, { tone: 'warn' })
+    setValue(codecRef.current.decode(raw, defaults))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [epoch, view])
+  }, [epoch, view, notify])
 
   const set = useCallback((next: Updater<T>) => {
     setValue((prev) =>

@@ -24,6 +24,7 @@ import {
   resolveShortId,
   shortId,
   str,
+  unresolved,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 import type { BreedPair } from '../../domain/breeding.ts'
@@ -189,6 +190,23 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         pairB: resolveShortId(raw.get('b') ?? undefined, index.palById.keys()),
         purpose: purposeOf(raw.get('for')) ?? d.purpose,
       }
+    },
+
+    missing(raw) {
+      const out: string[] = []
+      if (unresolved(raw, 'p', index.playerByUid.keys())) out.push('a player')
+      if (
+        list(raw, 'gm').some((short) => !resolveShortId(short, owners(index)))
+      ) {
+        out.push('a guildmate')
+      }
+      if (
+        unresolved(raw, 'a', index.palById.keys()) ||
+        unresolved(raw, 'b', index.palById.keys())
+      ) {
+        out.push('a pal')
+      }
+      return out
     },
   }
 }

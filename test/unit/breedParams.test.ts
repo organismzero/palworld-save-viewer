@@ -296,3 +296,25 @@ describe('breedCodec', () => {
     expect(roundTrip(value).query).toBe('a&b=c d')
   })
 })
+
+describe('breedCodec.missing', () => {
+  const missing = (qs: string) => codec.missing!(new URLSearchParams(qs))
+
+  it('says nothing about a link whose ids all resolve', () => {
+    expect(missing('p=aaaaaaaa&gm=bbbbbbbb&m=pair&a=cccccccc&b=dddddddd')).toEqual([]) // prettier-ignore
+    expect(missing('t=anubis&pv=legend')).toEqual([])
+  })
+
+  it('names a player, a guildmate and a pal the save does not have', () => {
+    expect(missing('p=eeeeeeee')).toEqual(['a player'])
+    expect(missing('gm=bbbbbbbb,eeeeeeee')).toEqual(['a guildmate'])
+    expect(missing('m=pair&a=cccccccc&b=eeeeeeee')).toEqual(['a pal'])
+  })
+
+  it('counts an ambiguous prefix as missing, as decode does', () => {
+    const two = codecFor([A, A2])
+    expect(two.missing!(new URLSearchParams('p=aaaaaaaa'))).toEqual([
+      'a player',
+    ])
+  })
+})

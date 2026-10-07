@@ -10,12 +10,7 @@ import {
   type LayerId,
   type MapEntity,
 } from './MapController.ts'
-import {
-  KeyHint,
-  Panel,
-  Pill,
-  PromptBar,
-} from '../../components/primitives.tsx'
+import { KeyHint, Panel, PromptBar } from '../../components/primitives.tsx'
 import {
   Button,
   Checkbox,
@@ -273,20 +268,6 @@ export function MapView({ index }: { index: SaveIndex }) {
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Panel padded>
             <div className="label">{bakeLabel ?? 'Preparing map'}</div>
-          </Panel>
-        </div>
-      )}
-
-      {status === 'degraded' && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2">
-          <Panel padded className="flex items-center gap-3 py-2">
-            <Pill tone="warn">no game art</Pill>
-            <span className="text-sm text-[var(--color-muted)]">
-              Showing a coordinate grid and raw ids. Positions are exact.
-            </span>
-            <Button size="sm" onClick={() => void ensure(true)}>
-              Retry
-            </Button>
           </Panel>
         </div>
       )}

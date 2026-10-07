@@ -11,6 +11,7 @@ import {
   bool,
   resolveShortId,
   shortId,
+  unresolved,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 
@@ -51,6 +52,13 @@ export function guildCodec(index: SaveIndex): ParamCodec<GuildParams> {
         ),
         showGroups: bool(raw, 'groups', d.showGroups),
       }
+    },
+
+    missing(raw) {
+      const out: string[] = []
+      if (unresolved(raw, 'g', index.guildById.keys())) out.push('a guild')
+      if (unresolved(raw, 'p', index.playerByUid.keys())) out.push('a player')
+      return out
     },
   }
 }

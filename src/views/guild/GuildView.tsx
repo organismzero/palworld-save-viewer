@@ -133,16 +133,15 @@ export function GuildView({ index }: { index: SaveIndex }) {
 
           <Aggregates index={index} guild={guild} />
 
-          <p className="label mt-10">
-            {/* Three states, not two: for the second or so before the data
-                lands it is neither here nor unavailable, and saying
-                "unavailable" then was simply untrue. */}
-            {data
-              ? 'names, elements and work suitability from reference data'
-              : status === 'degraded'
-                ? 'reference data unavailable — showing raw asset ids'
+          {/* Degraded is the shell's to say; this only covers the second or
+              so before the data lands, when it is neither here nor absent. */}
+          {status !== 'degraded' && (
+            <p className="label mt-10">
+              {data
+                ? 'names, elements and work suitability from reference data'
                 : 'loading reference data'}
-          </p>
+            </p>
+          )}
         </div>
       </div>
 

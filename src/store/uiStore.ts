@@ -253,6 +253,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
 
   notify: (text, opts) => {
+    // Saying the same thing twice at once is noise, and React's strict mode
+    // runs a mount effect twice in development.
+    if (get().notices.some((n) => n.text === text)) return
     const id = ++noticeSeq
     set((s) => ({
       notices: [...s.notices, { id, text, tone: opts?.tone ?? 'info' }],

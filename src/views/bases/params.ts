@@ -15,6 +15,7 @@ import {
   resolveShortId,
   shortId,
   str,
+  unresolved,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 
@@ -95,6 +96,21 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
         query: str(raw, 'q', d.query),
         storageOnly: !bool(raw, 'all', false),
       }
+    },
+
+    missing(raw) {
+      const out: string[] = []
+      const src = raw.get('src')
+      if (
+        src?.startsWith('base:') &&
+        !resolveShortId(src.slice(5), index.baseById.keys())
+      ) {
+        out.push('a base')
+      }
+      if (unresolved(raw, 'c', index.containerById.keys())) {
+        out.push('a container')
+      }
+      return out
     },
   }
 }

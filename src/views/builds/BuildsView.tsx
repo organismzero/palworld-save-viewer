@@ -250,7 +250,7 @@ export function BuildsView({ index }: { index: SaveIndex }) {
           <Missing
             what={
               status === 'degraded'
-                ? 'Game data could not be loaded, and every recommendation here is worked out from it — so there is nothing to show. The rest of the app still works.'
+                ? 'Every recommendation here is worked out from game data, so there is nothing to show.'
                 : 'Loading game data.'
             }
           />
@@ -261,6 +261,10 @@ export function BuildsView({ index }: { index: SaveIndex }) {
             {params.goal === 'fight' &&
               (opponent ? (
                 <Fight ctx={ctx} opponent={opponent} />
+              ) : params.opponent ? (
+                <Missing
+                  what={`The game data has no pal called ${params.opponent}, so there is nothing to match against. A link from a different version of the data would land here. Pick another on the left.`}
+                />
               ) : (
                 <Missing what="Pick the pal you are fighting on the left — a tower boss, an alpha, anything. What beats it is worked out from its elements." />
               ))}

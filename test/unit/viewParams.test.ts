@@ -13,12 +13,14 @@ import {
   bool,
   encodeList,
   list,
+  missingNotice,
   num,
   parseHash,
   resolveShortId,
   serialiseParams,
   shortId,
   str,
+  unresolved,
 } from '@/app/viewParams.ts'
 
 describe('parseHash', () => {
@@ -164,5 +166,39 @@ describe('codec helpers', () => {
     const p = raw('q=x&bogus=1&alsobogus')
     expect(str(p, 'q', '')).toBe('x')
     expect(num(p, 'lvl', 1)).toBe(1)
+  })
+})
+
+describe('unresolved', () => {
+  const ids = ['aaaaaaaa0000', 'bbbbbbbb0000', 'bbbbbbbb1111']
+  const raw = (qs: string) => new URLSearchParams(qs)
+
+  it('is false when the param is absent or resolves', () => {
+    expect(unresolved(raw(''), 'p', ids)).toBe(false)
+    expect(unresolved(raw('p='), 'p', ids)).toBe(false)
+    expect(unresolved(raw('p=aaaaaaaa'), 'p', ids)).toBe(false)
+  })
+
+  it('is true for an id nothing has, and for one two things share', () => {
+    expect(unresolved(raw('p=cccccccc'), 'p', ids)).toBe(true)
+    expect(unresolved(raw('p=bbbbbbbb'), 'p', ids)).toBe(true)
+  })
+})
+
+describe('missingNotice', () => {
+  it('says nothing when nothing is missing', () => {
+    expect(missingNotice([])).toBeUndefined()
+  })
+
+  it('agrees in number and does not repeat itself', () => {
+    expect(missingNotice(['a player'])).toBe(
+      'This link names a player that is not in this save.',
+    )
+    expect(missingNotice(['a player', 'a pal', 'a player'])).toBe(
+      'This link names a player and a pal that are not in this save.',
+    )
+    expect(missingNotice(['a guild', 'a player', 'a pal'])).toBe(
+      'This link names a guild, a player and a pal that are not in this save.',
+    )
   })
 })

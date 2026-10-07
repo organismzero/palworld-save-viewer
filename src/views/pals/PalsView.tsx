@@ -343,8 +343,8 @@ export function PalsView({ index }: { index: SaveIndex }) {
               </p>
               {elements.size > 0 && status === 'degraded' && (
                 <p className="max-w-sm text-center text-xs text-[var(--color-muted)]">
-                  Elements come from reference data, which could not be loaded,
-                  so the element filter is not being applied.
+                  Elements come from game data, so the element filter is not
+                  being applied.
                 </p>
               )}
               {dirty && <Button onClick={clearAll}>Clear filters</Button>}

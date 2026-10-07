@@ -56,6 +56,7 @@ import { parseHash } from './viewParams.ts'
 import { cn, tabId } from '../lib/utils.ts'
 import { Button, TabBar } from '../components/controls.tsx'
 import { KeyHint, PromptBar } from '../components/primitives.tsx'
+import { RefdataNote } from '../components/RefdataNote.tsx'
 import { TRUNCATED_NOTICE, carriesFiles, filesFromDrop } from './dropEntries.ts'
 import { useFilePicker } from './filePicker.tsx'
 import { CommandPalette } from './CommandPalette.tsx'
@@ -460,6 +461,8 @@ export function AppShell({ index }: { index: SaveIndex }) {
         floats: it is positioned against this box rather than the window, which
         is what keeps it between the header and the prompt row in both modes.
       */}
+      <RefdataNote onMap={view === 'map'} />
+
       <div className="relative flex min-h-0 flex-1">
         <main
           id={VIEW_PANEL}

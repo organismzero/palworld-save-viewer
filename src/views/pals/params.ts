@@ -14,7 +14,7 @@
  * one frame before being corrected. A measurement is not something to share.
  */
 
-import type { Pal, SaveIndex } from '../../domain/types.ts'
+import type { SaveIndex } from '../../domain/types.ts'
 import {
   encodeList,
   list,
@@ -22,6 +22,7 @@ import {
   resolveShortId,
   shortId,
   str,
+  unresolved,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 
@@ -106,13 +107,14 @@ export function palsCodec(index: SaveIndex): ParamCodec<PalsParams> {
         ),
       }
     },
-  }
-}
 
-/** Whether a link's `sel` named a pal this save does not have. */
-export function selectionMissing(
-  raw: string | undefined,
-  resolved: Pal | undefined,
-): boolean {
-  return Boolean(raw) && !resolved
+    missing(raw) {
+      const out: string[] = []
+      if (unresolved(raw, 'owner', index.playerByUid.keys())) {
+        out.push('a player')
+      }
+      if (unresolved(raw, 'sel', index.palById.keys())) out.push('a pal')
+      return out
+    },
+  }
 }

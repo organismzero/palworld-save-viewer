@@ -153,8 +153,7 @@ export function PassiveSheet({ index }: { index: SaveIndex }) {
   if (status === 'degraded') {
     return (
       <p className="p-4 text-sm text-[var(--color-muted)]">
-        The passive list comes from reference data, which could not be loaded.
-        Everything read from your save still works.
+        The passive list comes from game data, so there is nothing to list.
       </p>
     )
   }

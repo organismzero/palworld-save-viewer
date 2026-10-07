@@ -16,6 +16,7 @@ import {
   resolveShortId,
   shortId,
   str,
+  unresolved,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 
@@ -78,6 +79,9 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
           index.playerByUid.keys(),
         ),
       }
+    },
+    missing(raw) {
+      return unresolved(raw, 'p', index.playerByUid.keys()) ? ['a player'] : []
     },
   }
 }

@@ -108,15 +108,11 @@ The README, the footer and the shortcuts dialog all say `1`–`7`.
 
 ## Phase 1 — Small correctness fixes
 
-Done, except the three below: 1a (Guild no longer says "unavailable" while loading), 1b (the element filter waits for reference data), 1c (the Bases empty state offers to turn the storage filter off), 1e (the landing drop zone ignores text drags and no longer flickers), 1f (the folder cap is 256 and a cut-short drop says so), 1g and 1h (with the tray), the `ensure()` half of 1i, 1k (the diagnostics badge counts rejected files) and 1m (favicon, theme colour, Open Graph tags). 1d was removed as obsolete.
+Done. 1d was removed as obsolete. Three landed differently from how they were written:
 
-Still open:
-
-| #   | Fix                                                                                                                                                                                                                                                                                                                                                                                                          | Where                                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| 1i  | The shared `<RefdataNote/>` half. Degraded mode is still worded per view: Map, Builds and Breed each have their own, Guild and the tray's cheat sheet theirs, and Pals says so only beside an element filter. Bases says nothing.                                                                                                                                                                            | new `components/RefdataNote.tsx`, each view                              |
-| 1j  | A bad `p=`/`pl=`/opponent in a URL is silently dropped. Show "no player with that id in this save" like Breed does for species. `selectionMissing()` in `pals/params.ts` is exported and called nowhere.                                                                                                                                                                                                     | the `params.ts` of Guild, Breed, Builds and Pals                         |
-| 1l  | Tab focus ring is clipped by the shear. Move `clipPath` to a wrapper span; the button gets an inset `box-shadow` ring on `:focus-visible`. Check `--surface-select-fill` reaches 4.5:1 for white 15 px text and darken the stops if not; drop the `opacity-75` on tab hints and the `/70` on the diagnostics kind line and on `RawId` in favour of `--color-faint`. Record the change in `docs/redesign.md`. | `TabBar` in `controls.tsx`, `index.css`, `Diagnostics`, `primitives.tsx` |
+- **1i.** The degraded-mode note is one component, `RefdataNote`, rendered once by the shell above whichever view is open, not once per view. Views keep only the consequence that is theirs (Builds has nothing to recommend, the passive picker has no list). The status covers two failures, and the note tells them apart: no game data at all, or data present and only the map art missing, which is said on the Map alone.
+- **1j.** `ParamCodec` gained an optional `missing(raw)`, which every codec with ids implements, Bases included. `useViewParams` turns what it returns into one notice: "This link names a player and a pal that are not in this save." An ambiguous prefix counts as missing, as it does in `decode`. Builds also says so when its opponent is not a species in the game data. The unused `selectionMissing()` is gone.
+- **1l.** The tab's shape moved to two spans inside the button, and the focus ring is the same parallelogram in the frame cyan with the fill stepped 2px inside it, so the ring follows the shear. `--surface-select-fill` did fail: white on it was 2.4:1 at the top stop and 3.7:1 at the bottom. Its stops now mix towards `--color-select-deep` and give 4.7:1 and 5.6:1, which darkens primary buttons, selected menu entries and ticked checkboxes as well. The `opacity-75` on tab hints is gone. The `/70` on the diagnostics kind line and on `RawId` stays: it measures 4.95:1 on the solid panel, and `--color-faint`, which the item proposed instead, is 4.3:1.
 
 ---
 
@@ -370,7 +366,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 
 1. ~~**The utility tray**~~, done. It took 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
 2. ~~**8a**~~, done.
-3. **What is left of Phase 1**: the shared degraded-mode note, 1j and 1l.
+3. ~~**What is left of Phase 1**~~, done.
 4. **0a and 0e, then Phase 2, then Phase 3.** Links first because they make every later addition reachable; the drawer additions because they are the cheapest new value in the document.
 5. **0b and 0f, then Phase 5** (5a–5e), **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.

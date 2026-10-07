@@ -196,6 +196,7 @@ export function TabBar({
 }: TabStripProps) {
   const { refs, onKeyDown } = useTabKeys(tabs.length)
   const shear = 14
+  const shape = `polygon(${shear}px 0, 100% 0, calc(100% - ${shear}px) 100%, 0 100%)`
 
   return (
     <div
@@ -219,20 +220,41 @@ export function TabBar({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(e) => onKeyDown(e, i)}
-            style={{
-              clipPath: `polygon(${shear}px 0, 100% 0, calc(100% - ${shear}px) 100%, 0 100%)`,
-            }}
             className={cn(
-              'relative inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 px-5 text-base transition-colors',
+              // The shape is on the spans inside, not here. Clipping the button
+              // itself also clipped its focus outline, so a keyboard user saw
+              // nothing move along the main navigation.
+              'group relative inline-flex h-full min-w-0 flex-1 items-center justify-center px-5 text-base transition-colors focus-visible:outline-none',
               active
-                ? 'bg-[image:var(--surface-select-fill)] text-white'
-                : 'bg-[rgb(7_17_25/0.72)] text-[var(--color-muted)] hover:text-[var(--color-text)]',
+                ? 'text-white'
+                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]',
             )}
           >
-            {tab.label}
-            {tab.hint !== undefined && (
-              <span className="num text-[11px] opacity-75">{tab.hint}</span>
-            )}
+            {/* The focus ring: the same parallelogram in the frame cyan, which
+                the fill then steps 2px inside of. A ring that follows the
+                shear, where an outline could only draw the box around it. */}
+            <span
+              aria-hidden
+              style={{ clipPath: shape }}
+              className="absolute inset-0 hidden bg-[var(--color-signal)] group-focus-visible:block"
+            />
+            <span
+              aria-hidden
+              style={{ clipPath: shape }}
+              className={cn(
+                'absolute inset-0 group-focus-visible:inset-[2px]',
+                active
+                  ? 'bg-[image:var(--surface-select-fill)]'
+                  : // Opaque while focused, or the ring behind shows through it.
+                    'bg-[rgb(7_17_25/0.72)] group-focus-visible:bg-[rgb(7_17_25)]',
+              )}
+            />
+            <span className="relative inline-flex min-w-0 items-center gap-2">
+              {tab.label}
+              {tab.hint !== undefined && (
+                <span className="num text-[11px]">{tab.hint}</span>
+              )}
+            </span>
           </button>
         )
       })}
