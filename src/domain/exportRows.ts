@@ -19,25 +19,17 @@
  * `Pal.characterId` and `ItemStack.staticId` are not lowercased. Every lookup
  * has to `.toLowerCase()`, and forgetting silently yields the raw id for every
  * row — which looks like working code with bad reference data rather than a
- * bug. Both helpers below do it in one place so no call site has to remember.
+ * bug. The helpers in `names.ts` do it in one place so no call site has to
+ * remember.
  */
 
 import type { Column } from '../lib/export.ts'
 import type { Refdata } from '../refdata/refdata.ts'
 import { containerLocation, type ItemHit } from './bases.ts'
+import { baseNames, itemName, speciesName, structureName } from './names.ts'
 import { palName } from './palText.ts'
 import { formatMapPos, posToMap } from './coords.ts'
 import type { Container, Pal, SaveIndex } from './types.ts'
-
-/** Species name for an asset id, or the id itself. Handles the casing. */
-export function speciesName(refdata: Refdata | undefined, id: string): string {
-  return refdata?.species[id.toLowerCase()]?.name ?? id
-}
-
-/** Item name for a static id, or the id itself. Handles the casing. */
-export function itemName(refdata: Refdata | undefined, id: string): string {
-  return refdata?.items[id.toLowerCase()]?.name ?? id
-}
 
 /* -------------------------------------------------------------------------
    Pals
@@ -107,16 +99,33 @@ export interface ContainerStackRow {
   count: number
 }
 
+/**
+ * Where a container is, in the words the Bases view uses for it.
+ *
+ * The exports used to pass stubs here — the structure's asset id, and the
+ * literal "Base" — so a file saved from a screen reading "Wooden Chest · Base 3
+ * · near Sea Breeze Archipelago" said `Chest_Wood` and `Base`.
+ */
+function locator(index: SaveIndex, refdata: Refdata | undefined) {
+  const bases = baseNames(index, refdata)
+  return (c: Container) =>
+    containerLocation(
+      index,
+      c,
+      (s) => structureName(refdata, s),
+      (b) => bases.get(b.baseId) ?? 'Base',
+    )
+}
+
 export function containerRows(
   index: SaveIndex,
   refdata: Refdata | undefined,
   containers: readonly Container[],
 ): ContainerStackRow[] {
-  const structureName = (s: { mapObjectId: string }) => s.mapObjectId
-  const baseName = () => 'Base'
+  const where = locator(index, refdata)
 
   return containers.flatMap((c) => {
-    const at = containerLocation(index, c, structureName, baseName)
+    const at = where(c)
     return c.slots.map((slot) => ({
       containerId: c.containerId,
       where: at.label,
@@ -162,16 +171,16 @@ export interface ItemHitRow {
 
 export function itemHitRows(
   index: SaveIndex,
+  refdata: Refdata | undefined,
   hits: readonly ItemHit[],
 ): ItemHitRow[] {
-  const structureName = (s: { mapObjectId: string }) => s.mapObjectId
-  const baseName = () => 'Base'
+  const where = locator(index, refdata)
 
   return hits.flatMap((hit) =>
     hit.places.flatMap((place) => {
       const container = index.containerById.get(place.containerId)
       if (!container) return []
-      const at = containerLocation(index, container, structureName, baseName)
+      const at = where(container)
       return [
         {
           item: hit.name,

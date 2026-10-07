@@ -22,6 +22,7 @@ import { Command } from 'cmdk'
 
 import { searchItems } from '../domain/bases.ts'
 import { playerGuilds } from '../domain/index.ts'
+import { baseNames, itemName, speciesName } from '../domain/names.ts'
 import type { SaveIndex } from '../domain/types.ts'
 import { count } from '../lib/format.ts'
 import { useRefdataStore } from '../store/refdataStore.ts'
@@ -109,7 +110,7 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
     const jumpTo = (view: ViewId, focus: Focus) => () => jump(view, focus)
 
     /* --- pals ---------------------------------------------------------- */
-    const named = (id: string) => data?.species[id.toLowerCase()]?.name ?? id
+    const named = (id: string) => speciesName(data, id)
     let n = 0
     for (const pal of index.pals) {
       if (n >= PER_GROUP) break
@@ -173,8 +174,11 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
     }
 
     /* --- bases --------------------------------------------------------- */
-    index.bases.forEach((base, i) => {
-      const label = `Base ${i + 1}`
+    // The label the Bases view and the map use, landmark included, so typing
+    // the name of a place finds the base beside it.
+    const bases = baseNames(index, data)
+    index.bases.forEach((base) => {
+      const label = bases.get(base.baseId) ?? 'Base'
       if (!label.toLowerCase().includes(q)) return
       out.push({
         key: `base:${base.baseId}`,
@@ -188,7 +192,7 @@ export function CommandPalette({ index }: { index?: SaveIndex }) {
     return out
 
     function nameOfItem(staticId: string) {
-      return data?.items[staticId.toLowerCase()]?.name ?? staticId
+      return itemName(data, staticId)
     }
   }, [query, index, data, jump, setView, setPalette, setAbout, setShortcuts])
 

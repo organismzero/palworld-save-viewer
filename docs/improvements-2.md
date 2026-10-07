@@ -83,16 +83,9 @@ First callers: rejected files while a world is open (today they reach the ledger
 - The footer's `Esc Close` prompt shows whenever the stack is non-empty or a modal is open.
 - `useDrawerFocus(ref, open)`: on open, focus the drawer's first heading or close button; on close, return focus to `document.activeElement` at open time. Give each drawer `role="region"` and an `aria-label`.
 
-### 0e. Shared name resolvers — S
+### 0e. Shared name resolvers — done
 
-Most of the resolvers already exist, scattered: `speciesName` and `itemName` in `src/domain/exportRows.ts`, `baseLabel` (built on `nearestLandmark`) in `src/domain/bases.ts`, and `containerLocation` already takes `structureName` and `baseName` callbacks. What is missing is a `structureName` outside `BasesView`'s closure and any `skillName`.
-
-- New `src/domain/names.ts` holding `structureName(refdata, s)` and `skillName(refdata, wazaTail)`, with `speciesName` and `itemName` moved beside them.
-- `exportRows.ts` still stubs the structure name to the asset id and the base name to the literal `Base`; pass the real resolvers. The palette matches `Base ${i + 1}`; use `baseLabel`.
-
-Exports then read "Wooden Chest" and "Base 3 · near Sea Breeze Archipelago", and typing a landmark into ⌘K finds the base.
-
-Tests: extend `export.test.ts` to assert the `where` column for a fixture container is the structure's display name.
+`src/domain/names.ts` holds `speciesName`, `itemName`, `structureName`, `skillName` and `baseNames(index, refdata)`. The exports pass the real resolvers, so a saved file reads "Wooden Chest" and "Base 3 · near Sea Breeze Archipelago" as the screen does, and the palette matches a base by its full label, landmark included. Tested in `test/unit/names.test.ts`.
 
 ### 0f. Combobox hook — S
 

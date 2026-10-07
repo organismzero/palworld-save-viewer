@@ -2,12 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import {
-  baseLabel,
   containerLocation,
   searchItems,
   storageTotals,
   type ItemHit,
 } from '../../domain/bases.ts'
+import {
+  baseNames as namesOfBases,
+  itemName,
+  structureName,
+} from '../../domain/names.ts'
+import type { Refdata } from '../../refdata/refdata.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type {
   Base,
@@ -98,19 +103,11 @@ export function BasesView({ index }: { index: SaveIndex }) {
     void ensure()
   }, [ensure])
 
-  const nameOfStructure = (s: Structure) =>
-    data?.structures[s.mapObjectId.toLowerCase()]?.name ?? s.mapObjectId
-  const nameOfItem = (staticId: string) =>
-    data?.items[staticId.toLowerCase()]?.name ?? staticId
+  const nameOfStructure = (s: Structure) => structureName(data, s)
+  const nameOfItem = (staticId: string) => itemName(data, staticId)
 
   const bases = index.bases
-  const baseNames = useMemo(
-    () =>
-      new Map(
-        bases.map((b, i) => [b.baseId, baseLabel(b, i + 1, data?.landmarks)]),
-      ),
-    [bases, data],
-  )
+  const baseNames = useMemo(() => namesOfBases(index, data), [index, data])
   const nameOfBase = (b: Base) => baseNames.get(b.baseId) ?? 'Base'
 
   /** Structures that hold a container and sit outside any base camp. */
@@ -248,6 +245,7 @@ export function BasesView({ index }: { index: SaveIndex }) {
           nameOfItem={nameOfItem}
           nameOfStructure={nameOfStructure}
           nameOfBase={nameOfBase}
+          data={data}
           onOpen={(id) => {
             openContainer(id)
             setQuery('')
@@ -1098,6 +1096,7 @@ function ItemSearch({
   nameOfItem,
   nameOfStructure,
   nameOfBase,
+  data,
   onOpen,
   storageOnly,
   onStorageOnly,
@@ -1109,6 +1108,7 @@ function ItemSearch({
   nameOfItem: (staticId: string) => string
   nameOfStructure: (s: Structure) => string
   nameOfBase: (b: Base) => string
+  data: Refdata | undefined
   onOpen: (containerId: Guid) => void
   storageOnly: boolean
   onStorageOnly: (v: boolean) => void
@@ -1155,7 +1155,7 @@ function ItemSearch({
                     is the question, so the answer has to keep the places. */}
                 <div className="flex justify-end px-3 py-1.5">
                   <ExportMenu
-                    rows={itemHitRows(index, hits)}
+                    rows={itemHitRows(index, data, hits)}
                     columns={ITEM_HIT_COLUMNS}
                     kind="item-search"
                     title={`Export every place these ${hits.length} items were found`}
