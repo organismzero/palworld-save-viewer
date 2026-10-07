@@ -434,7 +434,7 @@ function PartnerSection({
               id={r.id}
               ctx={ctx}
               held={held.has(r.id)}
-              href={breedHref(ctx.index, ctx.ownerUid, r.id, picks)}
+              href={breedHref(ctx.index, ctx.ownerUid, r.id, picks, ctx.also)}
             >
               {r.effects.map((e) => (
                 <Pill key={e.type} tone="signal">
@@ -525,7 +525,13 @@ function ProducerSections({
                   id={r.id}
                   ctx={ctx}
                   held={held.has(r.id)}
-                  href={breedHref(ctx.index, ctx.ownerUid, r.id, picks)}
+                  href={breedHref(
+                    ctx.index,
+                    ctx.ownerUid,
+                    r.id,
+                    picks,
+                    ctx.also,
+                  )}
                 >
                   <Pill tone="signal" title="Ranching level">
                     Lv {r.level}

@@ -13,6 +13,9 @@ import type { Where } from '../../domain/recommend.ts'
 import { WORK_TYPES, element } from '../../lib/color.ts'
 import type { PassiveText } from '../breed/passiveText.ts'
 import type { SpeciesText } from '../breed/speciesText.ts'
+import type { OwnerText } from '../breed/ownerText.ts'
+import type { Pool } from '../breed/PoolPicker.tsx'
+import type { Stock } from '../../domain/breeding.ts'
 import { serialiseParams } from '../../app/viewParams.ts'
 import { BREED_DEFAULTS, breedCodec } from '../breed/params.ts'
 
@@ -146,10 +149,21 @@ export function breedHref(
   playerUid: Guid | undefined,
   target: string,
   passives: readonly string[],
+  /**
+   * Whose pals besides the player's own. Carried across so a species marked
+   * "have" because a guildmate holds one is planned from that same pool.
+   */
+  also: Pool = {},
 ): string {
   const qs = serialiseParams(
     breedCodec(index).encode(
-      { ...BREED_DEFAULTS, playerUid, target, passives: [...passives] },
+      {
+        ...BREED_DEFAULTS,
+        ...also,
+        playerUid,
+        target,
+        passives: [...passives],
+      },
       BREED_DEFAULTS,
     ),
   )
@@ -168,8 +182,28 @@ export interface Ctx {
   pals: readonly Pal[]
   where: (pal: Pal) => Where
   ownerUid: Guid | undefined
+  /** Whose a pal is, when it is not the selected player's. */
+  owner: OwnerText
+  /** The pooling settings behind `pals`, for links that should keep them. */
+  also: Pool
   text: SpeciesText
   passives: PassiveText
+}
+
+/**
+ * Every pal in a stock, once each.
+ *
+ * A stock files a pal under male, female or unknown, and with the
+ * unknown-gender switch on it files some under two, so they are deduped.
+ */
+export function stockPals(stock: Stock): Pal[] {
+  const seen = new Map<Guid, Pal>()
+  for (const entry of stock.bySpecies.values()) {
+    for (const pal of [...entry.male, ...entry.female, ...entry.unknown]) {
+      seen.set(pal.instanceId, pal)
+    }
+  }
+  return [...seen.values()]
 }
 
 export function workName(data: Refdata, id: string): string {

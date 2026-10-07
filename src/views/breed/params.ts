@@ -244,7 +244,7 @@ function purposeOf(raw: string | null): GoalId | undefined {
  * The union matters in both directions: a departed member owns pals but has no
  * player record, and a member who owns none still has one.
  */
-function owners(index: SaveIndex): Guid[] {
+export function owners(index: SaveIndex): Guid[] {
   return [
     ...new Set([...index.palsByOwner.keys(), ...index.playerByUid.keys()]),
   ]

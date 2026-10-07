@@ -8,10 +8,12 @@
  */
 
 import { element } from '../../lib/color.ts'
+import { owners } from '../breed/params.ts'
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import type { GoalId } from '../../domain/recommend.ts'
 import { DEFAULT_CAKE, cakeRecipe } from '../../domain/recipes.ts'
 import {
+  bool,
   encodeList,
   list,
   resolveShortId,
@@ -34,6 +36,13 @@ export interface BuildsParams {
   /** The cake tier a cake base is for, by item id. */
   cake: string
   playerUid?: Guid
+  /**
+   * Whose pals count as "yours" beside the player's own. The same three
+   * settings, under the same keys, as the Breed view's.
+   */
+  includeGuild: boolean
+  includeBase: boolean
+  includeMembers: Guid[]
 }
 
 export const BUILDS_DEFAULTS: BuildsParams = {
@@ -44,6 +53,9 @@ export const BUILDS_DEFAULTS: BuildsParams = {
   elements: [],
   cake: DEFAULT_CAKE,
   playerUid: undefined,
+  includeGuild: false,
+  includeBase: false,
+  includeMembers: [],
 }
 
 const GOALS: readonly GoalId[] = [
@@ -68,6 +80,14 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       if (v.elements.length > 0) out.el = encodeList(v.elements)
       if (v.cake !== d.cake) out.c = v.cake
       if (v.playerUid) out.p = shortId(v.playerUid)
+      // `gp` means everything; the finer two only speak when it is off.
+      if (v.includeGuild) out.gp = '1'
+      else {
+        if (v.includeBase) out.gb = '1'
+        if (v.includeMembers.length > 0) {
+          out.gm = encodeList(v.includeMembers.map(shortId))
+        }
+      }
       return out
     },
     decode(raw, d) {
@@ -84,6 +104,13 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
           raw.get('p') ?? undefined,
           index.playerByUid.keys(),
         ),
+        includeGuild: bool(raw, 'gp', d.includeGuild),
+        includeBase: bool(raw, 'gb', d.includeBase),
+        // Against everyone who owns a pal, as Breed resolves them, so a
+        // departed member's palbox can still be named.
+        includeMembers: list(raw, 'gm')
+          .map((short) => resolveShortId(short, owners(index)))
+          .filter((uid): uid is Guid => uid !== undefined),
       }
     },
     missing(raw) {

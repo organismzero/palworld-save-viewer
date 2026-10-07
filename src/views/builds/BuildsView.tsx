@@ -65,6 +65,9 @@ import {
   SelectControl,
   TextInput,
 } from '../../components/controls.tsx'
+import { ownerText } from '../breed/ownerText.ts'
+import { PoolPicker } from '../breed/PoolPicker.tsx'
+import { stockFor } from '../breed/stockCache.ts'
 import { passiveText } from '../breed/passiveText.ts'
 import { speciesText, type SpeciesText } from '../breed/speciesText.ts'
 import {
@@ -72,6 +75,7 @@ import {
   MOUNT_LABEL,
   TOP,
   breedHref,
+  stockPals,
   workName,
   type Ctx,
 } from './buildsText.ts'
@@ -155,10 +159,17 @@ export function BuildsView({ index }: { index: SaveIndex }) {
     ? index.playerByUid.get(params.playerUid)
     : fallback
   const ownerUid = player?.playerUid
-  const pals = useMemo(
-    () => (ownerUid ? (index.palsByOwner.get(ownerUid) ?? []) : []),
-    [index, ownerUid],
-  )
+  // The pool Breed would build from the same three settings, with no breeding
+  // table to narrow it: every species counts here, breedable or not.
+  const stock = stockFor(index, undefined, {
+    ownerUid,
+    assumeUnknownGender: false,
+    includeGuild: params.includeGuild,
+    includeBase: params.includeBase,
+    includeMembers: params.includeMembers,
+  })
+  const pals = useMemo(() => stockPals(stock), [stock])
+  const owner = useMemo(() => ownerText(index, ownerUid), [index, ownerUid])
   const where = useMemo(() => locator(index), [index])
 
   const work =
@@ -183,6 +194,12 @@ export function BuildsView({ index }: { index: SaveIndex }) {
     pals,
     where,
     ownerUid,
+    owner,
+    also: {
+      includeGuild: params.includeGuild,
+      includeBase: params.includeBase,
+      includeMembers: params.includeMembers,
+    },
     text,
     passives,
   }
@@ -204,6 +221,16 @@ export function BuildsView({ index }: { index: SaveIndex }) {
             label: `${p.name} — ${count(index.palsByOwner.get(p.playerUid)?.length ?? 0)} pals`,
           }))}
         />
+
+        {stock.guild && (
+          <PoolPicker
+            stock={stock}
+            owner={owner}
+            onPool={patch}
+            title="also count"
+            memberNote={(n) => `which ${n === 1 ? 'is' : 'are'} theirs to lend`}
+          />
+        )}
 
         <div className="space-y-2">
           <div className="label">what for</div>
@@ -282,7 +309,11 @@ export function BuildsView({ index }: { index: SaveIndex }) {
             {params.goal === 'food' && <Food ctx={ctx} work={work} />}
             {params.goal === 'cake' && <Cake ctx={ctx} cake={params.cake} />}
             {params.goal === 'ranch' && <Ranch ctx={ctx} work={work} />}
-            <Footnote goal={params.goal} player={player} />
+            <Footnote
+              goal={params.goal}
+              player={player}
+              pooled={stock.countedOwn !== stock.counted}
+            />
           </div>
         )}
       </div>
@@ -461,7 +492,7 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
               id={r.id}
               ctx={ctx}
               held={held.has(r.id)}
-              href={breedHref(ctx.index, ctx.ownerUid, r.id, picks)}
+              href={breedHref(ctx.index, ctx.ownerUid, r.id, picks, ctx.also)}
             >
               <Matchup dealt={r.dealt} taken={r.taken} element={r.element} />
               <Pill title="Base attack (shot_attack)">atk {r.attack}</Pill>
@@ -568,7 +599,13 @@ function Travel({ ctx }: { ctx: Ctx }) {
                     id={r.id}
                     ctx={ctx}
                     held={held.has(r.id)}
-                    href={breedHref(ctx.index, ctx.ownerUid, r.id, picks)}
+                    href={breedHref(
+                      ctx.index,
+                      ctx.ownerUid,
+                      r.id,
+                      picks,
+                      ctx.also,
+                    )}
                   >
                     {!glider && (
                       <Pill tone="signal" title="ride_sprint_speed">
@@ -772,7 +809,16 @@ function OpponentPicker({
    The assumptions, said out loud
    ------------------------------------------------------------------------- */
 
-function Footnote({ goal, player }: { goal: GoalId; player?: Player }) {
+function Footnote({
+  goal,
+  player,
+  pooled,
+}: {
+  goal: GoalId
+  player?: Player
+  /** Whether anyone else's pals are being counted. */
+  pooled: boolean
+}) {
   return (
     <section className="border-t border-[var(--color-line-faint)] pt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
       <p>
@@ -813,8 +859,11 @@ function Footnote({ goal, player }: { goal: GoalId; player?: Player }) {
       )}
       <p className="mt-2">
         “Yours” lists {player ? `${player.name}’s` : 'this player’s'} own pals,
-        wherever they are. “Breed →” opens the Breed tab on that species with up
-        to four of the best passives a hatch can roll already picked.
+        wherever they are
+        {pooled &&
+          ', and the ones ticked under “also count”, each tagged with whose it is'}
+        . “Breed →” opens the Breed tab on that species with up to four of the
+        best passives a hatch can roll already picked.
       </p>
     </section>
   )

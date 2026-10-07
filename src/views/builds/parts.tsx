@@ -143,6 +143,7 @@ export function Owned({
       )}
       {rows.map((r) => {
         const id = r.pal.characterId.toLowerCase()
+        const who = ctx.owner.badge(r.pal)
         return (
           <div
             key={r.pal.instanceId}
@@ -171,6 +172,18 @@ export function Owned({
                   {palName(r.pal, ctx.data.species[id])}
                 </span>
               </Jump>
+              {who && (
+                <Pill
+                  tone="warn"
+                  title={
+                    who.unowned
+                      ? 'A base worker nobody owns'
+                      : `${who.name}’s pal, not this player’s`
+                  }
+                >
+                  {who.name}
+                </Pill>
+              )}
               <Pill title="Pal level">Lv {r.pal.level}</Pill>
               <Pill title="Where it is now">{WHERE_LABEL[r.where]}</Pill>
             </div>
@@ -331,7 +344,13 @@ export function WorkSections({
                   id={r.id}
                   ctx={ctx}
                   held={held.has(r.id)}
-                  href={breedHref(ctx.index, ctx.ownerUid, r.id, picks)}
+                  href={breedHref(
+                    ctx.index,
+                    ctx.ownerUid,
+                    r.id,
+                    picks,
+                    ctx.also,
+                  )}
                 >
                   <Pill tone="signal" title="Work suitability level">
                     Lv {r.level}
