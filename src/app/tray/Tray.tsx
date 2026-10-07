@@ -102,7 +102,7 @@ export function Tray({ index }: { index: SaveIndex }) {
         aria-labelledby={tabId(TRAY_TABS, tab)}
         className="min-h-0 flex-1"
       >
-        {tab === 'passives' && <PassiveSheet />}
+        {tab === 'passives' && <PassiveSheet index={index} />}
         {tab === 'paths' && <SavedPaths index={index} />}
       </div>
     </aside>
