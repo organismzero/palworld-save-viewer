@@ -16,6 +16,7 @@ import {
   ZOOM_STEP,
   type LayerId,
   type MapEntity,
+  type MapHit,
 } from './MapController.ts'
 import {
   LAYER_IDS,
@@ -31,8 +32,10 @@ import {
   Button,
   Checkbox,
   IconButton,
+  MoreResults,
   RangeControl,
 } from '../../components/controls.tsx'
+import { OPTION_ACTIVE, useCombobox } from '../../components/combobox.ts'
 import { cn } from '../../lib/utils.ts'
 import { useEscape } from '../../components/drawer.ts'
 import { Jump } from '../../components/Jump.tsx'
@@ -60,6 +63,9 @@ const LEGEND_ORDER: LayerId[] = [
   'dungeons',
   'landmarks',
 ]
+
+/** Results shown before "show more". Few, because the list sits on the map. */
+const SEARCH_LIMIT = 8
 
 export function MapView({ index }: { index: SaveIndex }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -403,11 +409,35 @@ export function MapView({ index }: { index: SaveIndex }) {
   // Computed in the change handler rather than during render: the entity list
   // lives on the controller behind a ref, and reading a ref while rendering
   // can leave the UI stale.
-  const [results, setResults] = useState<MapEntity[]>([])
+  const [results, setResults] = useState<MapHit[]>([])
+  const [limit, setLimit] = useState(SEARCH_LIMIT)
   const runSearch = (q: string) => {
     setQuery(q)
+    setLimit(SEARCH_LIMIT)
     setResults(controllerRef.current?.search(q) ?? [])
   }
+  const shownResults = results.slice(0, limit)
+  const choose = (hit: MapHit | undefined) => {
+    if (!hit) return
+    controllerRef.current?.focus(hit.entity)
+    // The thing was asked for by name, so show it even if its layer is off.
+    setParams((p) => ({
+      ...p,
+      layers: new Set([...p.layers, hit.entity.kind]),
+      selected: { layer: hit.entity.kind, id: hit.entity.id },
+    }))
+    runSearch('')
+  }
+  const searching = query.trim() !== ''
+  const searchRef = useRef<HTMLDivElement>(null)
+  const combo = useCombobox({
+    rootRef: searchRef,
+    count: shownResults.length,
+    open: searching,
+    onPick: (i) => choose(shownResults[i]),
+    onClose: () => runSearch(''),
+    resetKey: query,
+  })
 
   return (
     /* The map is a framed screen, as the game frames it: a hairline and four
@@ -441,36 +471,61 @@ export function MapView({ index }: { index: SaveIndex }) {
       )}
 
       {/* Search */}
-      <div className="absolute top-3 left-3 w-64">
+      <div ref={searchRef} className="absolute top-3 left-3 w-72">
         <Panel className="overflow-hidden">
           <input
             value={query}
             onChange={(e) => runSearch(e.target.value)}
-            aria-label="Find a pal, base or chest on the map"
-            placeholder="Find a pal, base, chest…"
+            aria-label="Find a pal, base or chest on the map, by name, owner or contents"
+            placeholder="Find a pal, base, chest, owner, item…"
             className="w-full bg-[rgb(3_9_13/0.55)] px-3 py-2 text-sm shadow-[var(--edge-sunken)] outline-none placeholder:text-[var(--color-faint)]"
+            {...combo.inputProps}
           />
-          {results.length > 0 && (
-            <ul className="max-h-64 overflow-y-auto border-t border-[var(--color-line)]">
-              {results.map((r) => (
-                <li key={r.kind + r.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      controllerRef.current?.focus(r)
-                      pick(r)
-                      runSearch('')
-                    }}
-                    className="flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--color-signal)]/[0.08]"
-                  >
-                    <span className="truncate">{r.label}</span>
-                    <span className="label shrink-0">
-                      {LAYER_STYLES[r.kind].label}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {searching && (
+            <div className="border-t border-[var(--color-line)]">
+              {results.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-[var(--color-muted)]">
+                  Nothing on the map matches “{query}”.
+                </p>
+              ) : (
+                <ul {...combo.listProps} className="max-h-72 overflow-y-auto">
+                  {shownResults.map((r, i) => (
+                    <li key={r.entity.kind + r.entity.id}>
+                      <button
+                        type="button"
+                        onClick={() => choose(r)}
+                        {...combo.optionProps(i)}
+                        className={cn(
+                          'flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--color-signal)]/[0.08]',
+                          OPTION_ACTIVE,
+                        )}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">
+                            {r.entity.label}
+                          </span>
+                          {/* On its own line: beside the name it was the first
+                              thing the narrow column cut off. */}
+                          {r.via && (
+                            <span className="block truncate text-xs text-[var(--color-muted)]">
+                              {r.via}
+                            </span>
+                          )}
+                        </span>
+                        <span className="label shrink-0">
+                          {LAYER_STYLES[r.entity.kind].label}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <MoreResults
+                shown={shownResults.length}
+                total={results.length}
+                onMore={() => setLimit((n) => n * 4)}
+              />
+            </div>
           )}
         </Panel>
       </div>

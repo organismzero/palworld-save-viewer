@@ -39,8 +39,14 @@ import {
   Button,
   IconButton,
   ListRow,
+  MoreResults,
   TextInput,
 } from '../../components/controls.tsx'
+import {
+  OPTION_ACTIVE,
+  useCombobox,
+  type Combobox,
+} from '../../components/combobox.ts'
 import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -1105,6 +1111,9 @@ function DetailRow({
    Global item search
    ------------------------------------------------------------------------- */
 
+/** Item matches shown before "show more". */
+const ITEM_PAGE = 40
+
 function ItemSearch({
   index,
   query,
@@ -1130,22 +1139,43 @@ function ItemSearch({
   onStorageOnly: (v: boolean) => void
   showStorageToggle: boolean
 }) {
+  // Every match, not the first forty: the export wants them all, and the list
+  // says how many it is holding back.
   const hits = useMemo(
-    () => searchItems(index, query, nameOfItem),
+    () => searchItems(index, query, nameOfItem, Infinity),
     [index, query, nameOfItem],
   )
   const [expanded, setExpanded] = useState<string>()
+  const [limit, setLimit] = useState(ITEM_PAGE)
+  const shown = hits.slice(0, limit)
+  const toggle = (staticId: string | undefined) =>
+    setExpanded((e) => (e === staticId ? undefined : staticId))
+  const search = (q: string) => {
+    onQuery(q)
+    setExpanded(undefined)
+    setLimit(ITEM_PAGE)
+  }
+  const open = query.trim() !== ''
+  const rootRef = useRef<HTMLDivElement>(null)
+  const combo = useCombobox({
+    rootRef,
+    count: shown.length,
+    open,
+    // A hit is a heading over the places the item is in, so choosing one opens
+    // that list rather than leaving the search.
+    onPick: (i) => toggle(shown[i]?.staticId),
+    onClose: () => search(''),
+    resetKey: query,
+  })
 
   return (
-    <div className="relative border-b border-[var(--color-line)]">
+    <div ref={rootRef} className="relative border-b border-[var(--color-line)]">
       <div className="space-y-2 px-3 py-2.5">
         <TextInput
           value={query}
-          onChange={(v) => {
-            onQuery(v)
-            setExpanded(undefined)
-          }}
+          onChange={search}
           aria-label="Find an item anywhere in the world"
+          {...combo.inputProps}
           placeholder="Find an item anywhere…"
         />
         {showStorageToggle && (
@@ -1158,8 +1188,11 @@ function ItemSearch({
         )}
       </div>
 
-      {query.trim() !== '' && (
-        <div className="absolute top-full left-3 z-20 max-h-[60vh] w-[560px] max-w-[calc(100vw-var(--rail-width)-2rem)] overflow-y-auto">
+      {open && (
+        <div
+          {...combo.listProps}
+          className="absolute top-full left-3 z-20 max-h-[60vh] w-[560px] max-w-[calc(100vw-var(--rail-width)-2rem)] overflow-y-auto"
+        >
           <Panel className="divide-y divide-[var(--color-line-faint)]">
             {hits.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-[var(--color-muted)]">
@@ -1177,15 +1210,13 @@ function ItemSearch({
                     title={`Export every place these ${hits.length} items were found`}
                   />
                 </div>
-                {hits.map((hit) => (
+                {shown.map((hit, i) => (
                   <div key={hit.staticId}>
                     <ItemHitButton
                       hit={hit}
-                      onClick={() =>
-                        setExpanded((e) =>
-                          e === hit.staticId ? undefined : hit.staticId,
-                        )
-                      }
+                      expanded={expanded === hit.staticId}
+                      option={combo.optionProps(i)}
+                      onClick={() => toggle(hit.staticId)}
                     />
 
                     {expanded === hit.staticId && (
@@ -1226,6 +1257,11 @@ function ItemSearch({
                     )}
                   </div>
                 ))}
+                <MoreResults
+                  shown={shown.length}
+                  total={hits.length}
+                  onMore={() => setLimit((n) => n + ITEM_PAGE)}
+                />
               </>
             )}
           </Panel>
@@ -1238,9 +1274,13 @@ function ItemSearch({
 /** A search hit, whose hover card is the item it found. */
 function ItemHitButton({
   hit,
+  expanded,
+  option,
   onClick,
 }: {
   hit: ItemHit
+  expanded: boolean
+  option: ReturnType<Combobox['optionProps']>
   onClick: () => void
 }) {
   const hover = useHoverCard({
@@ -1254,7 +1294,12 @@ function ItemHitButton({
       type="button"
       onClick={onClick}
       {...hover}
-      className="flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
+      {...option}
+      aria-expanded={expanded}
+      className={cn(
+        'flex w-full items-baseline gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]',
+        OPTION_ACTIVE,
+      )}
     >
       <span className="truncate text-sm">{hit.name}</span>
       <span className="num ml-auto shrink-0 text-xs">{count(hit.total)}</span>

@@ -442,6 +442,40 @@ export function TextInput({
 }
 
 /**
+ * The last row of a list that was cut short: how much is showing, and a way to
+ * see more.
+ *
+ * The typeaheads all cap what they render, and all three used to do it without
+ * a word — eight map results, forty passives — so a search that had found the
+ * thing but ranked it ninth looked exactly like one that had found nothing.
+ */
+export function MoreResults({
+  shown,
+  total,
+  onMore,
+}: {
+  shown: number
+  total: number
+  onMore: () => void
+}) {
+  if (total <= shown) return null
+  return (
+    <div className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px] text-[var(--color-muted)]">
+      <span className="num">
+        showing {shown} of {total.toLocaleString('en-US')}
+      </span>
+      <button
+        type="button"
+        onClick={onMore}
+        className="text-[var(--color-signal)] hover:underline"
+      >
+        show more
+      </button>
+    </div>
+  )
+}
+
+/**
  * The game's checkbox: a small square that fills with selection blue.
  *
  * A real `<input>`, visually hidden and driving the box through `peer-*`, rather

@@ -20,13 +20,23 @@
  * the toggle row of the Pals view's element pips.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { count } from '../../lib/format.ts'
 import { Panel, PassiveChip, SectionHeading } from '../../components/primitives.tsx'
-import { Checkbox, IconButton, TextInput } from '../../components/controls.tsx'
+import {
+  Checkbox,
+  IconButton,
+  MoreResults,
+  TextInput,
+} from '../../components/controls.tsx'
+import { OPTION_ACTIVE, useCombobox } from '../../components/combobox.ts'
+import { cn } from '../../lib/utils.ts'
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import type { PassiveText } from './passiveText.ts'
+
+/** Matches shown before "show more". */
+const PAGE = 40
 
 export function PassivePicker({
   selected,
@@ -69,11 +79,32 @@ export function PassivePicker({
           b.rank - a.rank ||
           a.name.localeCompare(b.name),
       )
-      .slice(0, 40)
   }, [query, selected, carriers, text])
 
+  const [limit, setLimit] = useState(PAGE)
+  const search = (q: string) => {
+    setQuery(q)
+    setLimit(PAGE)
+  }
+  const shown = hits.slice(0, limit)
+  const add = (id: string | undefined) => {
+    if (id === undefined) return
+    onChange([...selected, id])
+    search('')
+  }
+  const open = query.trim() !== '' && !full
+  const rootRef = useRef<HTMLDivElement>(null)
+  const combo = useCombobox({
+    rootRef,
+    count: shown.length,
+    open,
+    onPick: (i) => add(shown[i]?.id),
+    onClose: () => search(''),
+    resetKey: query,
+  })
+
   return (
-    <div className="relative space-y-2">
+    <div ref={rootRef} className="relative space-y-2">
       <SectionHeading title="carrying" />
 
       {selected.length > 0 && (
@@ -129,33 +160,38 @@ export function PassivePicker({
       ) : (
         <TextInput
           value={query}
-          onChange={setQuery}
+          onChange={search}
           aria-label="Find a passive to target"
+          {...combo.inputProps}
           placeholder={
             selected.length === 0 ? 'Any passives too?' : 'And another…'
           }
         />
       )}
 
-      {query.trim() !== '' && !full && (
+      {open && (
         <div className="absolute top-full left-0 z-20 max-h-[50vh] w-[320px] max-w-[calc(100vw-var(--rail-width)-2rem)] overflow-y-auto">
-          <Panel className="divide-y divide-[var(--color-line-faint)]">
+          <Panel
+            {...combo.listProps}
+            className="divide-y divide-[var(--color-line-faint)]"
+          >
             {hits.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-[var(--color-muted)]">
                 No passive matches “{query}”.
               </p>
             ) : (
-              hits.map((p) => {
+              shown.map((p, i) => {
                 const held = carriers.get(p.id) ?? 0
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => {
-                      onChange([...selected, p.id])
-                      setQuery('')
-                    }}
-                    className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]"
+                    onClick={() => add(p.id)}
+                    {...combo.optionProps(i)}
+                    className={cn(
+                      'flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-signal)]/[0.08]',
+                      OPTION_ACTIVE,
+                    )}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
@@ -195,6 +231,11 @@ export function PassivePicker({
                 )
               })
             )}
+            <MoreResults
+              shown={shown.length}
+              total={hits.length}
+              onMore={() => setLimit((n) => n + PAGE)}
+            />
           </Panel>
         </div>
       )}

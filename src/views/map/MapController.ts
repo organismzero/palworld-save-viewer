@@ -27,6 +27,7 @@ import {
   worldPerPixel,
 } from '../../domain/coords.ts'
 import { baseLabel } from '../../domain/bases.ts'
+import { itemName } from '../../domain/names.ts'
 import { elementColor } from '../../lib/color.ts'
 import type {
   FogMask,
@@ -156,6 +157,17 @@ export interface MapEntity {
   world: Vec3
   mx: number
   my: number
+  /** Who it belongs to: a pal's owner, a structure's builder, a base's guild. */
+  owner?: string
+  /** What a container holds, by display name. */
+  holds?: string[]
+}
+
+/** A search result, with the reason when it is not the marker's own name. */
+export interface MapHit {
+  entity: MapEntity
+  /** "owned by Ada", "holds Paldium Fragment". Absent for a match on the name. */
+  via?: string
 }
 
 interface Options {
@@ -501,6 +513,9 @@ export class MapController {
           // wherever it appears.
           label: baseLabel(base, i + 1, refdata?.landmarks),
           sub: `${index.structuresByBase.get(base.baseId)?.length ?? 0} structures`,
+          owner: base.groupId
+            ? index.guildById.get(base.groupId)?.name
+            : undefined,
           world: base.pos,
           ...at,
         },
@@ -552,6 +567,12 @@ export class MapController {
             ]
               .filter(Boolean)
               .join(' · ') || undefined,
+          owner: builder,
+          holds: s.containerId
+            ? index.containerById
+                .get(s.containerId)
+                ?.slots.map((slot) => itemName(refdata, slot.staticId))
+            : undefined,
           world: s.pos,
           ...at,
         },
@@ -571,6 +592,9 @@ export class MapController {
           id: pal.instanceId,
           label: info?.name ?? pal.characterId,
           sub: `Lv ${pal.level}${pal.isBoss ? ' · alpha' : ''}`,
+          owner: pal.ownerPlayerUid
+            ? index.playerByUid.get(pal.ownerPlayerUid)?.name
+            : undefined,
           world: pal.pos!,
           ...at,
         },
@@ -973,12 +997,32 @@ export class MapController {
     return found
   }
 
-  search(query: string, limit = 8): MapEntity[] {
+  /**
+   * Everything matching, best first, with no limit: the caller decides how many
+   * to show and can say how many it left out.
+   *
+   * A marker matches on its own name, on who it belongs to, or on what it
+   * holds. Name matches come first, since a name is what is usually typed; the
+   * other two say why they are in the list, or "Paldium" returning forty rows
+   * all reading "Wooden Chest" would look like a bug.
+   */
+  search(query: string): MapHit[] {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return this.entities
-      .filter((e) => e.label.toLowerCase().includes(q))
-      .slice(0, limit)
+    const byName: MapHit[] = []
+    const byOwner: MapHit[] = []
+    const byContents: MapHit[] = []
+    for (const entity of this.entities) {
+      if (entity.label.toLowerCase().includes(q)) {
+        byName.push({ entity })
+      } else if (entity.owner?.toLowerCase().includes(q)) {
+        byOwner.push({ entity, via: entity.owner })
+      } else {
+        const item = entity.holds?.find((h) => h.toLowerCase().includes(q))
+        if (item) byContents.push({ entity, via: `holds ${item}` })
+      }
+    }
+    return [...byName, ...byOwner, ...byContents]
   }
 
   get counts(): Record<LayerId, number> {
