@@ -11,8 +11,10 @@
 
 import type { DynamicItem, ItemStack } from '../domain/types.ts'
 import type { ItemInfo } from '../refdata/refdata.ts'
+import { wearFraction } from '../domain/bases.ts'
 import { GameIcon } from './GameIcon.tsx'
 import { useHoverCard } from './cards/hoverCard.ts'
+import { wearColor } from '../lib/color.ts'
 import { compact } from '../lib/format.ts'
 import { rarityOf } from '../lib/rarity.ts'
 import { cn } from '../lib/utils.ts'
@@ -58,10 +60,7 @@ export function ItemSlot({
   const name = info?.name ?? stack.staticId
   // Durability is only meaningful against the item's full value; without the
   // reference data there is no denominator and so no bar.
-  const wear =
-    dynamic?.durability !== undefined && info?.durability
-      ? Math.max(0, Math.min(1, dynamic.durability / info.durability))
-      : undefined
+  const wear = wearFraction(dynamic, info?.durability)
 
   return (
     <button
@@ -117,11 +116,4 @@ export function ItemSlot({
       )}
     </button>
   )
-}
-
-/** Wear genuinely is a good / warning / bad scale, so it keeps status colour. */
-function wearColor(fraction: number): string {
-  if (fraction > 0.5) return 'var(--color-hp)'
-  if (fraction > 0.2) return 'var(--color-stamina)'
-  return 'var(--color-danger)'
 }

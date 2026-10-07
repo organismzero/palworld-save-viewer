@@ -187,3 +187,10 @@ export function passiveTier(rank: number | undefined): PassiveTier {
   if (rank >= 2) return 'good'
   return 'common'
 }
+
+/** Wear genuinely is a good / warning / bad scale, so it keeps status colour. */
+export function wearColor(fraction: number): string {
+  if (fraction > 0.5) return 'var(--color-hp)'
+  if (fraction > 0.2) return 'var(--color-stamina)'
+  return 'var(--color-danger)'
+}

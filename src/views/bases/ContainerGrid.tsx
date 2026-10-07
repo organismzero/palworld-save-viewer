@@ -9,10 +9,16 @@
  * actually has. Side by side is the design system's own layout for this pane.
  */
 
-import { slotGridSize, slotsByIndex } from '../../domain/bases.ts'
+import {
+  containerContents,
+  slotGridSize,
+  slotsByIndex,
+  wearFraction,
+} from '../../domain/bases.ts'
 import type { Container, ItemStack, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ItemSlot, type SlotContents } from '../../components/ItemSlot.tsx'
+import { wearColor } from '../../lib/color.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Pill } from '../../components/primitives.tsx'
 import { IconButton } from '../../components/controls.tsx'
@@ -102,7 +108,7 @@ export function ContainerGrid({
             {note && <CapacityNote className="mt-3 max-w-[340px]" />}
           </div>
 
-          <ItemList container={container} />
+          <ItemList container={container} index={index} />
         </div>
       )}
     </div>
@@ -141,41 +147,98 @@ function contentsFor(
   }
 }
 
-/** The same contents, merged by item, because one material fills many slots. */
-function ItemList({ container }: { container: Container }) {
+/**
+ * The same contents as a table: merged by item, because one material fills many
+ * slots, except for a stack with wear, a magazine or passives of its own.
+ *
+ * The condition and ammo columns appear only when something in the container
+ * has one, so a chest of ore is still two columns wide.
+ */
+function ItemList({
+  container,
+  index,
+}: {
+  container: Container
+  index: SaveIndex
+}) {
   const { data } = useRefdataStore()
   if (container.slots.length === 0) return null
 
-  const merged = new Map<string, number>()
-  for (const slot of container.slots) {
-    merged.set(slot.staticId, (merged.get(slot.staticId) ?? 0) + slot.count)
-  }
+  const rows = containerContents(index, container)
+  const kinds = new Set(rows.map((r) => r.staticId)).size
+  const anyWear = rows.some((r) => r.dynamic?.durability !== undefined)
+  const anyAmmo = rows.some((r) => r.dynamic?.ammo)
 
   return (
     <div className="min-w-[220px] flex-1">
-      <div className="label mb-2">
-        contents <span className="ml-2 normal-case">{merged.size} kinds</span>
+      <div className="label mb-2 flex items-baseline gap-3">
+        <span className="flex-1">
+          contents <span className="ml-2 normal-case">{kinds} kinds</span>
+        </span>
+        {anyWear && <span className="w-20 text-right">condition</span>}
+        {anyAmmo && <span className="w-14 text-right">ammo</span>}
+        <span className="w-16 text-right">count</span>
       </div>
       <div className="divide-y divide-[var(--color-line-faint)] border-y border-[var(--color-line-faint)]">
-        {[...merged]
-          .sort((a, b) => b[1] - a[1])
-          .map(([staticId, n]) => {
-            const info = data?.items[staticId.toLowerCase()]
-            return (
-              <CardTrigger
-                key={staticId}
-                as="div"
-                card={{ kind: 'item', staticId, count: n }}
-                focusable
-                className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
-              >
-                <span className="truncate">{info?.name ?? staticId}</span>
-                <span className="num shrink-0 text-[var(--color-muted)]">
-                  {count(n)}
+        {rows.map((row) => {
+          const info = data?.items[row.staticId.toLowerCase()]
+          const d = row.dynamic
+          const wear = wearFraction(d, info?.durability)
+          return (
+            <CardTrigger
+              key={d?.localId ?? row.staticId}
+              as="div"
+              card={{
+                kind: 'item',
+                staticId: row.staticId,
+                count: row.count,
+                dynamicId: d?.localId,
+              }}
+              focusable
+              className="flex items-baseline gap-3 py-1.5 text-sm"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {info?.name ?? row.staticId}
+              </span>
+              {anyWear && (
+                <span
+                  className="num w-20 shrink-0 text-right"
+                  style={{
+                    color:
+                      wear === undefined
+                        ? 'var(--color-muted)'
+                        : wearColor(wear),
+                  }}
+                  title={
+                    d?.durability === undefined
+                      ? undefined
+                      : info?.durability
+                        ? `${Math.round(d.durability)} of ${info.durability} durability`
+                        : 'Durability left. The full value needs reference data.'
+                  }
+                >
+                  {wear !== undefined
+                    ? `${Math.round(wear * 100)}%`
+                    : d?.durability !== undefined
+                      ? Math.round(d.durability)
+                      : ''}
                 </span>
-              </CardTrigger>
-            )
-          })}
+              )}
+              {anyAmmo && (
+                <span className="num w-14 shrink-0 text-right text-[var(--color-muted)]">
+                  {d?.ammo
+                    ? info?.magazine
+                      ? `${d.ammo}/${info.magazine}`
+                      : d.ammo
+                    : ''}
+                </span>
+              )}
+              <span className="num w-16 shrink-0 text-right text-[var(--color-muted)]">
+                {count(row.count)}
+              </span>
+            </CardTrigger>
+          )
+        })}
       </div>
     </div>
   )

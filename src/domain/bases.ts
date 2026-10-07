@@ -16,6 +16,7 @@
 import type {
   Base,
   Container,
+  DynamicItem,
   Guid,
   ItemStack,
   SaveIndex,
@@ -23,6 +24,8 @@ import type {
   Vec3,
 } from './types.ts'
 import type { Landmark } from '../refdata/refdata.ts'
+import { baseWorkers } from './index.ts'
+import { conditions } from './palState.ts'
 
 /* -------------------------------------------------------------------------
    Naming
@@ -122,6 +125,225 @@ export function slotGridSize(slots: ItemStack[], columns: number): number {
 /** Occupied slots by index, for rendering a grid with its gaps intact. */
 export function slotsByIndex(slots: ItemStack[]): Map<number, ItemStack> {
   return new Map(slots.map((s) => [s.slot, s]))
+}
+
+/**
+ * What a container holds, as the contents table lists it.
+ *
+ * One material fills many slots, so stacks of the same item are merged into one
+ * row. A stack with a state of its own is not: two pickaxes at different wear
+ * are two things, and adding them up would leave nowhere to say which is which.
+ */
+export interface ContentRow {
+  staticId: string
+  count: number
+  /** Present when the row is a single stack that carries its own state. */
+  dynamic?: DynamicItem
+}
+
+export function containerContents(
+  index: SaveIndex,
+  container: Container,
+): ContentRow[] {
+  const merged = new Map<string, ContentRow>()
+  const single: ContentRow[] = []
+  for (const slot of container.slots) {
+    const dynamic = slot.dynamicLocalId
+      ? index.dynamicItemById.get(slot.dynamicLocalId)
+      : undefined
+    if (dynamic && hasState(dynamic)) {
+      single.push({ staticId: slot.staticId, count: slot.count, dynamic })
+      continue
+    }
+    const row = merged.get(slot.staticId)
+    if (row) row.count += slot.count
+    else
+      merged.set(slot.staticId, { staticId: slot.staticId, count: slot.count })
+  }
+  // Most of something first, as before; the single stacks keep slot order after
+  // whatever outnumbers them, which for gear is nearly always everything.
+  return [...merged.values(), ...single].sort((a, b) => b.count - a.count)
+}
+
+function hasState(d: DynamicItem): boolean {
+  return d.durability !== undefined || !!d.ammo || d.passives.length > 0
+}
+
+/**
+ * How much of an item's durability is left, 0 to 1.
+ *
+ * Only against the item's full value: a durability with no denominator is a
+ * number, not a condition, so without reference data this is undefined.
+ */
+export function wearFraction(
+  dynamic: DynamicItem | undefined,
+  full: number | undefined,
+): number | undefined {
+  if (dynamic?.durability === undefined || !full) return undefined
+  return Math.max(0, Math.min(1, dynamic.durability / full))
+}
+
+/* -------------------------------------------------------------------------
+   Condition
+   ------------------------------------------------------------------------- */
+
+/** Below full hit points. A structure with no recorded maximum is not damaged. */
+export function isDamaged(s: Structure): boolean {
+  return (
+    s.hpMax !== undefined && s.hpCurrent !== undefined && s.hpCurrent < s.hpMax
+  )
+}
+
+/** Hit points left as a whole percentage, when the save records both halves. */
+export function hpPercent(s: Structure): number | undefined {
+  if (s.hpMax === undefined || s.hpCurrent === undefined || s.hpMax <= 0) {
+    return undefined
+  }
+  return Math.round((s.hpCurrent / s.hpMax) * 100)
+}
+
+export interface BaseHealth {
+  structures: number
+  damaged: number
+  /** Structures with storage and a password set. */
+  lockedChests: number
+  workers: number
+  /** Workers that are sick, hungry, hurt or low on sanity. */
+  workersAiling: number
+}
+
+export function baseHealth(index: SaveIndex, base: Base): BaseHealth {
+  const structures = index.structuresByBase.get(base.baseId) ?? []
+  const workers = baseWorkers(index, base.baseId)
+  return {
+    structures: structures.length,
+    damaged: structures.filter(isDamaged).length,
+    lockedChests: structures.filter((s) => s.locked && s.containerId).length,
+    workers: workers.length,
+    workersAiling: workers.filter((p) => conditions(p).length > 0).length,
+  }
+}
+
+/* -------------------------------------------------------------------------
+   The structure list
+   ------------------------------------------------------------------------- */
+
+export interface StructureFilter {
+  storageOnly: boolean
+  /** A player uid, or empty for anyone. */
+  builder: string
+  damaged: boolean
+  locked: boolean
+}
+
+export function filterStructures(
+  structures: readonly Structure[],
+  f: StructureFilter,
+): Structure[] {
+  return structures.filter(
+    (s) =>
+      (!f.storageOnly || !!s.containerId) &&
+      (!f.builder || s.buildPlayerUid === f.builder) &&
+      (!f.damaged || isDamaged(s)) &&
+      (!f.locked || s.locked),
+  )
+}
+
+export interface Builder {
+  uid: Guid
+  /** Undefined for a player the save has structures from but no record of. */
+  name?: string
+  count: number
+}
+
+/** Who built these, whoever built most first. */
+export function buildersOf(
+  index: SaveIndex,
+  structures: readonly Structure[],
+): Builder[] {
+  const counts = new Map<Guid, number>()
+  for (const s of structures) {
+    if (!s.buildPlayerUid) continue
+    counts.set(s.buildPlayerUid, (counts.get(s.buildPlayerUid) ?? 0) + 1)
+  }
+  return [...counts]
+    .map(([uid, count]) => ({
+      uid,
+      name: index.playerByUid.get(uid)?.name,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.uid.localeCompare(b.uid))
+}
+
+/**
+ * Storage, fullest first.
+ *
+ * "Full" is stacks held, not a share of capacity: capacity is not in the save
+ * (see {@link slotGridSize}), so a percentage would be a share of a guess.
+ */
+export function byFullness(
+  index: SaveIndex,
+  structures: readonly Structure[],
+): Structure[] {
+  const held = (s: Structure) =>
+    s.containerId
+      ? (index.containerById.get(s.containerId)?.slots.length ?? 0)
+      : -1
+  return [...structures].sort(
+    (a, b) => held(b) - held(a) || a.instanceId.localeCompare(b.instanceId),
+  )
+}
+
+/* -------------------------------------------------------------------------
+   Wear
+   ------------------------------------------------------------------------- */
+
+export interface WornItem {
+  staticId: string
+  containerId: Guid
+  slot: number
+  durability: number
+  full: number
+  /** 0 to 1, of `full`. */
+  fraction: number
+}
+
+/**
+ * Every item in a container at or under `threshold` of its full durability,
+ * worst first.
+ *
+ * `fullOf` is injected because the denominator is reference data: without it
+ * nothing can be called worn, and this returns nothing rather than guessing.
+ */
+export function wornItems(
+  index: SaveIndex,
+  fullOf: (staticId: string) => number | undefined,
+  threshold: number,
+): WornItem[] {
+  const out: WornItem[] = []
+  for (const c of index.containers) {
+    for (const slot of c.slots) {
+      if (!slot.dynamicLocalId) continue
+      const dynamic = index.dynamicItemById.get(slot.dynamicLocalId)
+      const full = fullOf(slot.staticId)
+      const fraction = wearFraction(dynamic, full)
+      if (fraction === undefined || fraction > threshold) continue
+      out.push({
+        staticId: slot.staticId,
+        containerId: c.containerId,
+        slot: slot.slot,
+        durability: dynamic!.durability!,
+        full: full!,
+        fraction,
+      })
+    }
+  }
+  return out.sort(
+    (a, b) =>
+      a.fraction - b.fraction ||
+      a.containerId.localeCompare(b.containerId) ||
+      a.slot - b.slot,
+  )
 }
 
 /* -------------------------------------------------------------------------
@@ -263,4 +485,39 @@ function rank(hit: ItemHit, q: string): number {
   if (name === q || id === q) return 0
   if (name.startsWith(q) || id.startsWith(q)) return 1
   return 2
+}
+
+/* -------------------------------------------------------------------------
+   Where an item is, as places on a map
+   ------------------------------------------------------------------------- */
+
+export interface ItemPlace {
+  containerId: Guid
+  structure: Structure
+  count: number
+}
+
+/**
+ * The containers holding an item that stand somewhere.
+ *
+ * Only a container a structure claims has a position. What a player carries or
+ * a guild stores has none, so those are counted and left off rather than drawn
+ * at a guess.
+ */
+export function itemPlaces(
+  index: SaveIndex,
+  staticId: string,
+): { places: ItemPlace[]; unplaced: number } {
+  const places: ItemPlace[] = []
+  let unplaced = 0
+  for (const p of index.containersByItem.get(staticId) ?? []) {
+    const structureId = index.structureByContainer.get(p.containerId)
+    const structure = structureId
+      ? index.structureById.get(structureId)
+      : undefined
+    if (structure) {
+      places.push({ containerId: p.containerId, structure, count: p.count })
+    } else unplaced += 1
+  }
+  return { places, unplaced }
 }

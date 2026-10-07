@@ -39,7 +39,7 @@ import {
 import { placeText, placer, workLevel } from './palState.ts'
 import { palName } from './palText.ts'
 import { formatMapPos, posToMap } from './coords.ts'
-import type { Container, Pal, SaveIndex } from './types.ts'
+import type { Container, ItemStack, Pal, SaveIndex } from './types.ts'
 
 /* -------------------------------------------------------------------------
    Pals
@@ -135,6 +135,32 @@ export interface ContainerStackRow {
   itemId: string
   item: string
   count: number
+  /** Left on this stack, for an item that wears. */
+  durability?: number
+  /** The item's full durability, from reference data. */
+  durabilityFull?: number
+  /** Rounds loaded. */
+  ammo?: number
+  magazine?: number
+}
+
+/** A stack's own state, with the reference values it is read against. */
+function stackState(
+  index: SaveIndex,
+  refdata: Refdata | undefined,
+  slot: ItemStack,
+) {
+  const dynamic = slot.dynamicLocalId
+    ? index.dynamicItemById.get(slot.dynamicLocalId)
+    : undefined
+  const info = refdata?.items[slot.staticId.toLowerCase()]
+  const wears = dynamic?.durability !== undefined
+  return {
+    durability: wears ? Math.round(dynamic.durability!) : undefined,
+    durabilityFull: wears ? info?.durability : undefined,
+    ammo: dynamic?.ammo || undefined,
+    magazine: dynamic?.ammo ? info?.magazine : undefined,
+  }
 }
 
 /**
@@ -173,6 +199,7 @@ export function containerRows(
       itemId: slot.staticId,
       item: itemName(refdata, slot.staticId),
       count: slot.count,
+      ...stackState(index, refdata, slot),
     }))
   })
 }
@@ -181,6 +208,11 @@ export const CONTAINER_COLUMNS: Column<ContainerStackRow>[] = [
   { header: 'item', value: (r) => r.item },
   { header: 'item_id', value: (r) => r.itemId },
   { header: 'count', value: (r) => r.count },
+  // Empty for anything that does not wear or load, which is most things.
+  { header: 'durability', value: (r) => r.durability },
+  { header: 'durability_full', value: (r) => r.durabilityFull },
+  { header: 'ammo', value: (r) => r.ammo },
+  { header: 'magazine', value: (r) => r.magazine },
   { header: 'where', value: (r) => r.where },
   { header: 'detail', value: (r) => r.detail },
   // Whether the location is known or guessed travels with the row. Dropping it
@@ -201,6 +233,14 @@ export interface ItemHitRow {
   itemId: string
   total: number
   count: number
+  /**
+   * The most worn of this item in this place. A place can hold several, and
+   * the one about to break is the one worth a row.
+   */
+  durabilityLowest?: number
+  durabilityFull?: number
+  /** Rounds loaded across every one of this item in this place. */
+  ammo?: number
   where: string
   detail: string
   exact: boolean
@@ -219,12 +259,22 @@ export function itemHitRows(
       const container = index.containerById.get(place.containerId)
       if (!container) return []
       const at = where(container)
+      const states = container.slots
+        .filter((s) => s.staticId === hit.staticId)
+        .map((s) => stackState(index, refdata, s))
+      const worn = states.flatMap((s) =>
+        s.durability === undefined ? [] : [s.durability],
+      )
+      const ammo = states.reduce((sum, s) => sum + (s.ammo ?? 0), 0)
       return [
         {
           item: hit.name,
           itemId: hit.staticId,
           total: hit.total,
           count: place.count,
+          durabilityLowest: worn.length ? Math.min(...worn) : undefined,
+          durabilityFull: states.find((s) => s.durabilityFull)?.durabilityFull,
+          ammo: ammo || undefined,
           where: at.label,
           detail: at.detail ?? '',
           exact: at.exact,
@@ -240,6 +290,9 @@ export const ITEM_HIT_COLUMNS: Column<ItemHitRow>[] = [
   { header: 'item_id', value: (r) => r.itemId },
   { header: 'count_here', value: (r) => r.count },
   { header: 'count_total', value: (r) => r.total },
+  { header: 'durability_lowest', value: (r) => r.durabilityLowest },
+  { header: 'durability_full', value: (r) => r.durabilityFull },
+  { header: 'ammo', value: (r) => r.ammo },
   { header: 'where', value: (r) => r.where },
   { header: 'detail', value: (r) => r.detail },
   { header: 'location_exact', value: (r) => r.exact },
