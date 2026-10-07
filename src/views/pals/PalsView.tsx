@@ -16,6 +16,8 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
+import { Jump } from '../../components/Jump.tsx'
+import { breedHref } from '../builds/buildsText.ts'
 import { useHoverCard } from '../../components/cards/hoverCard.ts'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
@@ -87,7 +89,9 @@ export function PalsView({ index }: { index: SaveIndex }) {
   const [params, setParams] = useViewParams('pals', PALS_DEFAULTS, codec, () =>
     focus?.kind === 'pal'
       ? { query: focus.label, selectedId: focus.id }
-      : undefined,
+      : focus?.kind === 'species'
+        ? { query: focus.label, owner: focus.owner ?? '' }
+        : undefined,
   )
 
   const { query, elements, minLevel, minIv, owner, flags, sort } = params
@@ -604,6 +608,34 @@ function PalDetail({
             <div className="label mt-1 truncate">
               {info?.name ?? pal.characterId}
             </div>
+            {/* Only with game data: both destinations are worked out from it,
+                and would open on an empty pane without. */}
+            {info && (
+              <div className="mt-1.5 flex gap-3 text-xs">
+                <a
+                  href={breedHref(
+                    index,
+                    pal.ownerPlayerUid,
+                    pal.characterId.toLowerCase(),
+                    [],
+                  )}
+                  title={`Plan how to breed ${info.name}`}
+                  className="hover:underline"
+                >
+                  breed →
+                </a>
+                <Jump
+                  view="builds"
+                  focus={{
+                    kind: 'fight',
+                    species: pal.characterId.toLowerCase(),
+                  }}
+                  title={`What beats ${info.name}`}
+                >
+                  fight
+                </Jump>
+              </div>
+            )}
           </div>
         </div>
         <IconButton label="Close" tone="ghost" size={24} onClick={onClose}>
@@ -656,12 +688,14 @@ function PalDetail({
           label="owner"
           value={
             owner ? (
-              <CardTrigger
+              <Jump
+                view="guild"
+                focus={{ kind: 'player', id: owner.playerUid }}
                 card={{ kind: 'player', uid: owner.playerUid }}
-                focusable
+                title="Open this player in Guild"
               >
                 {owner.name}
-              </CardTrigger>
+              </Jump>
             ) : (
               'unowned'
             )
@@ -673,7 +707,19 @@ function PalDetail({
         />
         <Field
           label="position"
-          value={pal.pos ? formatMapPos(posToMap(pal.pos)) : '—'}
+          value={
+            pal.pos ? (
+              <Jump
+                view="map"
+                focus={{ kind: 'map', id: pal.instanceId }}
+                title="Show on the map"
+              >
+                {formatMapPos(posToMap(pal.pos))}
+              </Jump>
+            ) : (
+              '—'
+            )
+          }
         />
       </div>
 

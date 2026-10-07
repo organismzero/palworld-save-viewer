@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SaveIndex } from '../../domain/types.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useSaveStore } from '../../store/saveStore.ts'
+import { useUiStore } from '../../store/uiStore.ts'
 import {
   DEFAULT_FOG_OPACITY,
   LAYER_STYLES,
@@ -19,6 +20,7 @@ import {
 } from '../../components/controls.tsx'
 import { cn } from '../../lib/utils.ts'
 import { useEscape } from '../../components/drawer.ts'
+import { Jump } from '../../components/Jump.tsx'
 import { count } from '../../lib/format.ts'
 import { downloadBlob, exportName } from '../../lib/export.ts'
 import { useFilePicker } from '../../app/filePicker.tsx'
@@ -92,6 +94,38 @@ export function MapView({ index }: { index: SaveIndex }) {
   useEffect(() => {
     void ensure()
   }, [ensure])
+
+  /**
+   * A jump from another view: "show me this on the map".
+   *
+   * Held in a ref, not applied at once, because there is nothing to apply it to
+   * until a controller has mounted and plotted its entities. Cleared from the
+   * store straight away all the same, on the rule every view follows — a focus
+   * that lingered would re-apply on each return to the tab.
+   */
+  const focus = useUiStore((s) => s.focus)
+  const clearFocus = useUiStore((s) => s.clearFocus)
+  const notify = useUiStore((s) => s.notify)
+  const pending = useRef(focus?.kind === 'map' ? focus.id : undefined)
+  useEffect(clearFocus, [clearFocus])
+
+  useEffect(() => {
+    const controller = controllerRef.current
+    const id = pending.current
+    if (!controller || !id || mounted === 0) return
+    pending.current = undefined
+    const entity = controller.find(id)
+    if (!entity) {
+      // No position in the save, or one in the World Tree's own space, which
+      // this map does not draw.
+      notify('That has no position on this map.', { tone: 'warn' })
+      return
+    }
+    // Its layer may be one that is off by default — most pals are.
+    setVisible((v) => (v[entity.kind] ? v : { ...v, [entity.kind]: true }))
+    setSelected(entity)
+    controller.focus(entity)
+  }, [mounted, notify])
 
   // Rebuild when the art arrives, so a cold start shows the procedural map
   // first and upgrades in place rather than blocking on the network.
@@ -462,6 +496,7 @@ export function MapView({ index }: { index: SaveIndex }) {
               </IconButton>
             </div>
             {selected.sub && <p className="mt-2 text-sm">{selected.sub}</p>}
+            <SelectionLink entity={selected} />
             <dl className="mt-3 space-y-1 text-xs">
               <div className="flex justify-between gap-4">
                 <dt className="label">map</dt>
@@ -546,4 +581,53 @@ function cardFor(e: MapEntity, index: SaveIndex): CardDescriptor {
       return { kind: 'structure', id: e.id }
   }
   return { kind: 'text', title: e.label, sub: e.sub }
+}
+
+/**
+ * Where a selected marker lives in the rest of the app.
+ *
+ * Landmarks, dungeons and hand-placed pins get nothing: the map is the only
+ * place they exist.
+ */
+function SelectionLink({ entity }: { entity: MapEntity }) {
+  const link = (() => {
+    switch (entity.kind) {
+      case 'pals':
+        return {
+          view: 'pals' as const,
+          focus: { kind: 'pal' as const, id: entity.id, label: entity.label },
+          text: 'Open in Pals',
+        }
+      case 'players':
+        return {
+          view: 'guild' as const,
+          focus: { kind: 'player' as const, id: entity.id },
+          text: 'Open in Guild',
+        }
+      case 'bases':
+        return {
+          view: 'bases' as const,
+          focus: { kind: 'base' as const, id: entity.id },
+          text: 'Open in Bases',
+        }
+      case 'structuresBuilt':
+      case 'structuresWorld':
+      case 'chests':
+        return {
+          view: 'bases' as const,
+          focus: { kind: 'structure' as const, id: entity.id },
+          text: 'Open in Bases',
+        }
+      default:
+        return undefined
+    }
+  })()
+  if (!link) return null
+  return (
+    <div className="mt-2 text-sm">
+      <Jump view={link.view} focus={link.focus}>
+        {link.text}
+      </Jump>
+    </div>
+  )
 }

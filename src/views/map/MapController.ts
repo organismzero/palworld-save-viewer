@@ -875,6 +875,11 @@ export class MapController {
     }
   }
 
+  /** Whatever was plotted with this id, on any layer. */
+  find(id: string): MapEntity | undefined {
+    return this.entities.find((e) => e.id === id)
+  }
+
   search(query: string, limit = 8): MapEntity[] {
     const q = query.trim().toLowerCase()
     if (!q) return []

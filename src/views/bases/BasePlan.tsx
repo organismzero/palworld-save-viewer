@@ -11,6 +11,8 @@
  * rotated 90° and mirrored.
  */
 
+import { useRef, useState, type KeyboardEvent } from 'react'
+
 import { posToMap, worldToMap } from '../../domain/coords.ts'
 import type { Base, Guid, Structure } from '../../domain/types.ts'
 
@@ -22,26 +24,36 @@ export function BasePlan({
   selectedId,
   onSelect,
   chestIds,
+  nameOf,
 }: {
   base: Base
   structures: Structure[]
   selectedId?: Guid
   onSelect: (id: Guid) => void
+  /** What a structure is called. The dots carry no other label. */
+  nameOf: (s: Structure) => string
   /** Structures that hold a container, drawn in the storage accent. */
   chestIds: Set<Guid>
 }) {
+  const [active, setActive] = useState<number>()
+  const dots = useRef<(SVGCircleElement | null)[]>([])
+
   const origin = posToMap(base.pos)
   if (!origin) return null
 
   const radius = worldToMap(base.areaRange)
 
-  const points = structures.flatMap((s) => {
-    const at = posToMap(s.pos)
-    // A structure in the World Tree's coordinate space cannot be plotted
-    // against an overworld base; skipping beats drawing it in the wrong place.
-    if (!at || at.map !== origin.map) return []
-    return [{ s, dx: at.mx - origin.mx, dy: -(at.my - origin.my) }]
-  })
+  const points = structures
+    .flatMap((s) => {
+      const at = posToMap(s.pos)
+      // A structure in the World Tree's coordinate space cannot be plotted
+      // against an overworld base; skipping beats drawing it in the wrong place.
+      if (!at || at.map !== origin.map) return []
+      return [{ s, dx: at.mx - origin.mx, dy: -(at.my - origin.my) }]
+    })
+    // Reading order, top row first, so the arrow keys sweep the plan the way
+    // the eye does rather than in the order the save happened to list things.
+    .sort((a, b) => a.dy - b.dy || a.dx - b.dx)
 
   // Fit whatever is actually there — buildings routinely sit outside the
   // camp's nominal radius, and cropping them would be a lie about the base.
@@ -51,13 +63,55 @@ export function BasePlan({
   )
   const scale = SIZE / 2 / extent
 
+  /**
+   * One tab stop for the whole plan, and arrow keys within it.
+   *
+   * A base has hundreds of structures. A tab stop on each would put the rest of
+   * the page that many presses away, which is a worse plan for a keyboard than
+   * the one it had, where the dots could not be reached at all.
+   */
+  const selectedAt = points.findIndex((p) => p.s.instanceId === selectedId)
+  const stop = Math.min(
+    Math.max(active ?? (selectedAt === -1 ? 0 : selectedAt), 0),
+    Math.max(points.length - 1, 0),
+  )
+
+  const onKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
+    const step =
+      e.key === 'ArrowRight' || e.key === 'ArrowDown'
+        ? 1
+        : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+          ? -1
+          : e.key === 'Home'
+            ? -stop
+            : e.key === 'End'
+              ? points.length - 1 - stop
+              : undefined
+    if (step !== undefined) {
+      e.preventDefault()
+      const next = Math.min(Math.max(stop + step, 0), points.length - 1)
+      setActive(next)
+      dots.current[next]?.focus()
+      return
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      const at = points[stop]
+      if (!at) return
+      e.preventDefault()
+      onSelect(at.s.instanceId)
+    }
+  }
+
   return (
     <svg
       viewBox={`${-SIZE / 2} ${-SIZE / 2} ${SIZE} ${SIZE}`}
       width="100%"
-      role="img"
-      aria-label={`Plan of ${structures.length} structures around the base`}
+      // A group, not an image: its dots are controls, and an image's children
+      // are hidden from a screen reader.
+      role="group"
+      aria-label={`Plan of ${structures.length} structures around the base. Arrow keys move between them, Enter selects.`}
       className="block aspect-square w-full"
+      onKeyDown={onKeyDown}
     >
       <circle
         r={radius * scale}
@@ -85,12 +139,16 @@ export function BasePlan({
         opacity={0.5}
       />
 
-      {points.map(({ s, dx, dy }) => {
+      {points.map(({ s, dx, dy }, i) => {
         const isSelected = s.instanceId === selectedId
         const isChest = chestIds.has(s.instanceId)
+        const name = nameOf(s)
         return (
           <circle
             key={s.instanceId}
+            ref={(el) => {
+              dots.current[i] = el
+            }}
             cx={dx * scale}
             cy={dy * scale}
             r={isSelected ? 4 : isChest ? 2.4 : 1.6}
@@ -102,10 +160,19 @@ export function BasePlan({
                   : 'var(--color-muted)'
             }
             opacity={isSelected || isChest ? 1 : 0.55}
-            className="cursor-pointer"
-            onClick={() => onSelect(s.instanceId)}
+            role="button"
+            aria-label={name}
+            aria-pressed={isSelected}
+            tabIndex={i === stop ? 0 : -1}
+            // The ring is a stroke, not an outline: an outline on an SVG shape
+            // draws its bounding box, a square around a 3px dot.
+            className="cursor-pointer outline-none focus-visible:[stroke:var(--color-text)] focus-visible:[stroke-width:1.5px] focus-visible:opacity-100 focus-visible:[paint-order:stroke]"
+            onClick={() => {
+              setActive(i)
+              onSelect(s.instanceId)
+            }}
           >
-            <title>{s.mapObjectId}</title>
+            <title>{name}</title>
           </circle>
         )
       })}

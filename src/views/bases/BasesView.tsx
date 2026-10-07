@@ -147,6 +147,18 @@ export function BasesView({ index }: { index: SaveIndex }) {
     if (focus?.kind === 'base') {
       return { source: { kind: 'base', baseId: focus.id } }
     }
+    if (focus?.kind === 'structure') {
+      const structure = index.structureById.get(focus.id)
+      if (structure) {
+        return {
+          source: structure.baseCampId
+            ? { kind: 'base', baseId: structure.baseCampId }
+            : { kind: 'world' },
+          container: structure.containerId,
+          structureId: structure.instanceId,
+        }
+      }
+    }
     const first = bases[0]
     return {
       source: first
@@ -341,6 +353,7 @@ export function BasesView({ index }: { index: SaveIndex }) {
                 : undefined
             }
             selected={selectedStructure}
+            nameOfStructure={nameOfStructure}
             onSelect={(id) => {
               const st = index.structureById.get(id)
               if (!st) return
@@ -664,12 +677,14 @@ function BaseOverview({
   name,
   selected,
   onSelect,
+  nameOfStructure,
 }: {
   index: SaveIndex
   base?: Base
   name?: string
   selected?: Guid
   onSelect: (id: Guid) => void
+  nameOfStructure: (s: Structure) => string
 }) {
   if (!base) {
     return (
@@ -699,6 +714,7 @@ function BaseOverview({
             chestIds={chestIds}
             selectedId={selected}
             onSelect={onSelect}
+            nameOf={nameOfStructure}
           />
         </div>
         <div className="min-w-[220px] flex-1">

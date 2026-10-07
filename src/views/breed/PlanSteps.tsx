@@ -24,6 +24,7 @@ import { cn } from '../../lib/utils.ts'
 import { Checkbox } from '../../components/controls.tsx'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
+import { Jump } from '../../components/Jump.tsx'
 import {
   IVBar,
   Panel,
@@ -408,27 +409,50 @@ function ParentChip({
     <span className="flex min-w-0 items-center gap-1.5">
       {/* The pal to fetch when there is one, so its level, rolls and other
           passives are a hover away; otherwise just the species. */}
-      <CardTrigger
-        card={
-          pick
-            ? { kind: 'pal', pal: pick }
-            : { kind: 'species', id: node.species }
-        }
-        focusable
-        className="flex min-w-0 items-center gap-1.5"
-      >
-        <GameIcon
-          path={text.icon(node.species)}
-          name={node.species}
-          elementName={text.element(node.species)}
-          size={22}
-        />
-        <span className="truncate text-sm">
-          {pick
-            ? palName(pick, { name: text.name(node.species) })
-            : text.name(node.species)}
-        </span>
-      </CardTrigger>
+      {pick ? (
+        <Jump
+          view="pals"
+          focus={{
+            kind: 'pal',
+            id: pick.instanceId,
+            label: palName(pick, { name: text.name(node.species) }),
+          }}
+          card={{ kind: 'pal', pal: pick }}
+          title="Open this pal in Pals"
+          quiet
+          className="items-center gap-1.5"
+        >
+          <GameIcon
+            path={text.icon(node.species)}
+            name={node.species}
+            elementName={text.element(node.species)}
+            size={22}
+          />
+          <span className="truncate text-sm">
+            {pick
+              ? palName(pick, { name: text.name(node.species) })
+              : text.name(node.species)}
+          </span>
+        </Jump>
+      ) : (
+        <CardTrigger
+          card={{ kind: 'species', id: node.species }}
+          focusable
+          className="flex min-w-0 items-center gap-1.5"
+        >
+          <GameIcon
+            path={text.icon(node.species)}
+            name={node.species}
+            elementName={text.element(node.species)}
+            size={22}
+          />
+          <span className="truncate text-sm">
+            {pick
+              ? palName(pick, { name: text.name(node.species) })
+              : text.name(node.species)}
+          </span>
+        </CardTrigger>
+      )}
       {node.gender && (
         <Pill title="Which side of this pair it has to be">
           {node.gender === 'Male' ? '♂' : '♀'}
@@ -447,16 +471,19 @@ function ParentChip({
           </Pill>
         ) : (
           // The owner's card, carrying why they are named here.
-          <CardTrigger
+          <Jump
+            view="guild"
+            focus={{ kind: 'player', id: pick.ownerPlayerUid }}
             card={{
               kind: 'player',
               uid: pick.ownerPlayerUid,
               note: `This pal belongs to ${who.name}. You will need them to put it in the pen.`,
             }}
-            focusable
+            title="Open this player in Guild"
+            quiet
           >
             <Pill tone="warn">{who.name}</Pill>
-          </CardTrigger>
+          </Jump>
         ))}
       {pick && (
         <>

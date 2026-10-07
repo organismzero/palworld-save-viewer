@@ -43,18 +43,11 @@ Sizes below are S (an hour or two), M (half a day to a day), L (several days). E
 
 Nothing user-visible on its own, but every later phase leans on it.
 
-### 0a. Widen `Focus` — S
+### 0a. Widen `Focus` — done
 
-`Focus` in `src/store/uiStore.ts` has five kinds. Add:
+`Focus` has four more kinds: `structure` (Bases opens the base or world list the structure is in, on it), `map` (the Map selects and centres whatever was plotted with that id, turning its layer on if it was off, and says so when the thing has no position), `species` (Pals filters to one species, optionally one player's) and `fight` (Builds opens Fight against a species). The `map` kind carries an id and no layer: the controller finds the entity on whichever layer drew it, so a caller does not have to know that a player-built chest is on a different layer from a loot chest.
 
-```ts
-| { kind: 'structure'; id: Guid }              // Bases: locate() already routes it
-| { kind: 'map'; layer: LayerId; id: string }  // Map: controller.focus(entity)
-| { kind: 'species'; id: string }              // Pals: filter to one species
-| { kind: 'fight'; species: string }           // Builds: open Fight with an opponent
-```
-
-`LayerId` lives in `MapController.ts`; move the type to `src/views/map/layers.ts` so `uiStore` does not import Pixi-adjacent code. Consumers: `BasesView` (add `structure` beside `container`), `MapView` (new, see 0b; it reads no focus today), `PalsView` (`species` sets `query` to the species name and no `selectedId`), `BuildsView` (`fight` seeds the goal and opponent; Builds has eight goals now and only Fight takes an opponent). The Guild comment about a positional focus member in `GuildView` is resolved by the `map` kind.
+Doing it turned up a race in `useHashSync`. A view change pushes the hash, the push fires `hashchange`, and the handler adopted that echo as if it were a navigation, re-decoding the destination view from a hash that had no params yet. Whether a jump's focus survived depended on whether the view mounted before the event arrived. The hook now ignores the echo of its own push.
 
 ### 0b. Map params codec — M
 
@@ -111,40 +104,16 @@ Done. 1d was removed as obsolete. Three landed differently from how they were wr
 
 ## Phase 2 — Cross-view links
 
-The `jump()` plumbing exists and is used only by the palette. This phase makes every named thing clickable. One `<Jump view focus>` primitive in `primitives.tsx` renders an inline link-styled button with the `signal` accent and a right-arrow glyph, matching the `breed →` link Builds already draws.
+Done, except the two pieces that wait on other items. `Jump` in `src/components/Jump.tsx` is a button that calls `jump(view, focus)` and still raises the hover card of whatever it names. It has a `quiet` form for names inside list rows, where the text keeps its own colour and only the arrow is in the accent.
 
-Most of the targets below are already hover-card `CardTrigger`s. `<Jump>` has to compose with that: the card still shows on hover and focus, and a click navigates.
+- **2a. Pal drawer.** Owner opens the player in Guild, position shows the pal on the Map, and under the species name are `breed →` (a real link into Breed) and `fight →` (Builds, Fight, against that species). The **Where** row is 3a's and its link goes in with it.
+- **2b. Map selection card.** "Open in Pals", "Open in Guild" or "Open in Bases" by what is selected. Landmarks, dungeons and pins get none.
+- **2c. Breed and Builds.** A step's parent pal and a borrowed parent's owner are links, as are the owned-pal rows in Builds. The "owned" pill opens Pals on that species for that player.
+- **2d. Guild.** The player panel's bases, best pals and position are links. The marker chips wait on 5c, which plots them.
+- **2e. Base plan.** The dots are named buttons with a stroke focus ring, and the plan is one tab stop with arrow keys, Home and End inside it, not one stop per dot: a single base in the reference save has 1,372 structures.
+- **2f. Copy link.** Done with the tray.
 
-### 2a. Pal drawer — S
-
-`PalDetail` in `PalsView`:
-
-- Owner → Guild with `{kind:'player'}`. "unowned" stays text.
-- Position → Map with `{kind:'map', layer:'pals', id}`.
-- New **Where** row (see 3a) → Bases with `{kind:'base'}` when it is a worker roster.
-- Species name → Breed (`breedHref` in `buildsText.ts` already builds the URL) and → Builds Fight with `{kind:'fight'}`.
-
-### 2b. Map selection card — S
-
-By entity kind, a link to Pals (`pal`), Bases (`container`, `structure`, `base`), Guild (`player`). Landmarks and markers get none.
-
-### 2c. Breed and Builds — S
-
-- `ParentChip` in `PlanSteps.tsx` becomes a `<Jump>` to Pals with the pal id. The borrowed owner's name → Guild.
-- `Owned` rows in `builds/parts.tsx` → Pals; the "owned" pill in `SpeciesRow` opens the same list filtered to that species (`{kind:'species'}`).
-
-### 2d. Guild — S
-
-- `PlayerDetailPanel` base list → Bases; pals → Pals; position → Map.
-- Marker chips in `GuildView` → Map with a positional focus (needs the markers plotted, item 5c). "Open map" then centres on the first marker.
-
-### 2e. Base plan — S
-
-`BasePlan`: `<circle>` gains `tabIndex={0}`, `role="button"`, `aria-label` from `structureName` (it receives no name resolver today; pass one), Enter/Space to select, and a visible focus ring (stroke change, not outline, since it is SVG). `<title>` uses the display name instead of the raw `mapObjectId`.
-
-### 2f. Copy link — S **(tray)**
-
-A header button after Search: copies `location.href` and notifies "Link copied". This is the only thing that makes the deep-link work discoverable. Also offered in the palette as an action.
+Found on the way: a character that has never moved records its position as exactly x 0, y 0, and 292 pals in the reference save were being plotted on that one spot and given its coordinates in their detail panel. The reader now reads that as no position, and `SNAPSHOT_VERSION` went to 4 so a remembered save does not bring the pile back.
 
 ---
 
@@ -360,7 +329,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 1. ~~**The utility tray**~~, done. It took 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
-4. **0a and 0e, then Phase 2, then Phase 3.** Links first because they make every later addition reachable; the drawer additions because they are the cheapest new value in the document.
+4. ~~**0a and 0e, then Phase 2**~~, done. **Phase 3** is next: the drawer additions are the cheapest new value in the document.
 5. **0b and 0f, then Phase 5** (5a–5e), **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.

@@ -138,7 +138,12 @@ export function BuildsView({ index }: { index: SaveIndex }) {
     'builds',
     BUILDS_DEFAULTS,
     codec,
-    () => (focus?.kind === 'player' ? { playerUid: focus.id } : undefined),
+    () =>
+      focus?.kind === 'player'
+        ? { playerUid: focus.id }
+        : focus?.kind === 'fight'
+          ? { goal: 'fight' as const, opponent: focus.species.toLowerCase() }
+          : undefined,
   )
   const patch = (p: Partial<BuildsParams>) =>
     setParams((prev) => ({ ...prev, ...p }))

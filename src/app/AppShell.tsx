@@ -117,8 +117,25 @@ function useHashSync() {
     return null
   })
 
+  /**
+   * The hash this hook last pushed itself, until its `hashchange` comes back.
+   *
+   * Assigning `location.hash` fires `hashchange` like any other navigation, a
+   * moment later. Adopting that echo is harmless for a tab click, where the
+   * hash holds what the store already does. For a jump it is not: the hash is
+   * pushed bare, the destination view mounts and seeds itself from the focus,
+   * and then the echo arrives, says "the address bar has no params", and
+   * re-decodes the view back to its defaults. Whether the jump survived came
+   * down to whether the view mounted before or after the event.
+   */
+  const echo = useRef<string | undefined>(undefined)
+
   useEffect(() => {
     const fromHash = () => {
+      const own = echo.current
+      echo.current = undefined
+      if (own !== undefined && window.location.hash === own) return
+
       const { view: id, qs } = parseHash(window.location.hash)
       if (!VIEWS.some((v) => v.id === id)) return
       setView(id as ViewId)
@@ -157,6 +174,7 @@ function useHashSync() {
     lastView.current = view
 
     if (viewChanged) {
+      echo.current = target
       window.location.hash = target.slice(1)
       return
     }

@@ -15,7 +15,7 @@ import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { playerSummary } from '../../domain/guild.ts'
 import { palName } from '../../domain/palText.ts'
-import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
+import { Jump } from '../../components/Jump.tsx'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
@@ -137,7 +137,13 @@ export function PlayerDetailPanel({
               label="position"
               value={
                 <>
-                  {formatMapPos(posToMap(detail?.pos ?? player.pos))}
+                  <Jump
+                    view="map"
+                    focus={{ kind: 'map', id: player.playerUid }}
+                    title="Show on the map"
+                  >
+                    {formatMapPos(posToMap(detail?.pos ?? player.pos))}
+                  </Jump>
                   <span className="label ml-2 normal-case">
                     {detail ? 'from player save' : 'last jump point'}
                   </span>
@@ -170,11 +176,17 @@ export function PlayerDetailPanel({
               <ul className="space-y-1">
                 {bases.map((b) => (
                   <li key={b.baseId} className="text-xs">
-                    {baseLabel(
-                      b,
-                      index.bases.findIndex((x) => x.baseId === b.baseId) + 1,
-                      data?.landmarks,
-                    )}
+                    <Jump
+                      view="bases"
+                      focus={{ kind: 'base', id: b.baseId }}
+                      card={{ kind: 'base', id: b.baseId }}
+                    >
+                      {baseLabel(
+                        b,
+                        index.bases.findIndex((x) => x.baseId === b.baseId) + 1,
+                        data?.landmarks,
+                      )}
+                    </Jump>
                   </li>
                 ))}
               </ul>
@@ -219,24 +231,34 @@ export function PlayerDetailPanel({
                 {topPals.map((pal) => {
                   const info = data?.species[pal.characterId.toLowerCase()]
                   return (
-                    <CardTrigger
+                    <li
                       key={pal.instanceId}
-                      as="li"
-                      // The row shows a name, an IV bar and a level; the card
-                      // carries everything else about the pal.
-                      card={{ kind: 'pal', pal }}
-                      focusable
                       className="flex items-center gap-2"
                     >
-                      <GameIcon
-                        path={info?.icon}
-                        name={pal.characterId}
-                        elementName={info?.element1}
-                        size={24}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-xs">
-                        {palName(pal, info)}
-                      </span>
+                      {/* The row shows a name, an IV bar and a level; the card
+                          carries everything else about the pal. */}
+                      <Jump
+                        view="pals"
+                        focus={{
+                          kind: 'pal',
+                          id: pal.instanceId,
+                          label: palName(pal, info),
+                        }}
+                        card={{ kind: 'pal', pal }}
+                        title="Open this pal in Pals"
+                        quiet
+                        className="flex-1 items-center gap-2"
+                      >
+                        <GameIcon
+                          path={info?.icon}
+                          name={pal.characterId}
+                          elementName={info?.element1}
+                          size={24}
+                        />
+                        <span className="min-w-0 truncate text-xs">
+                          {palName(pal, info)}
+                        </span>
+                      </Jump>
                       {pal.isBoss && <Pill tone="danger">alpha</Pill>}
                       <IVBar
                         hp={pal.ivHp}
@@ -247,7 +269,7 @@ export function PlayerDetailPanel({
                       <span className="num w-8 shrink-0 text-right text-[11px] text-[var(--color-muted)]">
                         {pal.level}
                       </span>
-                    </CardTrigger>
+                    </li>
                   )
                 })}
               </ul>

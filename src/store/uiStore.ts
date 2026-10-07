@@ -21,6 +21,14 @@ export type Focus =
   | { kind: 'container'; id: Guid }
   | { kind: 'base'; id: Guid }
   | { kind: 'item'; staticId: string; label: string }
+  /** Bases: open the base or world list this structure is in, on it. */
+  | { kind: 'structure'; id: Guid }
+  /** Map: select and centre whatever has this id, on whichever layer. */
+  | { kind: 'map'; id: string }
+  /** Pals: every pal of one species, optionally one player's. `label` is its display name. */
+  | { kind: 'species'; id: string; label: string; owner?: Guid }
+  /** Builds: the Fight purpose, against this species. */
+  | { kind: 'fight'; species: string }
 
 export type ViewId =
   'map' | 'pals' | 'bases' | 'guild' | 'breed' | 'summary' | 'builds'

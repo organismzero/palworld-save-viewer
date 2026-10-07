@@ -22,6 +22,7 @@ import { palName } from '../../domain/palText.ts'
 import { count } from '../../lib/format.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
+import { Jump } from '../../components/Jump.tsx'
 import {
   PassiveChip,
   Pill,
@@ -88,9 +89,19 @@ export function SpeciesRow({
       <span className="flex shrink-0 flex-wrap justify-end gap-1">
         {children}
         {held ? (
-          <Pill tone="good" title="This player owns one">
-            owned
-          </Pill>
+          <Jump
+            view="pals"
+            focus={{
+              kind: 'species',
+              id,
+              label: ctx.text.name(id),
+              owner: ctx.ownerUid,
+            }}
+            title="Show the ones this player owns in Pals"
+            quiet
+          >
+            <Pill tone="good">owned</Pill>
+          </Jump>
         ) : (
           <a
             href={href}
@@ -138,10 +149,17 @@ export function Owned({
             className="border-t border-[var(--color-line-faint)] py-2"
           >
             <div className="flex items-center gap-3 text-sm">
-              <CardTrigger
+              <Jump
+                view="pals"
+                focus={{
+                  kind: 'pal',
+                  id: r.pal.instanceId,
+                  label: palName(r.pal, ctx.data.species[id]),
+                }}
                 card={{ kind: 'pal', pal: r.pal }}
-                focusable
-                className="flex min-w-0 flex-1 items-center gap-3"
+                title="Open this pal in Pals"
+                quiet
+                className="flex-1 items-center gap-3"
               >
                 <GameIcon
                   path={ctx.text.icon(id)}
@@ -149,10 +167,10 @@ export function Owned({
                   elementName={ctx.text.element(id)}
                   size={26}
                 />
-                <span className="min-w-0 flex-1 truncate">
+                <span className="min-w-0 truncate">
                   {palName(r.pal, ctx.data.species[id])}
                 </span>
-              </CardTrigger>
+              </Jump>
               <Pill title="Pal level">Lv {r.pal.level}</Pill>
               <Pill title="Where it is now">{WHERE_LABEL[r.where]}</Pill>
             </div>
