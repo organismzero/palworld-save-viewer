@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 import { serialiseParams } from '@/app/viewParams.ts'
 import {
+  ailingWorkers,
   baseHealth,
   buildersOf,
   byFullness,
@@ -20,7 +21,7 @@ import {
   wearFraction,
   wornItems,
 } from '@/domain/bases.ts'
-import { BASES_DEFAULTS, basesCodec } from '@/views/bases/params.ts'
+import { BASES_DEFAULTS, basesCodec, basesLink } from '@/views/bases/params.ts'
 import {
   CONTAINER_COLUMNS,
   ITEM_HIT_COLUMNS,
@@ -377,6 +378,30 @@ describe('itemPlaces', () => {
     expect(itemPlaces(withItems, 'Nothing')).toEqual({
       places: [],
       unplaced: 0,
+    })
+  })
+})
+
+describe('what needs attention at a base', () => {
+  it('names the workers with something wrong, and what', () => {
+    const ailing = ailingWorkers(index, base)
+    expect(ailing).toHaveLength(1)
+    expect(ailing[0]!.pal).toBe(workers[0])
+    expect(ailing[0]!.conditions.map((c) => c.id)).toEqual(['sick'])
+  })
+
+  it('links to the base with its list narrowed to what is damaged', () => {
+    const qs = basesLink(index, {
+      source: { kind: 'base', baseId: CAMP },
+      damaged: true,
+      storageOnly: false,
+    })
+    expect(qs).toBe('all=1&dmg=1&src=base:bbbbbbbb')
+    const got = basesCodec(index).decode(new URLSearchParams(qs), BASES_DEFAULTS) // prettier-ignore
+    expect(got).toMatchObject({
+      damaged: true,
+      storageOnly: false,
+      builder: '',
     })
   })
 })

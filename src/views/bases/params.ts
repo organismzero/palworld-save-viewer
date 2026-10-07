@@ -14,6 +14,7 @@ import {
   bool,
   num,
   resolveShortId,
+  serialiseParams,
   shortId,
   str,
   unresolved,
@@ -68,6 +69,22 @@ export const BASES_DEFAULTS: BasesParams = {
   locked: false,
   sort: 'type',
   wear: DEFAULT_WEAR,
+}
+
+/**
+ * A link into Bases from another view: the defaults, with these changed.
+ *
+ * For a destination a one-shot focus cannot describe. "This base" is a focus;
+ * "this base, narrowed to what is damaged" is a view state, and this is how
+ * another view writes one.
+ */
+export function basesLink(
+  index: SaveIndex,
+  over: Partial<BasesParams>,
+): string {
+  return serialiseParams(
+    basesCodec(index).encode({ ...BASES_DEFAULTS, ...over }, BASES_DEFAULTS),
+  )
 }
 
 export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {

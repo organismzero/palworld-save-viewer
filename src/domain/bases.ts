@@ -19,13 +19,14 @@ import type {
   DynamicItem,
   Guid,
   ItemStack,
+  Pal,
   SaveIndex,
   Structure,
   Vec3,
 } from './types.ts'
 import type { Landmark } from '../refdata/refdata.ts'
 import { baseWorkers } from './index.ts'
-import { conditions } from './palState.ts'
+import { conditions, type Condition } from './palState.ts'
 
 /* -------------------------------------------------------------------------
    Naming
@@ -212,6 +213,20 @@ export interface BaseHealth {
   workersAiling: number
 }
 
+/** A worker with something wrong, and what. */
+export interface AilingWorker {
+  pal: Pal
+  conditions: Condition[]
+}
+
+/** A base's workers that are sick, hurt, starving or low on sanity. */
+export function ailingWorkers(index: SaveIndex, base: Base): AilingWorker[] {
+  return baseWorkers(index, base.baseId).flatMap((pal) => {
+    const found = conditions(pal)
+    return found.length ? [{ pal, conditions: found }] : []
+  })
+}
+
 export function baseHealth(index: SaveIndex, base: Base): BaseHealth {
   const structures = index.structuresByBase.get(base.baseId) ?? []
   const workers = baseWorkers(index, base.baseId)
@@ -220,7 +235,7 @@ export function baseHealth(index: SaveIndex, base: Base): BaseHealth {
     damaged: structures.filter(isDamaged).length,
     locked: structures.filter((s) => s.locked).length,
     workers: workers.length,
-    workersAiling: workers.filter((p) => conditions(p).length > 0).length,
+    workersAiling: ailingWorkers(index, base).length,
   }
 }
 

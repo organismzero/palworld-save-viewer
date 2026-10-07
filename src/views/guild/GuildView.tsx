@@ -47,6 +47,7 @@ import {
 import { Checkbox, SelectControl } from '../../components/controls.tsx'
 import { MapJump } from '../../components/Jump.tsx'
 import { ContributionBoard } from './Board.tsx'
+import { BaseTriage } from './Triage.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 import { memberRole } from '../../lib/roles.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
@@ -132,6 +133,8 @@ export function GuildView({ index }: { index: SaveIndex }) {
             selected={openPlayer}
             onSelect={setOpenPlayer}
           />
+
+          <BaseTriage index={index} guild={guild} />
 
           <ContributionBoard
             index={index}
