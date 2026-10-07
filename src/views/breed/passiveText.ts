@@ -29,6 +29,15 @@ export interface PassiveText {
   all: () => { id: string; name: string; rank: number }[]
 }
 
+/** The source in two words, for a pill. `origin` is the sentence. */
+export const SOURCE_LABEL = {
+  random: 'random',
+  lucky: 'lucky only',
+  worldtree: 'world tree',
+  mutation: 'mutation',
+  exclusive: 'species only',
+} as const satisfies Record<PassiveInfo['source'], string>
+
 /**
  * Where a passive comes from when a parent cannot supply it.
  *
@@ -42,14 +51,16 @@ function origin(info: PassiveInfo): string {
   const from = {
     random: 'Turns up on wild pals and on hatches, at random.',
     lucky: 'Only ever on Lucky pals.',
-    worldtree: 'Only from World Tree pals — blue-glowing catches and ominous eggs.',
+    worldtree:
+      'Only from World Tree pals — blue-glowing catches and ominous eggs.',
     mutation: 'Only on mutated pals; an ordinary hatch never rolls it.',
     exclusive:
       'Comes with the species that has it. No catch or hatch puts it on anything else.',
   }[info.source]
 
   const implant = {
-    reusable: ' A reusable implant for it exists, applied at a Pal Surgery Table.',
+    reusable:
+      ' A reusable implant for it exists, applied at a Pal Surgery Table.',
     disposable:
       ' A single-use implant for it exists, applied at a Pal Surgery Table.',
     both: ' Implants for it exist, reusable and single-use, applied at a Pal Surgery Table.', // prettier-ignore

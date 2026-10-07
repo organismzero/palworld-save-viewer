@@ -39,6 +39,11 @@ const BuildsView = lazy(() =>
     default: m.BuildsView,
   })),
 )
+// Lazy for the same reason the views are: nobody pays for the tray's sheets
+// until they open it.
+const Tray = lazy(() =>
+  import('./tray/Tray.tsx').then((m) => ({ default: m.Tray })),
+)
 import { useSaveStore } from '../store/saveStore.ts'
 import {
   flushSessionWrite,
@@ -219,6 +224,12 @@ function useShortcuts() {
         setShortcuts(true)
         return
       }
+      if (e.key.toLowerCase() === 't') {
+        e.preventDefault()
+        const ui = useUiStore.getState()
+        ui.setTray({ open: !ui.trayOpen })
+        return
+      }
       const i = Number(e.key)
       const view = VIEWS[i - 1]
       if (view && i >= 1 && i <= VIEWS.length) {
@@ -325,6 +336,8 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const { fileName, reset } = useSaveStore()
   const setPalette = useUiStore((s) => s.setPalette)
   const setAbout = useUiStore((s) => s.setAbout)
+  const trayOpen = useUiStore((s) => s.trayOpen)
+  const setTray = useUiStore((s) => s.setTray)
   const add = useFilePicker()
   const drop = useShellDrop()
 
@@ -363,6 +376,16 @@ export function AppShell({ index }: { index: SaveIndex }) {
             className="hidden sm:inline-flex"
           >
             Search
+          </Button>
+
+          <Button
+            size="sm"
+            keyHint="T"
+            aria-expanded={trayOpen}
+            onClick={() => setTray({ open: !trayOpen })}
+            title="Reference sheets and saved breeding paths"
+          >
+            Tray
           </Button>
 
           <span className="label hidden max-w-40 truncate lg:inline">
@@ -416,31 +439,44 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
       <RememberOffer />
 
-      <main
-        id={VIEW_PANEL}
-        role="tabpanel"
-        aria-labelledby={tabId(VIEW_TABS, view)}
-        className="min-h-0 flex-1"
-      >
-        {/* Keyed on the view so switching tabs clears a view's crash. */}
-        <ErrorBoundary key={view} what={`the ${view} view`}>
-          <Suspense
-            fallback={
-              <div className="label flex h-64 items-center justify-center">
-                loading view
-              </div>
-            }
-          >
-            {view === 'map' && <MapView index={index} />}
-            {view === 'pals' && <PalsView index={index} />}
-            {view === 'bases' && <BasesView index={index} />}
-            {view === 'guild' && <GuildView index={index} />}
-            {view === 'summary' && <SaveSummary index={index} />}
-            {view === 'breed' && <BreedView index={index} />}
-            {view === 'builds' && <BuildsView index={index} />}
+      {/*
+        The view and the tray share this row. `relative` is for the tray when it
+        floats: it is positioned against this box rather than the window, which
+        is what keeps it between the header and the prompt row in both modes.
+      */}
+      <div className="relative flex min-h-0 flex-1">
+        <main
+          id={VIEW_PANEL}
+          role="tabpanel"
+          aria-labelledby={tabId(VIEW_TABS, view)}
+          className="min-h-0 min-w-0 flex-1"
+        >
+          {/* Keyed on the view so switching tabs clears a view's crash. */}
+          <ErrorBoundary key={view} what={`the ${view} view`}>
+            <Suspense
+              fallback={
+                <div className="label flex h-64 items-center justify-center">
+                  loading view
+                </div>
+              }
+            >
+              {view === 'map' && <MapView index={index} />}
+              {view === 'pals' && <PalsView index={index} />}
+              {view === 'bases' && <BasesView index={index} />}
+              {view === 'guild' && <GuildView index={index} />}
+              {view === 'summary' && <SaveSummary index={index} />}
+              {view === 'breed' && <BreedView index={index} />}
+              {view === 'builds' && <BuildsView index={index} />}
+            </Suspense>
+          </ErrorBoundary>
+        </main>
+
+        {trayOpen && (
+          <Suspense fallback={null}>
+            <Tray index={index} />
           </Suspense>
-        </ErrorBoundary>
-      </main>
+        )}
+      </div>
 
       <Notices />
       <Prompts />
@@ -472,6 +508,7 @@ function Prompts() {
     <PromptBar className="shrink-0 border-t border-[var(--color-line-faint)] bg-[rgb(5_13_19/0.7)]">
       <Prompt keys="⌘K">Search</Prompt>
       <Prompt keys="1–7">Switch view</Prompt>
+      <Prompt keys="T">Tray</Prompt>
       <Prompt keys="?">Shortcuts</Prompt>
       {anyOpen && <Prompt keys="Esc">Close</Prompt>}
     </PromptBar>

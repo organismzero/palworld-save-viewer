@@ -38,6 +38,52 @@ export interface Notice {
   tone: 'info' | 'warn'
 }
 
+/** The utility tray's sheets. */
+export type TrayTab = 'passives'
+
+const TRAY_TABS: readonly TrayTab[] = ['passives']
+const TRAY_KEY = 'psv.tray'
+
+interface TrayPref {
+  open: boolean
+  pinned: boolean
+  tab: TrayTab
+}
+
+/**
+ * How the tray was left: which sheet, and whether it was docked.
+ *
+ * A preference about the app's own furniture, with nothing of the save in it,
+ * so it is kept without asking — unlike everything in `session.ts`. Storage
+ * that throws (private mode, a disabled origin) just means the default.
+ */
+function readTrayPref(): TrayPref {
+  const fallback: TrayPref = { open: false, pinned: false, tab: 'passives' }
+  try {
+    const raw = localStorage.getItem(TRAY_KEY)
+    if (!raw) return fallback
+    const v = JSON.parse(raw) as Partial<TrayPref>
+    const pinned = v.pinned === true
+    return {
+      // Only a docked tray comes back open. An overlay left open would cover
+      // part of the first screen somebody sees after a reload.
+      open: pinned && v.open === true,
+      pinned,
+      tab: TRAY_TABS.find((t) => t === v.tab) ?? fallback.tab,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+function writeTrayPref(pref: TrayPref) {
+  try {
+    localStorage.setItem(TRAY_KEY, JSON.stringify(pref))
+  } catch {
+    // Not being able to remember this is not worth telling anyone about.
+  }
+}
+
 const NOTICE_TTL = 5000
 let noticeSeq = 0
 
@@ -84,6 +130,11 @@ interface UiState {
    */
   paramsEpoch: number
 
+  trayOpen: boolean
+  trayTab: TrayTab
+  /** Docked beside the view rather than floating over its right edge. */
+  trayPinned: boolean
+
   notices: Notice[]
   /** How many drawers Escape could close right now. */
   escapeDepth: number
@@ -116,14 +167,21 @@ interface UiState {
    * save, and landing back on it with the next one is what they would expect.
    */
   clearViewParams: () => void
+  /** Open, close or change the tray. Omitted fields keep their value. */
+  setTray: (next: { open?: boolean; tab?: TrayTab; pinned?: boolean }) => void
   notify: (text: string, opts?: { tone?: Notice['tone']; ttl?: number }) => void
   dismiss: (id: number) => void
   /** Register something for Escape to close. Returns the unregister. */
   pushEscape: (close: () => void) => () => void
 }
 
+const TRAY = readTrayPref()
+
 export const useUiStore = create<UiState>((set, get) => ({
   view: 'map',
+  trayOpen: TRAY.open,
+  trayTab: TRAY.tab,
+  trayPinned: TRAY.pinned,
   paletteOpen: false,
   aboutOpen: false,
   shortcutsOpen: false,
@@ -167,6 +225,17 @@ export const useUiStore = create<UiState>((set, get) => ({
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
 
   clearViewParams: () => set({ viewParams: {}, focus: undefined }),
+
+  setTray: (next) => {
+    const s = get()
+    const pref = {
+      open: next.open ?? s.trayOpen,
+      tab: next.tab ?? s.trayTab,
+      pinned: next.pinned ?? s.trayPinned,
+    }
+    set({ trayOpen: pref.open, trayTab: pref.tab, trayPinned: pref.pinned })
+    writeTrayPref(pref)
+  },
 
   notify: (text, opts) => {
     const id = ++noticeSeq

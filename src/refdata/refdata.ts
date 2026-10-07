@@ -35,7 +35,8 @@ const PST_REF = 'main'
 // 8: species stats and mount kind, passive effects, active skills — for Builds.
 // 9: partner-skill and active-skill descriptions, element icons — for hover cards.
 // 10: partner-skill effects, ranch drops and a food flag — for the new Builds.
-const SLIM_VERSION = 10
+// 11: passive descriptions lose their carriage returns — for the cheat sheet.
+const SLIM_VERSION = 11
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -572,8 +573,12 @@ function passiveSource(p: any): PassiveSource {
 const ALREADY_NEGATIVE = /\b(?:by|extension|reduction|decrease[sd]?)\s+-/i
 
 function resolveEffects(p: any): string | undefined {
-  const text: unknown = p?.description
-  if (typeof text !== 'string' || text === '') return undefined
+  const raw: unknown = p?.description
+  if (typeof raw !== 'string' || raw === '') return undefined
+  // Upstream separates a description's lines with `\r\n`. Harmless in a
+  // paragraph, where any whitespace collapses, and wrong anywhere the lines are
+  // split out — which the cheat sheet does.
+  const text = raw.replace(/\r\n?/g, '\n')
   if (!text.includes('{')) return text
 
   let unresolved = false

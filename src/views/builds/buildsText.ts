@@ -19,8 +19,9 @@ import { BREED_DEFAULTS, breedCodec } from '../breed/params.ts'
 /**
  * Short names for effect types.
  *
- * Only the ones a purpose asks for are here; anything else prints its raw type,
- * which is what the rest of the app does with an id it cannot name.
+ * Every type a displayable passive carries is here, because the tray's cheat
+ * sheet lists all of them; anything else prints its raw type, which is what the
+ * rest of the app does with an id it cannot name.
  */
 const EFFECT_LABEL: Record<string, string> = {
   ShotAttack: 'Attack',
@@ -47,6 +48,15 @@ const EFFECT_LABEL: Record<string, string> = {
   RideJumpCount_Increase: 'Mounted jumps',
   LeanBackInvalid_ForPassiveSkill: 'Immune to flinch',
   KnockbackInvalid_ForPassiveSkill: 'Immune to knockback',
+  ExplosionResist: 'Immune to explosions',
+  ResistAdditionalEffect_Burn: 'Immune to burn',
+  ResistAdditionalEffect_Poison: 'Immune to poison',
+  NonKilling: 'Never lands the killing blow',
+  ReloadSpeedUp: 'Reload speed',
+  ShopSellPrice_Money_Increase: 'Sale price',
+  ShopBuyPrice_Money_Increase: 'Purchase price',
+  SelfDeathAddItemDrop: 'Items dropped on defeat',
+  WorldTreeDecayImmunity: 'World Tree resources stay put',
   // Partner-skill effects, for the production purposes.
   Fishing_ItemAddDrop: 'Fishing drops',
   Fishing_EnemyAddDrop: 'Fished-pal drops',
@@ -66,6 +76,18 @@ const COUNTS = new Set([
   'RideJumpCount_Increase',
 ])
 
+/**
+ * Types that are on or off, whatever number they carry.
+ *
+ * The three resistances store 100, and "Immune to burn +100%" says less than
+ * "Immune to burn".
+ */
+const SWITCHES = new Set([
+  'ExplosionResist',
+  'ResistAdditionalEffect_Burn',
+  'ResistAdditionalEffect_Poison',
+])
+
 function label(type: string): string {
   const known = EFFECT_LABEL[type]
   if (known) return known
@@ -79,7 +101,8 @@ function label(type: string): string {
 }
 
 /**
- * `Work speed +50%`, `Hunger drain −15%`, `You: Attack +10%`.
+ * `Work speed +50%`, `Hunger drain −15%`, `You: Attack +10%`,
+ * `Base: Incubation speed +30%`.
  *
  * The value is printed with the sign the game stores, which for the "less is
  * better" types is already the readable one: Diet Lover's −15 hunger drain is
@@ -87,9 +110,10 @@ function label(type: string): string {
  * ends in the minus and the number follows it.
  */
 export function effectText(e: PassiveEffect): string {
-  const who = e.target === 'trainer' ? 'You: ' : ''
+  const who =
+    e.target === 'trainer' ? 'You: ' : e.target === 'base' ? 'Base: ' : ''
   const name = label(e.type)
-  if (e.value === 0) return who + name
+  if (e.value === 0 || SWITCHES.has(e.type)) return who + name
   if (COUNTS.has(e.type)) return `${who}${name} +${e.value}`
   if (name.endsWith('−')) return `${who}${name}${Math.abs(e.value)}%`
   const sign = e.value > 0 ? '+' : '−'

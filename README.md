@@ -79,11 +79,12 @@ directly and the conversion step only cost time.
 | ------------------------- | ---------------------------------- |
 | <kbd>⌘K</kbd>             | Search pals, items, players, bases |
 | <kbd>1</kbd>–<kbd>7</kbd> | Switch view                        |
+| <kbd>T</kbd>              | Open or close the utility tray     |
 | <kbd>?</kbd>              | Keyboard shortcuts                 |
 | <kbd>Esc</kbd>            | Close whatever is open             |
 
-<kbd>⌘</kbd> is <kbd>Ctrl</kbd> on Windows and Linux. Number keys are ignored
-while a text field has focus.
+<kbd>⌘</kbd> is <kbd>Ctrl</kbd> on Windows and Linux. Number keys and
+<kbd>T</kbd> are ignored while a text field has focus.
 
 ### Privacy
 

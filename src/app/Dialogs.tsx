@@ -157,6 +157,7 @@ const SHORTCUTS: { keys: string[]; what: string }[] = [
   { keys: ['5'], what: 'Summary' },
   { keys: ['6'], what: 'Breed' },
   { keys: ['7'], what: 'Builds' },
+  { keys: ['T'], what: 'Utility tray' },
   { keys: ['?'], what: 'This list' },
   { keys: ['Esc'], what: 'Close whatever is open' },
 ]

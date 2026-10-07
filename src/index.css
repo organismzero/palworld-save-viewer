@@ -177,6 +177,7 @@
   --panel-pad: 16px;
   --rail-width: 264px;
   --detail-width: 340px;
+  --tray-width: 360px; /* the utility tray, docked or floating */
   --header-height: 52px;
 
   /* Weights. Not `--font-weight-*`, which would collide with Tailwind's own
@@ -346,6 +347,19 @@
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+/* The utility tray arriving from its own edge. Short, and only when it floats:
+   a docked tray reflows the view, and sliding on top of that is two motions. */
+@keyframes pw-tray-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

@@ -17,6 +17,7 @@ import {
   type SideSpec,
 } from '../../domain/recommend.ts'
 import { carrierCounts } from '../../domain/passives.ts'
+import { SOURCE_LABEL } from '../breed/passiveText.ts'
 import { palName } from '../../domain/palText.ts'
 import { count } from '../../lib/format.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
@@ -280,14 +281,6 @@ export function PassiveAdviceBlock({
     </div>
   )
 }
-
-const SOURCE_LABEL = {
-  random: 'random',
-  lucky: 'lucky only',
-  worldtree: 'world tree',
-  mutation: 'mutation',
-  exclusive: 'species only',
-} as const
 
 export function WorkSections({
   ctx,
