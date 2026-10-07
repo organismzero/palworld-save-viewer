@@ -39,7 +39,7 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { saveCurrentPath, usePathsStore } from './pathsStore.ts'
-import { canonicalPath } from './savedPaths.ts'
+import { canonicalPath, liveTicks, summarisePlan } from './savedPaths.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
@@ -198,6 +198,36 @@ export function BreedView({ index }: { index: SaveIndex }) {
     params.noSpares,
     search.reach,
   ])
+
+  // The saved path this is, if it is one — for keeping its summary current and
+  // for the ticks on its steps.
+  const paths = usePathsStore((s) => s.paths)
+  const setProgress = usePathsStore((s) => s.setProgress)
+  const tickStep = usePathsStore((s) => s.tick)
+  const currentPath = useMemo(
+    () => canonicalPath(params, index),
+    [params, index],
+  )
+  const savedPath = currentPath && paths.find((p) => p.qs === currentPath.qs)
+  // While a passive search is running, called off or failed, `plan` is the
+  // species-only route standing in for the real one. Recording that would
+  // overwrite a path's summary with a route nobody asked for, and drop every
+  // tick, since none of its steps carry anything.
+  const settled =
+    !pairMode && (params.passives.length === 0 || search.reach !== undefined)
+  const savedAt = index.meta.savedAtTicks
+  useEffect(() => {
+    if (!savedPath || !plan || !settled) return
+    const ticks =
+      plan.status === 'plan'
+        ? liveTicks(plan, savedPath.ticks ?? [])
+        : (savedPath.ticks ?? [])
+    setProgress(
+      savedPath.id,
+      summarisePlan(plan, ticks, savedAt, savedPath.summary),
+      ticks,
+    )
+  }, [savedPath, plan, settled, savedAt, setProgress])
 
   // Reference data loaded, but its breeding section did not. That fetch is the
   // one allowed to fail on its own, so this is a real state rather than a guard.
@@ -368,6 +398,10 @@ export function BreedView({ index }: { index: SaveIndex }) {
             passives={passives}
             owner={owner}
             search={search}
+            ticks={savedPath && settled ? (savedPath.ticks ?? []) : undefined}
+            onTick={(key, done) => {
+              if (savedPath) tickStep(savedPath.id, key, done)
+            }}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
             onDropNoSpares={() => patch({ noSpares: false, route: undefined })}
@@ -445,6 +479,8 @@ function PlanPane({
   passives,
   owner,
   search,
+  ticks,
+  onTick,
   routeIndex,
   onRoute,
   onDropNoSpares,
@@ -456,6 +492,9 @@ function PlanPane({
   passives: PassiveText
   owner: OwnerText
   search: PassiveSearch
+  /** The saved path's ticked steps. Absent when this is not a saved path. */
+  ticks: readonly string[] | undefined
+  onTick: (key: string, done: boolean) => void
   routeIndex: number
   onRoute: (i: number) => void
   onDropNoSpares: () => void
@@ -570,6 +609,8 @@ function PlanPane({
             text={text}
             passives={passives}
             owner={owner}
+            ticks={ticks}
+            onTick={onTick}
           />
         </>
       ) : (
@@ -1267,6 +1308,8 @@ function Footnote({ stock, plan }: { stock: Stock; plan?: BreedingPlan }) {
         changes what you hold. A hatch that comes out better than the step asked
         for can make later steps unnecessary — so save and reload after each
         generation, and the route will shorten around what you actually got.
+        Between loads, a saved path lets you tick each step off as you hatch it;
+        a tick is dropped once a newer save no longer has that step.
       </p>
       {plan?.wanted && plan.wanted.length > 0 && (
         <p className="mt-2">

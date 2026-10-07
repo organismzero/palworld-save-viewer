@@ -23,6 +23,7 @@ import {
   belongsHere,
   canonicalPath,
   decodePath,
+  summaryText,
   type SavedPath,
 } from '../../views/breed/savedPaths.ts'
 import { speciesText, type SpeciesText } from '../../views/breed/speciesText.ts'
@@ -120,6 +121,12 @@ export function SavedPaths({ index }: { index: SaveIndex }) {
                 />
               ))}
             </ul>
+            {here.some((p) => p.summary) && (
+              <p className="px-3 py-2 text-xs text-[var(--color-faint)]">
+                Each count is from the last time that path was open in Breed.
+                Open one to work it out again against this save.
+              </p>
+            )}
             {elsewhere.length > 0 && (
               <details className="border-b border-[var(--color-line-faint)]">
                 <summary className="label cursor-pointer bg-[rgb(3_9_13/0.4)] px-3 py-1.5">
@@ -184,6 +191,8 @@ function PathRow({
   }
 
   const params = index ? decodePath(path.qs, index) : undefined
+  // Muted grey on the selection fill falls well short of readable.
+  const sub = current ? 'text-white/85' : 'text-[var(--color-muted)]'
 
   return (
     <li
@@ -213,7 +222,12 @@ function PathRow({
         >
           <span className="block truncate text-sm">{path.name}</span>
           {params && species && passives && (
-            <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted)]">
+            <span
+              className={cn(
+                'mt-1 flex flex-wrap items-center gap-1.5 text-xs',
+                sub,
+              )}
+            >
               {params.mode === 'pair' ? (
                 <span>
                   pair, ranked for{' '}
@@ -232,6 +246,21 @@ function PathRow({
                   ))}
                   {params.noSpares && <span>and nothing else</span>}
                 </>
+              )}
+            </span>
+          )}
+          {path.summary && params?.mode === 'plan' && (
+            <span className={cn('num mt-1 block text-xs', sub)}>
+              {summaryText(path.summary)}
+              {path.summary.previous && (
+                <span
+                  className={current ? undefined : 'text-[var(--color-faint)]'}
+                >
+                  {' '}
+                  · was {path.summary.previous.steps}
+                  {path.summary.previous.hatches !== undefined &&
+                    `, ≈${path.summary.previous.hatches} hatches`}
+                </span>
               )}
             </span>
           )}

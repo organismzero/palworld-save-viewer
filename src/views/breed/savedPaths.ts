@@ -22,6 +22,7 @@
  */
 
 import { serialiseParams } from '../../app/viewParams.ts'
+import type { BreedStep, BreedingPlan } from '../../domain/breeding.ts'
 import { busiestPlayer } from '../../domain/guild.ts'
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import { BREED_DEFAULTS, breedCodec, type BreedParams } from './params.ts'
@@ -37,6 +38,35 @@ export interface SavedPath {
   playerUid: Guid
   /** Milliseconds since the epoch. */
   createdAt: number
+  /** How the route stood when this path was last looked at. */
+  summary?: PathSummary
+  /** Steps ticked off by hand, as {@link stepKey}s. */
+  ticks?: string[]
+}
+
+/**
+ * A route in four numbers, for the list.
+ *
+ * Kept rather than computed for the list because computing it is the whole
+ * cost of the Breed view: a path with four passives is a ten-second search,
+ * and a list of eight of them is not something to work out on opening a tray.
+ * So each path remembers what it looked like when it was last on screen, and
+ * says which save that was.
+ */
+export interface PathSummary {
+  status: BreedingPlan['status']
+  /** Eggs in the route. */
+  steps: number
+  /** Of those, how many are ticked off or already met by a held pal. */
+  done: number
+  /** Hatches to expect, when passives make that more than the egg count. */
+  hatches?: number
+  /** How many of the target the stock already holds. */
+  owned: number
+  /** The save's own timestamp, so a summary can say which save it describes. */
+  savedAt?: number
+  /** What the route was under the save before this one, if it has changed. */
+  previous?: { steps: number; hatches?: number }
 }
 
 /** Enough that the list never becomes the thing being managed. */
@@ -123,6 +153,88 @@ export function belongsHere(path: SavedPath, index: SaveIndex): boolean {
 }
 
 /* -------------------------------------------------------------------------
+   Progress
+   ------------------------------------------------------------------------- */
+
+/**
+ * What a step is, in a form that survives the plan being worked out again.
+ *
+ * Not its number: steps are numbered in execution order, and a route that
+ * shortens renumbers everything after the step that went. The egg, its two
+ * parents and what it has to carry are what "I have done this one" refers to.
+ * Parents are sorted because the planner does not promise which side is which.
+ */
+export function stepKey(step: BreedStep): string {
+  const parents = [step.a.species, step.b.species].sort().join('+')
+  const carries = [...(step.carries ?? [])].sort().join(',')
+  return `${step.species}<${parents}#${carries}`
+}
+
+/** Ticks that still name a step in this plan. */
+export function liveTicks(
+  plan: BreedingPlan,
+  ticks: readonly string[],
+): string[] {
+  const keys = new Set(plan.steps.map(stepKey))
+  return ticks.filter((t) => keys.has(t))
+}
+
+/**
+ * Sum a plan up for the list.
+ *
+ * `before` is the summary already stored. When it describes a different save
+ * and the route has changed since, its numbers are kept as `previous` — that
+ * difference is the progress, and the reason to look at the list at all.
+ */
+export function summarisePlan(
+  plan: BreedingPlan,
+  ticks: readonly string[],
+  savedAt: number | undefined,
+  before?: PathSummary,
+): PathSummary {
+  const ticked = new Set(ticks)
+  const hatches =
+    plan.expectedEggs !== undefined &&
+    plan.expectedEggs > plan.steps.length + 0.5
+      ? Math.round(plan.expectedEggs)
+      : undefined
+
+  const out: PathSummary = {
+    status: plan.status,
+    steps: plan.steps.length,
+    done: plan.steps.filter(
+      (s) => s.progress?.meets === true || ticked.has(stepKey(s)),
+    ).length,
+    owned: plan.ownedTarget.length,
+  }
+  if (hatches !== undefined) out.hatches = hatches
+  if (savedAt !== undefined) out.savedAt = savedAt
+
+  if (before) {
+    const sameSave = before.savedAt === savedAt
+    const moved = before.steps !== out.steps || before.hatches !== out.hatches
+    // The same save again: whatever was being compared against still is.
+    if (sameSave && before.previous) out.previous = before.previous
+    else if (!sameSave && moved) {
+      out.previous = { steps: before.steps }
+      if (before.hatches !== undefined) out.previous.hatches = before.hatches
+    }
+  }
+  return out
+}
+
+/** `4 eggs · 1 done · ≈38 hatches`, or what stands in for that. */
+export function summaryText(s: PathSummary): string {
+  if (s.status === 'unreachable') return 'no route from this stock'
+  if (s.status !== 'plan') return 'not worked out'
+  if (s.steps === 0) return s.owned > 0 ? 'already held' : 'nothing to breed'
+  const parts = [`${s.steps} ${s.steps === 1 ? 'egg' : 'eggs'}`]
+  if (s.done > 0) parts.push(`${s.done} done`)
+  if (s.hatches !== undefined) parts.push(`≈${s.hatches} hatches`)
+  return parts.join(' · ')
+}
+
+/* -------------------------------------------------------------------------
    Storage
    ------------------------------------------------------------------------- */
 
@@ -152,6 +264,26 @@ function isPath(v: unknown): v is SavedPath {
   )
 }
 
+/** Keeps the optional fields only when they are the shape the app reads. */
+function tidy(path: SavedPath): SavedPath {
+  const { summary, ticks, ...rest } = path
+  const out: SavedPath = rest
+  if (Array.isArray(ticks)) {
+    out.ticks = ticks.filter((t): t is string => typeof t === 'string')
+  }
+  if (
+    typeof summary === 'object' &&
+    summary !== null &&
+    typeof summary.steps === 'number' &&
+    typeof summary.done === 'number' &&
+    typeof summary.owned === 'number' &&
+    typeof summary.status === 'string'
+  ) {
+    out.summary = summary
+  }
+  return out
+}
+
 export function parseStored(raw: string | null): StoredPaths {
   if (!raw) return { paths: [], writable: true }
   let data: unknown
@@ -169,7 +301,7 @@ export function parseStored(raw: string | null): StoredPaths {
   return {
     // A damaged entry is dropped on its own rather than taking the rest of the
     // list with it.
-    paths: Array.isArray(paths) ? paths.filter(isPath) : [],
+    paths: Array.isArray(paths) ? paths.filter(isPath).map(tidy) : [],
     writable: true,
   }
 }

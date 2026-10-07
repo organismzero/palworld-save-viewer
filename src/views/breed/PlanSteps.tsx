@@ -20,6 +20,8 @@ import type {
 } from '../../domain/breeding.ts'
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import { palName } from '../../domain/palText.ts'
+import { cn } from '../../lib/utils.ts'
+import { Checkbox } from '../../components/controls.tsx'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
@@ -28,6 +30,7 @@ import {
   PassiveChip,
   Pill,
 } from '../../components/primitives.tsx'
+import { stepKey } from './savedPaths.ts'
 import type { SpeciesText } from './speciesText.ts'
 import type { PassiveText } from './passiveText.ts'
 import { borrowSummary, type OwnerText } from './ownerText.ts'
@@ -37,11 +40,19 @@ export function PlanSteps({
   text,
   passives,
   owner,
+  ticks,
+  onTick,
 }: {
   plan: BreedingPlan
   text: SpeciesText
   passives: PassiveText
   owner: OwnerText
+  /**
+   * Steps ticked off by hand, by {@link stepKey}. Absent when the plan is not a
+   * saved path — a tick has to be kept somewhere, and that is where.
+   */
+  ticks?: readonly string[]
+  onTick?: (key: string, done: boolean) => void
 }) {
   return (
     <div className="space-y-6">
@@ -64,6 +75,12 @@ export function PlanSteps({
               passives={passives}
               owner={owner}
               isTarget={step.n === plan.steps.length}
+              ticked={ticks?.includes(stepKey(step))}
+              onTick={
+                ticks && onTick
+                  ? (done) => onTick(stepKey(step), done)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -87,6 +104,8 @@ function StepRow({
   passives,
   owner,
   isTarget,
+  ticked,
+  onTick,
 }: {
   step: BreedStep
   text: SpeciesText
@@ -94,9 +113,15 @@ function StepRow({
   owner: OwnerText
   /** The last step is the one that makes the thing you asked for. */
   isTarget: boolean
+  ticked?: boolean
+  /** Absent when there is nowhere to keep a tick. */
+  onTick?: (done: boolean) => void
 }) {
+  // A held pal that meets the step is done whatever was ticked: the save
+  // outranks the checkbox.
+  const met = step.progress?.meets === true
   return (
-    <Panel padded className="py-2.5">
+    <Panel padded className={cn('py-2.5', (ticked || met) && 'opacity-60')}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="num shrink-0 text-xs text-[var(--color-muted)]">
           {step.n}
@@ -145,6 +170,15 @@ function StepRow({
           >
             needs both genders
           </Pill>
+        )}
+        {onTick && (
+          <Checkbox
+            checked={ticked === true || met}
+            disabled={met}
+            onChange={onTick}
+            className="ml-auto gap-2 text-xs text-[var(--color-muted)]"
+            label={met ? 'held' : 'done'}
+          />
         )}
       </div>
       {/* Only where the hatch is not a formality. A step whose parents can

@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import type { BreedNode, BreedStep, BreedingPlan } from '@/domain/breeding.ts'
 import type { SaveIndex } from '@/domain/types.ts'
 import { BREED_DEFAULTS, type BreedParams } from '@/views/breed/params.ts'
 import {
@@ -15,8 +16,12 @@ import {
   decodePath,
   defaultName,
   isSaveable,
+  liveTicks,
   parseStored,
   serialiseStored,
+  stepKey,
+  summarisePlan,
+  summaryText,
   type SavedPath,
 } from '@/views/breed/savedPaths.ts'
 
@@ -218,5 +223,174 @@ describe('stored paths', () => {
   it('drops a damaged entry without losing the rest', () => {
     const raw = JSON.stringify({ v: 1, paths: [one, { id: 'broken' }, null] })
     expect(parseStored(raw).paths).toEqual([one])
+  })
+})
+
+/* -------------------------------------------------------------------------
+   Progress
+   ------------------------------------------------------------------------- */
+
+const owned = (species: string): BreedNode => ({
+  kind: 'owned',
+  species,
+  count: 1,
+})
+
+const step = (
+  n: number,
+  species: string,
+  a: string,
+  b: string,
+  over: Partial<BreedStep> = {},
+): BreedStep => ({
+  n,
+  species,
+  a: owned(a),
+  b: owned(b),
+  generation: 1,
+  selfPair: a === b,
+  ...over,
+})
+
+const planOf = (
+  steps: BreedStep[],
+  over: Partial<BreedingPlan> = {},
+): BreedingPlan => ({
+  target: 'anubis',
+  status: 'plan',
+  ownedTarget: [],
+  steps,
+  generations: steps.length,
+  options: [],
+  borrowed: [],
+  blockers: [],
+  ...over,
+})
+
+describe('stepKey', () => {
+  it('does not depend on the step number', () => {
+    expect(stepKey(step(1, 'anubis', 'penguin', 'kelpie'))).toBe(
+      stepKey(step(4, 'anubis', 'penguin', 'kelpie')),
+    )
+  })
+
+  it('does not depend on which parent is on which side', () => {
+    expect(stepKey(step(1, 'anubis', 'penguin', 'kelpie'))).toBe(
+      stepKey(step(1, 'anubis', 'kelpie', 'penguin')),
+    )
+  })
+
+  it('tells the same egg apart by what it has to carry', () => {
+    const bare = step(1, 'anubis', 'penguin', 'kelpie')
+    const carrying = step(1, 'anubis', 'penguin', 'kelpie', {
+      carries: ['legend'],
+    })
+    expect(stepKey(bare)).not.toBe(stepKey(carrying))
+    expect(stepKey(carrying)).toBe(
+      stepKey(step(2, 'anubis', 'penguin', 'kelpie', { carries: ['legend'] })),
+    )
+  })
+})
+
+describe('liveTicks', () => {
+  it('drops a tick whose step the plan no longer has', () => {
+    const a = step(1, 'kelpie', 'penguin', 'penguin')
+    const b = step(2, 'anubis', 'penguin', 'kelpie')
+    const ticks = [stepKey(a), stepKey(b)]
+    expect(liveTicks(planOf([a, b]), ticks)).toEqual(ticks)
+    // A newer save holds a Kelpie, so the step that bred one is gone.
+    expect(liveTicks(planOf([b]), ticks)).toEqual([stepKey(b)])
+  })
+})
+
+describe('summarisePlan', () => {
+  const a = step(1, 'kelpie', 'penguin', 'penguin')
+  const b = step(2, 'anubis', 'penguin', 'kelpie')
+
+  it('counts eggs, and ticked steps as done', () => {
+    expect(summarisePlan(planOf([a, b]), [stepKey(a)], 100)).toEqual({
+      status: 'plan',
+      steps: 2,
+      done: 1,
+      owned: 0,
+      savedAt: 100,
+    })
+  })
+
+  it('counts a step a held pal already meets, ticked or not', () => {
+    const met = { ...b, progress: { meets: true } as BreedStep['progress'] }
+    expect(summarisePlan(planOf([a, met]), [], 100).done).toBe(1)
+  })
+
+  it('reports hatches only when they exceed the eggs', () => {
+    expect(
+      summarisePlan(planOf([a, b], { expectedEggs: 2 }), [], 100).hatches,
+    ).toBeUndefined()
+    expect(
+      summarisePlan(planOf([a, b], { expectedEggs: 37.6 }), [], 100).hatches,
+    ).toBe(38)
+  })
+
+  it('remembers the route under the previous save once it has changed', () => {
+    const before = summarisePlan(planOf([a, b], { expectedEggs: 40 }), [], 100)
+    const after = summarisePlan(planOf([b]), [], 200, before)
+    expect(after.previous).toEqual({ steps: 2, hatches: 40 })
+  })
+
+  it('has nothing to compare against when a newer save changed nothing', () => {
+    const before = summarisePlan(planOf([a, b]), [], 100)
+    expect(
+      summarisePlan(planOf([a, b]), [], 200, before).previous,
+    ).toBeUndefined()
+  })
+
+  it('keeps the comparison while the same save stays open', () => {
+    const first = summarisePlan(planOf([a, b]), [], 100)
+    const second = summarisePlan(planOf([b]), [], 200, first)
+    // Looked at again, ticked, looked at again: still "was 2".
+    const third = summarisePlan(planOf([b]), [stepKey(b)], 200, second)
+    expect(third.previous).toEqual({ steps: 2 })
+    expect(third.done).toBe(1)
+  })
+})
+
+describe('summaryText', () => {
+  const base = { status: 'plan' as const, steps: 4, done: 0, owned: 0 }
+
+  it('reads as a route', () => {
+    expect(summaryText(base)).toBe('4 eggs')
+    expect(summaryText({ ...base, steps: 1 })).toBe('1 egg')
+    expect(summaryText({ ...base, done: 2, hatches: 38 })).toBe(
+      '4 eggs · 2 done · ≈38 hatches',
+    )
+  })
+
+  it('says so when there is nothing left to breed', () => {
+    expect(summaryText({ ...base, steps: 0, owned: 2 })).toBe('already held')
+  })
+
+  it('says so when there is no route', () => {
+    expect(summaryText({ ...base, status: 'unreachable', steps: 0 })).toBe(
+      'no route from this stock',
+    )
+  })
+})
+
+describe('stored progress', () => {
+  it('round-trips a summary and ticks, and drops ones it cannot read', () => {
+    const good: SavedPath = {
+      id: 'a',
+      name: 'a',
+      qs: 't=anubis',
+      playerUid: A,
+      createdAt: 1,
+      summary: { status: 'plan', steps: 2, done: 1, owned: 0 },
+      ticks: ['anubis<kelpie+penguin#'],
+    }
+    const bad = { ...good, id: 'b', summary: 'four eggs', ticks: [1, 'x'] }
+    const { paths } = parseStored(JSON.stringify({ v: 1, paths: [good, bad] }))
+    expect(paths[0]).toEqual(good)
+    expect(paths[1]!.summary).toBeUndefined()
+    expect(paths[1]!.ticks).toEqual(['x'])
   })
 })

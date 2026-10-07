@@ -25,6 +25,7 @@ import {
   defaultName,
   parseStored,
   serialiseStored,
+  type PathSummary,
   type SavedPath,
 } from './savedPaths.ts'
 import { speciesText } from './speciesText.ts'
@@ -54,6 +55,10 @@ interface PathsState {
   rename: (id: string, name: string) => void
   /** Point an existing path at different params, keeping its name. */
   repoint: (id: string, to: Pick<SavedPath, 'qs' | 'playerUid'>) => void
+  /** Record how a path's route stands, and drop ticks for steps now gone. */
+  setProgress: (id: string, summary: PathSummary, ticks: string[]) => void
+  /** Tick a step off, or back on. */
+  tick: (id: string, key: string, done: boolean) => void
   remove: (id: string) => void
   /** Delete every path, including any this version could not read. */
   clear: () => void
@@ -107,6 +112,30 @@ export const usePathsStore = create<PathsState>((set, get) => {
 
     repoint: (id, to) =>
       commit(get().paths.map((p) => (p.id === id ? { ...p, ...to } : p))),
+
+    setProgress: (id, summary, ticks) => {
+      const path = get().paths.find((p) => p.id === id)
+      if (!path) return
+      // Compared as text because this is called from an effect on every
+      // settled plan, and writing an unchanged summary would be a storage
+      // write and a render of the whole list for nothing.
+      const same =
+        JSON.stringify(path.summary) === JSON.stringify(summary) &&
+        JSON.stringify(path.ticks ?? []) === JSON.stringify(ticks)
+      if (same) return
+      commit(
+        get().paths.map((p) => (p.id === id ? { ...p, summary, ticks } : p)),
+      )
+    },
+
+    tick: (id, key, done) =>
+      commit(
+        get().paths.map((p) => {
+          if (p.id !== id) return p
+          const rest = (p.ticks ?? []).filter((t) => t !== key)
+          return { ...p, ticks: done ? [...rest, key] : rest }
+        }),
+      ),
 
     remove: (id) => {
       commit(get().paths.filter((p) => p.id !== id))
