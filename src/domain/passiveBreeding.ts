@@ -103,6 +103,7 @@
  */
 
 import {
+  applyGender,
   borrowedIn,
   childOf,
   height,
@@ -140,7 +141,6 @@ import type { Gender, Guid, Pal } from './types.ts'
  */
 export const MAX_EXPECTED_EGGS = 200
 
-
 /** A guard against a pathological stock, not an expected limit. */
 export const MAX_STATES = 20_000
 
@@ -154,7 +154,6 @@ export const MAX_STATES = 20_000
  * one, exactly as a competent player would.
  */
 const BRED_FILLER_JUNK = MAX_SLOTS
-
 
 /* -------------------------------------------------------------------------
    States
@@ -259,7 +258,8 @@ export function reachWithPassives(
   const wanted = wantedFrom(asked.ids.filter((id) => !missing.includes(id)))
 
   const names = [...table.rank.keys()]
-  for (const id of stock.bySpecies.keys()) if (!table.rank.has(id)) names.push(id)
+  for (const id of stock.bySpecies.keys())
+    if (!table.rank.has(id)) names.push(id)
   const indexOf = new Map(names.map((id, i) => [id, i]))
   const n = names.length
 
@@ -389,7 +389,7 @@ export function reachWithPassives(
         // is the *only* skip on the pair itself: a filler still has to be
         // expandable as a source, or a pairing found after it settles is lost.
         if (uMask === 0 && vPacked >> 3 === 0) continue
-        if (uRoot && (rootMale[v]! | rootFemale[v]!)) {
+        if (uRoot && rootMale[v]! | rootFemale[v]!) {
           // Two pals already in the box, so the gender rule binds — and on
           // instances now, not counts. A state's male and female picks are two
           // different pals, which is also what stops a lone carrier pairing
@@ -431,7 +431,7 @@ export function reachWithPassives(
             viaA[child] = u
             viaB[child] = v
           } else if (
-            (rootMale[child]! | rootFemale[child]!) &&
+            rootMale[child]! | rootFemale[child]! &&
             cost < altEggs[child]! &&
             cost <= MAX_EXPECTED_EGGS
           ) {
@@ -509,7 +509,7 @@ function heapPush(
 ): void {
   heap.push(state)
   cost.push(value)
-  for (let i = heap.length - 1; i > 0; ) {
+  for (let i = heap.length - 1; i > 0;) {
     const parent = (i - 1) >> 1
     if (cost[parent]! <= cost[i]!) break
     swap(heap, cost, i, parent)
@@ -524,7 +524,7 @@ function heapPop(heap: number[], cost: number[]): number {
   if (heap.length > 0) {
     heap[0] = lastState
     cost[0] = lastCost
-    for (let i = 0; ; ) {
+    for (let i = 0; ;) {
       const l = i * 2 + 1
       const r = l + 1
       let small = i
@@ -762,9 +762,7 @@ export function planWithPassives(
     if (state.species !== id) continue
     if (state.profile.mask !== passive.wanted.all) continue
     if (noSpares && state.profile.junk !== 0) continue
-    const route = state.via
-      ? { eggs: state.eggs, via: state.via }
-      : state.alt
+    const route = state.via ? { eggs: state.eggs, via: state.via } : state.alt
     if (!route) continue
     goals.push({ key, eggs: route.eggs, via: route.via })
   }
@@ -846,7 +844,7 @@ export function planWithPassives(
     generations: height(tree),
     options,
     borrowed: borrowedIn(ctx.steps, stock.ownerUid),
-    expectedEggs: ctx.steps.reduce((t, s) => t + (s.expectedEggs ?? 1), 0),
+    ...applyGender(ctx.steps),
   }
 }
 
@@ -972,6 +970,9 @@ function rootNode(st: State, ctx: Ctx, want?: Gender): BreedNode {
     species: st.species,
     use,
     gender: want ?? use?.gender,
+    // The pal was pinned for its passives, so "the other sex" means another
+    // pal with the same profile, not any other of the species.
+    either: pick.male !== undefined && pick.female !== undefined,
     count: entry
       ? entry.male.length + entry.female.length + entry.unknown.length
       : 0,
@@ -1072,13 +1073,13 @@ function annotateProgress(
  */
 function better(a: StepProgress, b: StepProgress): boolean {
   return (
-    (a.meets ? 1 : 0) - (b.meets ? 1 : 0) ||
-    a.has.length - b.has.length ||
-    a.beyond.length - b.beyond.length ||
-    b.junk - a.junk ||
-    ivTotal(a.pal) - ivTotal(b.pal) ||
-    b.pal.instanceId.localeCompare(a.pal.instanceId)
-  ) > 0
+    ((a.meets ? 1 : 0) - (b.meets ? 1 : 0) ||
+      a.has.length - b.has.length ||
+      a.beyond.length - b.beyond.length ||
+      b.junk - a.junk ||
+      ivTotal(a.pal) - ivTotal(b.pal) ||
+      b.pal.instanceId.localeCompare(a.pal.instanceId)) > 0
+  )
 }
 
 /**

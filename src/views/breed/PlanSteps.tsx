@@ -17,6 +17,7 @@ import type {
   BreedNode,
   BreedStep,
   BreedingPlan,
+  GenderDemand,
 } from '../../domain/breeding.ts'
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import { palName } from '../../domain/palText.ts'
@@ -164,12 +165,9 @@ function StepRow({
           />
         ))}
         <RoomFor step={step} isTarget={isTarget} />
-        {step.selfPair && (
-          <Pill
-            tone="warn"
-            title="Both parents are the same species, so you need one of each gender — expect to hatch more than one egg."
-          >
-            needs both genders
+        {step.gender && (
+          <Pill tone="warn" title={genderTitle(step.gender, text)}>
+            {genderLabel(step.gender)}
           </Pill>
         )}
         {onTick && (
@@ -186,16 +184,31 @@ function StepRow({
           only produce what it needs is an ordinary egg and reads better without
           a 100% beside it — but a step that carries nothing and still has to be
           re-rolled for a *clean* result is not ordinary, and says so. */}
-      {step.chance !== undefined && step.chance < 0.995 && (
+      {step.chance !== undefined && step.chance < 0.995 ? (
         <div className="mt-1.5 pl-6 text-[11px] text-[var(--color-muted)]">
           <span className="num">
             {(step.chance! * 100).toFixed(step.chance! < 0.01 ? 2 : 0)}%
           </span>{' '}
           a hatch, so ≈
-          <span className="num">{Math.round(step.expectedEggs!)}</span> of them —
-          out of a pool of <span className="num">{step.pool}</span> passives
+          <span className="num">{Math.round(1 / step.chance)}</span> of them
+          {step.gender && (
+            <>
+              , and ≈
+              <span className="num">{Math.round(step.expectedEggs!)}</span> to
+              get {genderGoal(step.gender)}
+            </>
+          )}{' '}
+          — out of a pool of <span className="num">{step.pool}</span> passives
           between the two parents.
         </div>
+      ) : (
+        // An egg with nothing to land still has a sex, and that can cost.
+        step.gender && (
+          <div className="mt-1.5 pl-6 text-[11px] text-[var(--color-muted)]">
+            ≈<span className="num">{Math.round(step.expectedEggs!)}</span>{' '}
+            hatches to get {genderGoal(step.gender)}.
+          </div>
+        )
       )}
       <Progress
         step={step}
@@ -292,8 +305,8 @@ function Progress({
           {tooMany && (
             <>
               this step needs one with{' '}
-              {spare === 0 ? 'nothing spare' : `no more than ${spare} spare`}, so
-              the route breeds a cleaner one
+              {spare === 0 ? 'nothing spare' : `no more than ${spare} spare`},
+              so the route breeds a cleaner one
             </>
           )}
           {/* Unreachable, per the dominance argument above, and pinned by a
@@ -566,4 +579,35 @@ function TreeNode({
       )}
     </div>
   )
+}
+
+/** "♂ ×2", "♂ and ♀ ×3": what the egg has to be, and what that multiplies. */
+function genderLabel(g: GenderDemand): string {
+  const what =
+    g.why === 'self'
+      ? 'one of each sex'
+      : g.why === 'single'
+        ? `must be ${g.must === 'Male' ? 'male' : 'female'}`
+        : 'must be the other sex'
+  return `${what} · ×${g.factor}`
+}
+
+/** The same, as the end of "≈6 hatches to get …". */
+function genderGoal(g: GenderDemand): string {
+  return g.why === 'self'
+    ? 'a male and a female'
+    : g.why === 'single'
+      ? `a ${g.must === 'Male' ? 'male' : 'female'}`
+      : 'the sex its partner is not'
+}
+
+function genderTitle(g: GenderDemand, text: SpeciesText): string {
+  const partner = text.name(g.partner)
+  if (g.why === 'self') {
+    return `Step ${g.forStep} pairs this with another of itself, so it has to be hatched until you hold a male and a female: one hatch, then two more on average for the other sex.`
+  }
+  if (g.why === 'single') {
+    return `Step ${g.forStep} pairs this with your ${partner}, and the only ${partner} to hand is ${g.must === 'Male' ? 'female' : 'male'}. Half of hatches come out the sex needed, so two on average.`
+  }
+  return `Step ${g.forStep} pairs this with ${partner}, which is bred too. One of the two has to be re-hatched until they differ in sex, and this is the cheaper one: two on average.`
 }

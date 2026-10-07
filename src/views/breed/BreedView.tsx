@@ -544,7 +544,11 @@ function PlanPane({
                   plan.expectedEggs > plan.steps.length + 0.5 && (
                     <Pill
                       tone="warn"
-                      title="Hatches to expect, not eggs that have to go right. Most will not carry the passives you asked for."
+                      title={
+                        plan.wanted?.length
+                          ? 'Hatches to expect, not eggs that have to go right. Most will not carry the passives you asked for.'
+                          : 'Hatches to expect, not eggs that have to go right. The extra ones are for getting the sex a later step needs.'
+                      }
                     >
                       ≈{Math.round(plan.expectedEggs)} hatches
                     </Pill>
@@ -1297,11 +1301,18 @@ function Footnote({ stock, plan }: { stock: Stock; plan?: BreedingPlan }) {
             )}
       </p>
       <p className="mt-2">
-        Offspring gender is a coin flip, so anything bred along the way is
-        assumed available in either gender — expect more than one egg per step,
-        and two of them for a step that pairs a species with itself. Breeding
-        does not consume the parents. Eggs already sitting in storage are items
-        rather than pals, and are not counted.
+        A pair is a male and a female, and a hatch is taken as an even coin flip
+        between them. So an egg that has to come out one particular sex, to pair
+        with a pal you hold in one sex only or with another you are breeding,
+        counts as two hatches where it would be one; and an egg that is then
+        paired with its own kind counts as three, the first and two more on
+        average for the other sex.
+        {plan?.genderEggs
+          ? ` That is ${count(Math.round(plan.genderEggs))} of this plan’s hatches.`
+          : ''}{' '}
+        The route itself is still the one with the fewest eggs; sex only changes
+        the estimate. Breeding does not consume the parents. Eggs already
+        sitting in storage are items rather than pals, and are not counted.
       </p>
       <p className="mt-2">
         This plan is worked out from the save as you loaded it, and breeding

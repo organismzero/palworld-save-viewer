@@ -11,12 +11,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  applyGender,
   buildBreedingTable,
   buildStock,
   childOf,
   pairKey,
   planFor,
   reachFrom,
+  type BreedNode,
+  type BreedStep,
   type BreedingTable,
   type Stock,
 } from '@/domain/breeding.ts'
@@ -892,6 +895,96 @@ describe('planFor', () => {
 /* -------------------------------------------------------------------------
    When there is no route
    ------------------------------------------------------------------------- */
+
+describe('what sex costs a plan', () => {
+  const table = buildBreedingTable(
+    data({ aa: [100], bb: [200], mid: [150], top: [175], far: [900] }),
+  )
+
+  it('adds nothing to a pair of pals already held', () => {
+    const s = stockOf(table, [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female' }),
+    ])
+    const p = plan(table, s, 'mid')
+    expect(p.steps[0]!.gender).toBeUndefined()
+    expect(p).toMatchObject({ expectedEggs: 1, genderEggs: 0 })
+  })
+
+  it('doubles a step whose egg must match a pal held in one sex only', () => {
+    // top is mid × bb, and the only bb is female: mid has to hatch male.
+    const s = stockOf(table, [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female' }),
+    ])
+    const p = plan(table, s, 'top')
+    const mid = p.steps.find((x) => x.species === 'mid')!
+    expect(mid.gender).toEqual({
+      factor: 2,
+      why: 'single',
+      forStep: p.steps.at(-1)!.n,
+      partner: 'bb',
+      must: 'Male',
+    })
+    expect(mid.expectedEggs).toBe(2)
+    // Two steps that would be two eggs: one more for the coin flip.
+    expect(p).toMatchObject({ expectedEggs: 3, genderEggs: 1 })
+  })
+
+  it('asks nothing when the held parent exists in both sexes', () => {
+    const s = stockOf(table, [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female' }),
+      pal('bb', { gender: 'Male' }),
+    ])
+    const p = plan(table, s, 'top')
+    expect(p.steps.every((x) => !x.gender)).toBe(true)
+    expect(p).toMatchObject({ expectedEggs: 2, genderEggs: 0 })
+  })
+
+  it('triples the step that makes a species paired with itself', () => {
+    const t = buildBreedingTable(
+      data({ aa: [100], bb: [300], mid: [200], end: [200] }, [
+        { a: 'mid', b: 'mid', child: 'end' },
+      ]),
+    )
+    const s = stockOf(t, [
+      pal('aa', { gender: 'Male' }),
+      pal('bb', { gender: 'Female' }),
+    ])
+    const p = plan(t, s, 'end')
+    const mid = p.steps.find((x) => x.species === 'mid')!
+    // One hatch of whichever sex, then two more on average for the other.
+    expect(mid.gender).toMatchObject({ factor: 3, why: 'self' })
+    expect(p.steps.at(-1)!.gender).toBeUndefined()
+    expect(p).toMatchObject({ expectedEggs: 4, genderEggs: 2 })
+  })
+
+  it('multiplies the passive odds, on the cheaper of two bred parents', () => {
+    const held: BreedNode = { kind: 'owned', species: 'aa', count: 1, either: true } // prettier-ignore
+    const bred = (species: string, step: number): BreedNode => ({ kind: 'bred', species, step, a: held, b: held }) // prettier-ignore
+    const step = (
+      n: number,
+      species: string,
+      a: BreedNode,
+      b: BreedNode,
+      expectedEggs?: number,
+    ): BreedStep =>
+      // prettier-ignore
+      ({ n, species, a, b, generation: 1, selfPair: false, expectedEggs })
+    const steps = [
+      step(1, 'dear', held, held, 10),
+      step(2, 'cheap', held, held, 4),
+      step(3, 'end', bred('dear', 1), bred('cheap', 2), 5),
+    ]
+    const totals = applyGender(steps)
+    // The passive-only figure is 10 + 4 + 5. Sex doubles the 4, not the 10.
+    expect(steps[1]!.gender).toMatchObject({ factor: 2, why: 'match', partner: 'dear' }) // prettier-ignore
+    expect(steps[1]!.expectedEggs).toBe(8)
+    expect(steps[0]!.gender).toBeUndefined()
+    expect(totals).toEqual({ expectedEggs: 23, genderEggs: 4 })
+  })
+})
 
 describe('planFor — the honest failures', () => {
   const table = buildBreedingTable(

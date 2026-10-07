@@ -357,9 +357,7 @@ export function buildStock(
           palCount: index.palsByGuild.get(group.groupId)?.length ?? 0,
         }
       : undefined
-  const guildPals = guild
-    ? (index.palsByGuild.get(guild.groupId) ?? [])
-    : []
+  const guildPals = guild ? (index.palsByGuild.get(guild.groupId) ?? []) : []
 
   // Who *could* be pooled, counted from the pals themselves rather than from the
   // guild's member list. A departed member's pals keep their owner uid, so a
@@ -798,6 +796,11 @@ export type BreedNode =
        * end up advising "Chikipi ♂ × Chikipi ♂", which is not a pairing.
        */
       gender?: Gender
+      /**
+       * Whether the other sex of this parent is on hand too, so whatever it is
+       * paired with may come out either way. False pins the partner's sex.
+       */
+      either?: boolean
       /** How many of this species the player holds, in any gender. */
       count: number
       /** Wanted passives this specific pal is here to contribute. */
@@ -821,9 +824,16 @@ export interface BreedStep {
 
   /** Wanted passives this egg has to come out carrying. */
   carries?: string[]
-  /** Chance one hatch is good enough, and the hatches that implies. */
+  /**
+   * Chance one hatch is good enough, and the hatches that implies.
+   *
+   * `expectedEggs` includes what {@link gender} asks for. Absent on a step
+   * with neither a passive to land nor a sex to hit: that one is one egg.
+   */
   chance?: number
   expectedEggs?: number
+  /** What the sex of this egg costs, when the step it feeds cares. */
+  gender?: GenderDemand
   /** Distinct passives in the two parents' combined pool — the dilution. */
   pool?: number
   /** The most junk this egg may carry and still serve the route. */
@@ -838,6 +848,31 @@ export interface BreedStep {
    * search answers for itself, by seeding owned species as roots.
    */
   progress?: StepProgress
+}
+
+/**
+ * Why a step has to be hatched more than once to get the sex it is needed in.
+ *
+ * A pair is a male and a female, and a hatch is taken as an even coin flip. So
+ * an egg that must come out one particular sex takes two good hatches on
+ * average, and one that is then paired with its own kind takes three: the
+ * first, whichever it is, and two more on average for the other.
+ */
+export interface GenderDemand {
+  /** Good hatches needed on average, where one would otherwise do. */
+  factor: 2 | 3
+  /**
+   * - `self`: paired with another of the same egg, so one of each is needed.
+   * - `match`: paired with another bred pal, and must be the opposite sex.
+   * - `single`: paired with a held pal that exists in one sex only.
+   */
+  why: 'self' | 'match' | 'single'
+  /** The step that uses this egg and sets the requirement. */
+  forStep: number
+  /** The species it is paired with there. */
+  partner: string
+  /** For `single`: the sex this egg must be. */
+  must?: Gender
 }
 
 /** The closest pal the player holds to what a step is asking for. */
@@ -932,6 +967,11 @@ export interface BreedingPlan {
    * are involved, which is exactly why both are shown.
    */
   expectedEggs?: number
+  /**
+   * Of {@link expectedEggs}, the hatches that are there only to get the right
+   * sex. Zero when no step is constrained.
+   */
+  genderEggs?: number
   /** The search hit its budget, so a better route may exist unfound. */
   truncated?: boolean
   /**
@@ -1063,7 +1103,69 @@ export function planFor(
     options,
     borrowed: borrowedIn(steps, stock.ownerUid),
     blockers: [],
+    ...applyGender(steps),
   }
+}
+
+/**
+ * Works out what sex costs each step, and the plan's totals with it in.
+ *
+ * Run once the step list is complete, because the requirement comes from the
+ * step that *uses* an egg and lands on the step that *makes* it. Mutates the
+ * steps it is given.
+ *
+ * This is reporting, not search: the route was chosen on eggs and passive odds
+ * alone. Folding sex into the search would rarely change the route and would
+ * multiply its state space, so the estimate is corrected and the choice is not.
+ */
+export function applyGender(steps: BreedStep[]): {
+  expectedEggs: number
+  genderEggs: number
+} {
+  const eggsOf = (s: BreedStep) => s.expectedEggs ?? 1
+  const ask = (step: BreedStep, demand: GenderDemand) => {
+    // An egg used in two places takes the dearer of what they ask. Two uses
+    // can in principle want opposite sexes, which this undercounts; it has not
+    // come up, since a shared intermediate is almost always a self-pair.
+    if (!step.gender || demand.factor > step.gender.factor) step.gender = demand
+  }
+
+  for (const user of steps) {
+    const a = user.a.kind === 'bred' ? steps[user.a.step - 1] : undefined
+    const b = user.b.kind === 'bred' ? steps[user.b.step - 1] : undefined
+    if (a && b) {
+      if (a === b) {
+        ask(a, { factor: 3, why: 'self', forStep: user.n, partner: a.species })
+      } else {
+        // Either could be the one re-hatched, so it is the cheaper one.
+        const [roll, keep] = eggsOf(a) <= eggsOf(b) ? [a, b] : [b, a]
+        ask(roll, { factor: 2, why: 'match', forStep: user.n, partner: keep.species }) // prettier-ignore
+      }
+      continue
+    }
+    const bred = a ?? b
+    const held = a ? user.b : user.a
+    if (!bred || held.kind !== 'owned' || held.either || !held.gender) continue
+    ask(bred, {
+      factor: 2,
+      why: 'single',
+      forStep: user.n,
+      partner: held.species,
+      must: held.gender === 'Male' ? 'Female' : 'Male',
+    })
+  }
+
+  let expectedEggs = 0
+  let genderEggs = 0
+  for (const step of steps) {
+    const base = eggsOf(step)
+    if (step.gender) {
+      step.expectedEggs = base * step.gender.factor
+      genderEggs += step.expectedEggs - base
+    }
+    expectedEggs += eggsOf(step)
+  }
+  return { expectedEggs, genderEggs }
 }
 
 /**
@@ -1252,6 +1354,7 @@ function ownedNode(
     species: entry.id,
     use,
     gender: want ?? use?.gender,
+    either: entry.male.length > 0 && entry.female.length > 0,
     count: entry.male.length + entry.female.length + entry.unknown.length,
   }
 }
