@@ -32,7 +32,11 @@ export interface Pal {
   gender?: Gender
   level: number
   exp: number
-  /** Condensing ("souls") rank, 0–4. Present on very few pals. */
+  /**
+   * The save's own `Rank`, which counts from one: absent (read as 0) or 1 is a
+   * pal that has never been condensed, and 2 to 5 are one to four stars. Use
+   * `condenserStars` for anything shown to a person.
+   */
   rank: number
   rankAttack: number
   rankDefence: number

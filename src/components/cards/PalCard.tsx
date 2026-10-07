@@ -2,7 +2,7 @@ import type { Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ivTotal } from '../../domain/index.ts'
 import { conditions } from '../../domain/palState.ts'
-import { palName } from '../../domain/palText.ts'
+import { condenserStars, palName } from '../../domain/palText.ts'
 import { GameIcon } from '../GameIcon.tsx'
 import { PassiveChip, Pill } from '../primitives.tsx'
 import { effectText } from '../../views/builds/buildsText.ts'
@@ -65,7 +65,7 @@ export function PalCard({
           )}
           {pal.isBoss && <Pill tone="danger">alpha</Pill>}
           {pal.isRare && <Pill tone="warn">rare</Pill>}
-          {pal.rank > 0 && <Pill>★{pal.rank}</Pill>}
+          {condenserStars(pal) > 0 && <Pill>★{condenserStars(pal)}</Pill>}
         </span>
       </div>
 

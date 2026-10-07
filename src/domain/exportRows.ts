@@ -37,7 +37,7 @@ import {
   structureName,
 } from './names.ts'
 import { placeText, placer, workLevel } from './palState.ts'
-import { palName } from './palText.ts'
+import { condenserStars, palName } from './palText.ts'
 import { formatMapPos, posToMap } from './coords.ts'
 import type { Container, ItemStack, Pal, SaveIndex } from './types.ts'
 
@@ -82,7 +82,8 @@ export function palColumns(
     { header: 'iv_defense', value: (p) => p.ivDefense },
     { header: 'iv_total', value: (p) => ivTotal(p) },
     { header: 'elements', value: (p) => elements(p) },
-    { header: 'condenser_rank', value: (p) => p.rank },
+    // Stars, 0 to 4, not the save's raw value, which counts from one.
+    { header: 'condenser_rank', value: (p) => condenserStars(p) },
     { header: 'rank_attack', value: (p) => p.rankAttack },
     { header: 'rank_defence', value: (p) => p.rankDefence },
     { header: 'rank_hp', value: (p) => p.rankHp },

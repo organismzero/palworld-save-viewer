@@ -81,7 +81,8 @@ export function palTooltip(
     `IV ${ivTotal(pal)}/300 — hp ${pal.ivHp ?? 0}, atk ${pal.ivAttack ?? 0}, def ${pal.ivDefense ?? 0}`,
   )
 
-  if (pal.rank > 0) lines.push(`condensed ★${pal.rank}`)
+  const stars = condenserStars(pal)
+  if (stars > 0) lines.push(`condensed ★${stars}`)
   if (pal.sickness) lines.push(`sick: ${pal.sickness}`)
 
   if (pal.passives.length > 0) {
@@ -96,6 +97,18 @@ export function palTooltip(
   }
 
   return lines.join('\n')
+}
+
+/**
+ * How many stars a pal has from the Pal Condenser, 0 to 4.
+ *
+ * One less than the save's `Rank`, which starts at 1 for a pal nobody has
+ * condensed. The reference save shows it plainly: 59 pals at 2, a handful at
+ * 3, 4 and 5, and not one at 1. Printing the raw value called a one-star pal
+ * "★2" and a finished one "★5", a rank the game does not have.
+ */
+export function condenserStars(pal: Pal): number {
+  return Math.max(0, pal.rank - 1)
 }
 
 /** What the `★N` pill on a pal card means. */

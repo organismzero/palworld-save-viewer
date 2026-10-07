@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { palName, palTooltip } from '@/domain/palText.ts'
+import { condenserStars, palName, palTooltip } from '@/domain/palText.ts'
 import type { Pal } from '@/domain/types.ts'
 
 function pal(overrides: Partial<Pal> = {}): Pal {
@@ -75,7 +75,7 @@ describe('palTooltip', () => {
     expect(text).toContain('alpha')
     expect(text).toContain('rare')
     expect(text).toContain('female')
-    expect(text).toContain('condensed ★3')
+    expect(text).toContain('condensed ★2')
   })
 
   it('omits absent detail rather than listing it as empty', () => {
@@ -134,5 +134,13 @@ describe('palTooltip', () => {
     expect(
       palTooltip(pal(), { name: 'X', element1: 'EPalElementType::Leaf' }),
     ).toContain('Grass')
+  })
+})
+
+describe('condenserStars', () => {
+  it('is one less than the save’s rank, which counts from one', () => {
+    const stars = (rank: number) => condenserStars({ rank } as Parameters<typeof condenserStars>[0]) // prettier-ignore
+    // Absent and 1 are both "never condensed".
+    expect([0, 1, 2, 5].map(stars)).toEqual([0, 0, 1, 4])
   })
 })

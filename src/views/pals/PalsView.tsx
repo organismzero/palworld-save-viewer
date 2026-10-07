@@ -5,7 +5,11 @@ import { ivTotal } from '../../domain/index.ts'
 import type { Pal, SaveIndex } from '../../domain/types.ts'
 import { WORK_TYPES, element } from '../../lib/color.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
-import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
+import {
+  CONDENSER_RANK_HELP,
+  condenserStars,
+  palName,
+} from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import {
@@ -557,7 +561,9 @@ function PalCard({
         )}
         {pal.isBoss && <Pill tone="danger">alpha</Pill>}
         {pal.isRare && <Pill tone="warn">rare</Pill>}
-        {pal.rank > 0 && <Pill title={CONDENSER_RANK_HELP}>★{pal.rank}</Pill>}
+        {condenserStars(pal) > 0 && (
+          <Pill title={CONDENSER_RANK_HELP}>★{condenserStars(pal)}</Pill>
+        )}
       </div>
     </button>
   )
@@ -779,10 +785,10 @@ function PalDetail({
           label="IVs"
           value={`${pal.ivHp ?? '–'} / ${pal.ivAttack ?? '–'} / ${pal.ivDefense ?? '–'}`}
         />
-        {pal.rank > 0 && (
+        {condenserStars(pal) > 0 && (
           <Field
             label="condensed"
-            value={`★${pal.rank}`}
+            value={`★${condenserStars(pal)}`}
             title={CONDENSER_RANK_HELP}
           />
         )}
