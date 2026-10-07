@@ -12,6 +12,7 @@
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import {
   bool,
+  num,
   resolveShortId,
   shortId,
   str,
@@ -20,7 +21,14 @@ import {
 } from '../../app/viewParams.ts'
 
 export type Source =
-  { kind: 'base'; baseId: Guid } | { kind: 'world' } | { kind: 'unattributed' }
+  | { kind: 'base'; baseId: Guid }
+  | { kind: 'world' }
+  | { kind: 'unattributed' }
+  /** Not a place: every worn item, wherever it is. */
+  | { kind: 'wear' }
+
+/** Worn means at or under this share of full durability, by default. */
+export const DEFAULT_WEAR = 25
 
 export interface BasesParams {
   source: Source
@@ -43,6 +51,8 @@ export interface BasesParams {
   locked: boolean
   /** Grouped by what a thing is, or flat with the fullest storage first. */
   sort: StructureSort
+  /** The wear audit's threshold, as a whole percentage of full durability. */
+  wear: number
 }
 
 export type StructureSort = 'type' | 'full'
@@ -57,6 +67,7 @@ export const BASES_DEFAULTS: BasesParams = {
   damaged: false,
   locked: false,
   sort: 'type',
+  wear: DEFAULT_WEAR,
 }
 
 export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
@@ -68,6 +79,7 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
       const out: Record<string, string> = {}
       if (v.source.kind === 'base') out.src = `base:${shortId(v.source.baseId)}`
       else if (v.source.kind === 'unattributed') out.src = 'orphans'
+      else if (v.source.kind === 'wear') out.src = 'wear'
       else out.src = 'world'
       if (v.containerId) out.c = shortId(v.containerId)
       if (v.query !== d.query) out.q = v.query
@@ -77,6 +89,7 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
       if (v.damaged) out.dmg = '1'
       if (v.locked) out.lock = '1'
       if (v.sort !== d.sort) out.sort = v.sort
+      if (v.wear !== d.wear) out.wear = String(v.wear)
       return out
     },
 
@@ -91,6 +104,7 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
         : d.source
 
       if (src === 'orphans') source = { kind: 'unattributed' }
+      else if (src === 'wear') source = { kind: 'wear' }
       else if (src === 'world') source = { kind: 'world' }
       else if (src?.startsWith('base:')) {
         const baseId = resolveShortId(src.slice(5), index.baseById.keys())
@@ -121,6 +135,7 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
         damaged: bool(raw, 'dmg', d.damaged),
         locked: bool(raw, 'lock', d.locked),
         sort: raw.get('sort') === 'full' ? 'full' : d.sort,
+        wear: Math.min(100, Math.max(0, Math.round(num(raw, 'wear', d.wear)))),
       }
     },
 

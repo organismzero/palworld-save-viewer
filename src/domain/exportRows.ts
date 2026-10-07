@@ -25,7 +25,7 @@
 
 import type { Column } from '../lib/export.ts'
 import type { Refdata } from '../refdata/refdata.ts'
-import { containerLocation, type ItemHit } from './bases.ts'
+import { containerLocation, type ItemHit, type WornItem } from './bases.ts'
 import { WORK_TYPES } from '../lib/color.ts'
 import { ticksToDate } from '../lib/format.ts'
 import { ivTotal } from './index.ts'
@@ -296,5 +296,64 @@ export const ITEM_HIT_COLUMNS: Column<ItemHitRow>[] = [
   { header: 'where', value: (r) => r.where },
   { header: 'detail', value: (r) => r.detail },
   { header: 'location_exact', value: (r) => r.exact },
+  { header: 'container_id', value: (r) => r.containerId },
+]
+
+/* -------------------------------------------------------------------------
+   Worn items
+   ------------------------------------------------------------------------- */
+
+/** One row per worn item, with where to go and find it. */
+export interface WornRow {
+  item: string
+  itemId: string
+  durability: number
+  durabilityFull: number
+  percent: number
+  where: string
+  detail: string
+  exact: boolean
+  slot: number
+  containerId: string
+}
+
+export function wornRows(
+  index: SaveIndex,
+  refdata: Refdata | undefined,
+  worn: readonly WornItem[],
+): WornRow[] {
+  const where = locator(index, refdata)
+
+  return worn.flatMap((w) => {
+    const container = index.containerById.get(w.containerId)
+    if (!container) return []
+    const at = where(container)
+    return [
+      {
+        item: itemName(refdata, w.staticId),
+        itemId: w.staticId,
+        durability: Math.round(w.durability),
+        durabilityFull: w.full,
+        percent: Math.round(w.fraction * 100),
+        where: at.label,
+        detail: at.detail ?? '',
+        exact: at.exact,
+        slot: w.slot,
+        containerId: w.containerId,
+      },
+    ]
+  })
+}
+
+export const WORN_COLUMNS: Column<WornRow>[] = [
+  { header: 'item', value: (r) => r.item },
+  { header: 'item_id', value: (r) => r.itemId },
+  { header: 'durability', value: (r) => r.durability },
+  { header: 'durability_full', value: (r) => r.durabilityFull },
+  { header: 'percent', value: (r) => r.percent },
+  { header: 'where', value: (r) => r.where },
+  { header: 'detail', value: (r) => r.detail },
+  { header: 'location_exact', value: (r) => r.exact },
+  { header: 'slot', value: (r) => r.slot },
   { header: 'container_id', value: (r) => r.containerId },
 ]

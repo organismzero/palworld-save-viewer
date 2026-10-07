@@ -300,6 +300,7 @@ export function byFullness(
 
 export interface WornItem {
   staticId: string
+  dynamicId: Guid
   containerId: Guid
   slot: number
   durability: number
@@ -330,6 +331,7 @@ export function wornItems(
       if (fraction === undefined || fraction > threshold) continue
       out.push({
         staticId: slot.staticId,
+        dynamicId: slot.dynamicLocalId,
         containerId: c.containerId,
         slot: slot.slot,
         durability: dynamic!.durability!,

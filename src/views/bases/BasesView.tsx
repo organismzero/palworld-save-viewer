@@ -11,8 +11,10 @@ import {
   isDamaged,
   searchItems,
   storageTotals,
+  wornItems,
   type Builder,
   type ItemHit,
+  type WornItem,
 } from '../../domain/bases.ts'
 import {
   baseNames as namesOfBases,
@@ -37,8 +39,10 @@ import { ExportMenu } from '../../components/ExportMenu.tsx'
 import {
   CONTAINER_COLUMNS,
   ITEM_HIT_COLUMNS,
+  WORN_COLUMNS,
   containerRows,
   itemHitRows,
+  wornRows,
 } from '../../domain/exportRows.ts'
 import { Field, Meter, Panel, Pill } from '../../components/primitives.tsx'
 import {
@@ -47,6 +51,7 @@ import {
   IconButton,
   ListRow,
   MoreResults,
+  RangeControl,
   SelectControl,
   TextInput,
 } from '../../components/controls.tsx'
@@ -56,6 +61,7 @@ import {
   type Combobox,
 } from '../../components/combobox.ts'
 import { categoricalCss } from '../../lib/categorical.ts'
+import { wearColor } from '../../lib/color.ts'
 import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -249,6 +255,21 @@ export function BasesView({ index }: { index: SaveIndex }) {
   const clearFilters = () =>
     patch({ storageOnly: false, builder: '', damaged: false, locked: false })
 
+  /**
+   * Everything worn, at the current threshold. Worked out here rather than in
+   * the list because the rail counts it too. Empty until reference data
+   * arrives: an item's full durability is not in the save.
+   */
+  const worn = useMemo(
+    () =>
+      wornItems(
+        index,
+        (staticId) => data?.items[staticId.toLowerCase()]?.durability,
+        params.wear / 100,
+      ),
+    [index, data, params.wear],
+  )
+
   /** What the centre column is showing, resolved to containers, for export. */
   const visibleContainers = useMemo(() => {
     if (source.kind === 'unattributed') return orphans
@@ -275,6 +296,8 @@ export function BasesView({ index }: { index: SaveIndex }) {
         baseNames={baseNames}
         worldChests={worldChests}
         orphans={orphans}
+        worn={data ? worn.length : undefined}
+        wear={params.wear}
         source={source}
         onSelect={(s) =>
           // The builder goes with the place: whoever built one base may have
@@ -308,16 +331,44 @@ export function BasesView({ index }: { index: SaveIndex }) {
             setQuery('')
           }}
         >
-          {source.kind !== 'unattributed' && (
-            <StructureFilters
-              params={params}
-              builders={builders}
-              onChange={patch}
+          {source.kind === 'wear' ? (
+            <RangeControl
+              label="at or under, % of full"
+              value={params.wear}
+              onChange={(wear) => patch({ wear })}
+              step={5}
             />
+          ) : (
+            source.kind !== 'unattributed' && (
+              <StructureFilters
+                params={params}
+                builders={builders}
+                onChange={patch}
+              />
+            )
           )}
         </ItemSearch>
 
-        {source.kind === 'unattributed' ? (
+        {source.kind === 'wear' ? (
+          <WearList
+            index={index}
+            worn={worn}
+            threshold={params.wear}
+            degraded={!data}
+            nameOfItem={nameOfItem}
+            nameOfStructure={nameOfStructure}
+            nameOfBase={nameOfBase}
+            selected={selectedContainer}
+            onSelect={(id) =>
+              // The source stays on the audit, so the next worn thing is one
+              // click away; the pane beside it shows where this one is.
+              patch({
+                containerId: id,
+                structureId: index.structureByContainer.get(id),
+              })
+            }
+          />
+        ) : source.kind === 'unattributed' ? (
           <OrphanList
             index={index}
             orphans={orphans}
@@ -355,12 +406,21 @@ export function BasesView({ index }: { index: SaveIndex }) {
           a container is a sparse set of slots and not a rectangle.
         */}
         <div className="flex shrink-0 justify-end border-b border-[var(--color-line)] px-3 py-1.5">
-          <ExportMenu
-            rows={containerRows(index, data, visibleContainers)}
-            columns={CONTAINER_COLUMNS}
-            kind="storage"
-            title={`Export the contents of ${visibleContainers.length} containers in this view`}
-          />
+          {source.kind === 'wear' ? (
+            <ExportMenu
+              rows={wornRows(index, data, worn)}
+              columns={WORN_COLUMNS}
+              kind="wear"
+              title={`Export the ${worn.length} worn items in this list`}
+            />
+          ) : (
+            <ExportMenu
+              rows={containerRows(index, data, visibleContainers)}
+              columns={CONTAINER_COLUMNS}
+              kind="storage"
+              title={`Export the contents of ${visibleContainers.length} containers in this view`}
+            />
+          )}
         </div>
 
         {/* Structure first: it describes the selection whether or not it has
@@ -428,6 +488,8 @@ function SourceRail({
   baseNames,
   worldChests,
   orphans,
+  worn,
+  wear,
   source,
   onSelect,
 }: {
@@ -436,6 +498,10 @@ function SourceRail({
   baseNames: Map<Guid, string>
   worldChests: Structure[]
   orphans: Container[]
+  /** How many items are worn, or undefined while that cannot be known. */
+  worn: number | undefined
+  /** The threshold that count was taken at, as a percentage. */
+  wear: number
   source: Source
   onSelect: (s: Source) => void
 }) {
@@ -520,6 +586,24 @@ function SourceRail({
                 `${unknown} with no owner at all`,
               ]}
               onClick={() => onSelect({ kind: 'unattributed' })}
+            />
+          </li>
+        </ul>
+      </Panel>
+
+      <Panel title="Wear">
+        <ul>
+          <li>
+            <RailButton
+              active={source.kind === 'wear'}
+              title="Worn gear"
+              lines={[
+                worn === undefined
+                  ? 'needs game data'
+                  : `${count(worn)} ${worn === 1 ? 'item' : 'items'}`,
+                `at or under ${wear}% durability`,
+              ]}
+              onClick={() => onSelect({ kind: 'wear' })}
             />
           </li>
         </ul>
@@ -1189,6 +1273,127 @@ function ownerLabel(index: SaveIndex, c: Container): string {
 function OwnerKindPill({ kind }: { kind: Container['ownerKind'] }) {
   const tone = kind === 'unknown' ? 'warn' : 'neutral'
   return <Pill tone={tone}>{kind}</Pill>
+}
+
+/* -------------------------------------------------------------------------
+   Centre — the wear audit
+   ------------------------------------------------------------------------- */
+
+/**
+ * Every worn item in the save, worst first, each with where it is.
+ *
+ * Wear was only ever visible one cell at a time, as a two-pixel bar on a slot
+ * you had already found. This is the same fact asked the other way round:
+ * what is about to break, and where do I go to fix it.
+ */
+function WearList({
+  index,
+  worn,
+  threshold,
+  degraded,
+  nameOfItem,
+  nameOfStructure,
+  nameOfBase,
+  selected,
+  onSelect,
+}: {
+  index: SaveIndex
+  worn: WornItem[]
+  threshold: number
+  /** No reference data, so no full durability to measure against. */
+  degraded: boolean
+  nameOfItem: (staticId: string) => string
+  nameOfStructure: (s: Structure) => string
+  nameOfBase: (b: Base) => string
+  selected?: Guid
+  onSelect: (containerId: Guid) => void
+}) {
+  const { data } = useRefdataStore()
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: worn.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  })
+
+  if (worn.length === 0) {
+    return (
+      <p className="p-6 text-sm leading-relaxed text-[var(--color-muted)]">
+        {degraded
+          ? 'Wear is measured against an item’s full durability, which is game data rather than something the save records. It could not be loaded.'
+          : `Nothing is at or under ${threshold}% of its durability.`}
+      </p>
+    )
+  }
+
+  return (
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((v) => {
+          const w = worn[v.index]
+          const c = w ? index.containerById.get(w.containerId) : undefined
+          if (!w || !c) return null
+          const where = containerLocation(index, c, nameOfStructure, nameOfBase)
+          const name = nameOfItem(w.staticId)
+          const isSelected = w.containerId === selected
+          return (
+            <div
+              key={w.dynamicId}
+              className="absolute inset-x-0 top-0"
+              style={{
+                height: ROW_HEIGHT,
+                transform: `translateY(${v.start}px)`,
+              }}
+            >
+              <ListRow
+                selected={isSelected}
+                onClick={() => onSelect(w.containerId)}
+                card={{
+                  kind: 'item',
+                  staticId: w.staticId,
+                  count: 1,
+                  dynamicId: w.dynamicId,
+                }}
+                className="h-full"
+              >
+                <GameIcon
+                  path={data?.items[w.staticId.toLowerCase()]?.icon}
+                  name={name}
+                  size={22}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate leading-tight">{name}</span>
+                  <span
+                    className={cn(
+                      'block truncate text-[11px]',
+                      isSelected
+                        ? 'text-white/75'
+                        : 'text-[var(--color-muted)]',
+                    )}
+                  >
+                    {where.label}
+                    {where.detail && ` · ${where.detail}`}
+                  </span>
+                </span>
+                <span
+                  className="num shrink-0 text-xs"
+                  style={{
+                    color: isSelected ? undefined : wearColor(w.fraction),
+                  }}
+                  title={`${Math.round(w.durability)} of ${w.full} durability`}
+                >
+                  {Math.round(w.fraction * 100)}%
+                </span>
+              </ListRow>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 /* -------------------------------------------------------------------------

@@ -17,13 +17,16 @@ import {
   hpPercent,
   isDamaged,
   wearFraction,
+  wornItems,
 } from '@/domain/bases.ts'
 import { BASES_DEFAULTS, basesCodec } from '@/views/bases/params.ts'
 import {
   CONTAINER_COLUMNS,
   ITEM_HIT_COLUMNS,
+  WORN_COLUMNS,
   containerRows,
   itemHitRows,
+  wornRows,
 } from '@/domain/exportRows.ts'
 import type {
   Base,
@@ -61,8 +64,9 @@ const chest: Container = {
     slot(6, 'Egg', 1, id('4')),
     slot(7, 'Egg', 1, id('4')),
   ],
-  ownerKind: 'unknown',
-  confidence: 'inferred',
+  ownerKind: 'structure',
+  ownerId: id('7'),
+  confidence: 'exact',
   slotCount: 7,
   usedSlots: 7,
 }
@@ -277,5 +281,61 @@ describe('the structure list in a Bases link', () => {
     expect(codec.missing!(new URLSearchParams('by=99999999'))).toEqual(['a builder']) // prettier-ignore
     const got = codec.decode(new URLSearchParams('by=99999999&sort=nope'), BASES_DEFAULTS) // prettier-ignore
     expect(got).toMatchObject({ builder: '', sort: 'type' })
+  })
+})
+
+describe('wornItems', () => {
+  const fullOf = (staticId: string) =>
+    data.items[staticId.toLowerCase()]?.durability
+
+  it('lists what is at or under the threshold, worst first', () => {
+    const got = wornItems(index, fullOf, 0.9)
+    expect(got.map((w) => [w.staticId, w.fraction])).toEqual([
+      ['Pickaxe', 0.25],
+      ['Pickaxe', 0.9],
+    ])
+    expect(got[0]).toMatchObject({ containerId: chest.containerId, slot: 2, full: 200 }) // prettier-ignore
+  })
+
+  it('includes the threshold itself and nothing above it', () => {
+    expect(wornItems(index, fullOf, 0.25)).toHaveLength(1)
+    expect(wornItems(index, fullOf, 0.24)).toHaveLength(0)
+    expect(wornItems(index, fullOf, 1)).toHaveLength(3)
+  })
+
+  it('calls nothing worn without a full durability to measure against', () => {
+    expect(wornItems(index, () => undefined, 1)).toEqual([])
+  })
+
+  it('exports each with where it is', () => {
+    const [row] = wornRows(index, data, wornItems(index, fullOf, 0.5))
+    expect(row).toMatchObject({
+      item: 'Pickaxe',
+      durability: 50,
+      durabilityFull: 200,
+      percent: 25,
+      where: 'Thing',
+      exact: true,
+    })
+    expect(WORN_COLUMNS.map((c) => c.header)).toContain('percent')
+  })
+})
+
+describe('the wear audit in a Bases link', () => {
+  const codec = basesCodec(index)
+  const read = (qs: string) => codec.decode(new URLSearchParams(qs), BASES_DEFAULTS) // prettier-ignore
+
+  it('round-trips the source and a threshold that is not the default', () => {
+    const value = { ...BASES_DEFAULTS, source: { kind: 'wear' as const }, wear: 60 } // prettier-ignore
+    const out = codec.encode(value, BASES_DEFAULTS)
+    expect(out).toMatchObject({ src: 'wear', wear: '60' })
+    expect(read(serialiseParams(out))).toEqual(value)
+  })
+
+  it('leaves the default threshold out and clamps a silly one', () => {
+    const out = codec.encode({ ...BASES_DEFAULTS, source: { kind: 'wear' } }, BASES_DEFAULTS) // prettier-ignore
+    expect(out.wear).toBeUndefined()
+    expect(read('src=wear&wear=900').wear).toBe(100)
+    expect(read('src=wear&wear=x').wear).toBe(BASES_DEFAULTS.wear)
   })
 })
