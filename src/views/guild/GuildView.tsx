@@ -44,7 +44,8 @@ import {
   SectionHeading,
   type PillTone,
 } from '../../components/primitives.tsx'
-import { Button, Checkbox, SelectControl } from '../../components/controls.tsx'
+import { Checkbox, SelectControl } from '../../components/controls.tsx'
+import { Jump } from '../../components/Jump.tsx'
 import { PlayerDetailPanel } from './PlayerDetailPanel.tsx'
 import { memberRole } from '../../lib/roles.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
@@ -318,6 +319,7 @@ function MemberStrip({ guild }: { guild: Guild }) {
  * `icon` is a small integer with no lookup table anywhere in the reference
  * data, so it is shown as a raw index rather than guessed at — these are the
  * pins players drop on their own map, and the position is the useful part.
+ * Each one opens the map on itself.
  */
 function Markers({ guild }: { guild: Guild }) {
   if (guild.markers.length === 0) return null
@@ -325,27 +327,17 @@ function Markers({ guild }: { guild: Guild }) {
     <div className="mt-4 flex flex-wrap items-center gap-2">
       <span className="label">map markers</span>
       {guild.markers.map((m) => (
-        <span
+        <Jump
           key={m.markerId}
-          className="num rounded-control border border-[var(--color-line-strong)] px-2 py-1 text-[11px] text-[var(--color-muted)]"
+          view="map"
+          focus={{ kind: 'map', id: m.markerId }}
+          title="Show this marker on the map"
+          quiet
+          className="num rounded-control border border-[var(--color-line-strong)] px-2 py-1 text-[11px] text-[var(--color-muted)] hover:border-[var(--color-signal)]"
         >
           #{m.icon} · {formatMapPos(posToMap(m.pos))}
-        </span>
+        </Jump>
       ))}
-      {/*
-        `setView`, not `location.hash = …`. The hash is a mirror of the store
-        (see `useHashSync`), and a second writer racing it breaks the moment
-        the hash carries more than a view id.
-
-        Labelled "Open map" rather than "View on map" because that is all it
-        can do: it sits outside the `markers.map()` above, so it is one button
-        for N markers and has no marker to centre on. Centring wants a
-        positional member on the `Focus` union — worth doing, but alongside map
-        deep links rather than here.
-      */}
-      <Button size="sm" onClick={() => useUiStore.getState().setView('map')}>
-        Open map
-      </Button>
     </div>
   )
 }

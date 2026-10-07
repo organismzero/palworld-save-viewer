@@ -15,6 +15,7 @@ import {
   PAN_STEP,
   ZOOM_STEP,
   type LayerId,
+  type GuildKey,
   type MapEntity,
   type MapHit,
 } from './MapController.ts'
@@ -73,7 +74,14 @@ export function MapView({ index }: { index: SaveIndex }) {
   const { data, tiles, status, bakeLabel, ensure } = useRefdataStore()
 
   const [params, setParams] = useViewParams('map', MAP_DEFAULTS, mapCodec)
-  const { layers, fog: fogOn, fogOpacity, viewport, selected: wanted } = params
+  const {
+    layers,
+    fog: fogOn,
+    fogOpacity,
+    byGuild,
+    viewport,
+    selected: wanted,
+  } = params
 
   /**
    * The marker the link's selection resolves to on the current controller.
@@ -89,6 +97,7 @@ export function MapView({ index }: { index: SaveIndex }) {
   const [filterOpen, setFilterOpen] = useState(true)
   const [query, setQuery] = useState('')
   const [counts, setCounts] = useState<Record<LayerId, number>>()
+  const [guildKey, setGuildKey] = useState<GuildKey[]>([])
   const localData = useSaveStore((s) => s.localData)
 
   const setLayers = (next: (prev: Set<LayerId>) => Iterable<LayerId>) =>
@@ -197,6 +206,7 @@ export function MapView({ index }: { index: SaveIndex }) {
       // and announcing it would send every effect below to ask it questions.
       if (controllerRef.current !== controller || !controller.ready) return
       setCounts(controller.counts)
+      setGuildKey(controller.guildKey)
       setMounted((n) => n + 1)
     })
 
@@ -245,6 +255,10 @@ export function MapView({ index }: { index: SaveIndex }) {
     if (!controller) return
     for (const id of LAYER_IDS) controller.setLayerVisible(id, layers.has(id))
   }, [layers, mounted])
+
+  useEffect(() => {
+    controllerRef.current?.setTintByGuild(byGuild)
+  }, [byGuild, mounted])
 
   /**
    * Push the client's own save into Pixi.
@@ -586,6 +600,42 @@ export function MapView({ index }: { index: SaveIndex }) {
                 )
               })}
             </ul>
+
+            {/* Only where there is more than one guild to tell apart. With one,
+                every base and structure would turn the same new colour. */}
+            {guildKey.length > 1 && (
+              <div className="mt-2 border-t border-[var(--color-line-faint)] pt-2">
+                <Checkbox
+                  checked={byGuild}
+                  onChange={(on) => setParams((p) => ({ ...p, byGuild: on }))}
+                  className="w-full"
+                  label={
+                    <span
+                      title="Colour bases and player-built structures by the guild that owns them"
+                      className="text-xs"
+                    >
+                      Colour by guild
+                    </span>
+                  }
+                />
+                {byGuild && (
+                  <ul className="mt-1 space-y-0.5 pl-2">
+                    {guildKey.map((g) => (
+                      <li
+                        key={g.id}
+                        className="flex items-center gap-2 text-xs"
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: g.css }}
+                        />
+                        <span className="truncate">{g.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {/* Fog of war. Not in the list above: it is a raster covering the
                 whole map, not a countable set of markers. */}

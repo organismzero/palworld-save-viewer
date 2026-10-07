@@ -31,12 +31,14 @@ import { itemName } from '../../domain/names.ts'
 import { elementColor } from '../../lib/color.ts'
 import type {
   FogMask,
+  Guid,
   LocalDataPayload,
   SaveIndex,
   Vec3,
 } from '../../domain/types.ts'
 import type { Refdata, TileSet } from '../../refdata/refdata.ts'
 import { getTile } from '../../refdata/refdata.ts'
+import { guildTints, type Tint } from './guildTint.ts'
 import { DEFAULT_FOG_OPACITY, type MapViewport } from './params.ts'
 
 export { DEFAULT_FOG_OPACITY }
@@ -124,7 +126,7 @@ export const LAYER_STYLES: Record<LayerId, LayerStyle> = {
   },
   markers: {
     label: 'Map pins',
-    hint: 'Pins you placed by hand, from LocalData.sav. The icon is stored as a number and the game ships no names for it.',
+    hint: 'Markers a guild placed, which are in the save, and pins you placed by hand, which are in LocalData.sav. The icon is stored as a number and the game ships no names for it.',
     color: 0xf472b6,
     css: 'oklch(0.74 0.18 350)',
   },
@@ -147,7 +149,12 @@ export const LAYER_DRAW_ORDER: LayerId[] = [
   'markers',
 ]
 
-type Marker = Sprite & { entity?: MapEntity; baseSize?: number }
+type Marker = Sprite & {
+  entity?: MapEntity
+  baseSize?: number
+  /** The colour it was plotted in, to go back to when guild colours are off. */
+  ownColor?: number
+}
 
 export interface MapEntity {
   kind: LayerId
@@ -161,6 +168,22 @@ export interface MapEntity {
   owner?: string
   /** What a container holds, by display name. */
   holds?: string[]
+  /** The guild it belongs to, for colouring by guild. */
+  guildId?: Guid
+}
+
+/** The layers that colouring by guild repaints. */
+const TINTED: ReadonlySet<LayerId> = new Set([
+  'bases',
+  'structuresBuilt',
+  'markers',
+])
+
+/** One row of the guild colour key. */
+export interface GuildKey {
+  id: Guid
+  name: string
+  css: string
 }
 
 /** A search result, with the reason when it is not the marker's own name. */
@@ -253,6 +276,10 @@ export class MapController {
   private entities: MapEntity[] = []
   private markerOf = new Map<MapEntity, Marker>()
   private unbind: (() => void)[] = []
+  private tints = new Map<Guid, Tint>()
+  private byGuild = false
+  /** Base build-radius rings, which are drawn shapes rather than markers. */
+  private rings: { shape: Graphics; guildId?: Guid }[] = []
   private ring = new Graphics()
   /**
    * Holds the fog sprite, and exists so the fog's z-order is decided once in
@@ -326,6 +353,7 @@ export class MapController {
     // nothing is lost: `mount` reads `opts.local` and applies it itself.
     if (!this.mounted) return
     this.buildMarkers()
+    this.applyTints()
     this.applyFog()
     this.rescaleMarkers()
   }
@@ -441,12 +469,28 @@ export class MapController {
     // Markers are sized in *screen* pixels, so they stay legible at every
     // zoom instead of ballooning. `rescaleMarkers` applies it.
     s.baseSize = size
+    s.ownColor = color
     this.layers.get(e.kind)!.addChild(s)
     this.entities.push(e)
     this.markerOf.set(e, s)
   }
 
-  /** The hand-placed pins, rebuilt from scratch. Cheap: there are a handful. */
+  private place(pos: Vec3 | undefined) {
+    if (!pos) return undefined
+    const at = savToMapAuto(pos.x, pos.y)
+    // The World Tree lives in its own coordinate space and its own image;
+    // showing those entities on the overworld would scatter them.
+    return at.map === 'overworld' ? at : undefined
+  }
+
+  /**
+   * The pins, rebuilt from scratch. Cheap: there are a handful.
+   *
+   * Two sources share the layer. A guild's markers are in the level save and
+   * every member sees them; the hand-placed pins are one client's own, from
+   * `LocalData.sav`, and usually arrive after the map is up — which is why this
+   * can be re-run on its own.
+   */
   private buildMarkers() {
     const layer = this.layers.get('markers')
     if (!layer) return
@@ -455,6 +499,34 @@ export class MapController {
       if (e.kind === 'markers') this.markerOf.delete(e)
     }
     this.entities = this.entities.filter((e) => e.kind !== 'markers')
+
+    for (const guild of this.opts.index.guilds) {
+      for (const m of guild.markers) {
+        const at = this.place(m.pos)
+        if (!at) continue
+        const owner = m.ownerPlayerUid
+          ? this.opts.index.playerByUid.get(m.ownerPlayerUid)?.name
+          : undefined
+        this.addMarker(
+          {
+            kind: 'markers',
+            id: m.markerId,
+            label: `${guild.name} marker`,
+            // The icon is a bare number with no names anywhere in the game's
+            // data, so it is shown as one rather than guessed at.
+            sub: [`icon ${m.icon}`, owner ? `placed by ${owner}` : undefined]
+              .filter(Boolean)
+              .join(' · '),
+            owner,
+            guildId: guild.groupId,
+            world: m.pos,
+            ...at,
+          },
+          LAYER_STYLES.markers.color,
+          12,
+        )
+      }
+    }
 
     for (const [i, m] of (this.opts.local?.markers ?? []).entries()) {
       if (m.at.map !== 'overworld') continue
@@ -479,13 +551,8 @@ export class MapController {
     const add = (e: MapEntity, color: number, size: number, alpha = 1) =>
       this.addMarker(e, color, size, alpha)
 
-    const place = (pos: Vec3 | undefined) => {
-      if (!pos) return undefined
-      const at = savToMapAuto(pos.x, pos.y)
-      // The World Tree lives in its own coordinate space and its own image;
-      // showing those entities on the overworld would scatter them.
-      return at.map === 'overworld' ? at : undefined
-    }
+    const place = (pos: Vec3 | undefined) => this.place(pos)
+    this.tints = guildTints(index.guilds)
 
     for (const [i, base] of index.bases.entries()) {
       const at = place(base.pos)
@@ -495,16 +562,15 @@ export class MapController {
       // `areaRange` is a real world-space radius, so it converts through the
       // image's world scale — not through map coordinates.
       const r = base.areaRange / worldPerPixel(this.mapSize)
-      this.layers.get('bases')!.addChild(
-        new Graphics()
-          .circle(px, py, r)
-          .fill({ color: LAYER_STYLES.bases.color, alpha: 0.07 })
-          .stroke({
-            color: LAYER_STYLES.bases.color,
-            width: 1.5,
-            alpha: 0.5,
-          }),
-      )
+      // Drawn white and tinted, so colouring by guild is one assignment
+      // rather than a redraw.
+      const shape = new Graphics()
+        .circle(px, py, r)
+        .fill({ color: 0xffffff, alpha: 0.07 })
+        .stroke({ color: 0xffffff, width: 1.5, alpha: 0.5 })
+      shape.tint = LAYER_STYLES.bases.color
+      this.layers.get('bases')!.addChild(shape)
+      this.rings.push({ shape, guildId: base.groupId })
       add(
         {
           kind: 'bases',
@@ -516,6 +582,7 @@ export class MapController {
           owner: base.groupId
             ? index.guildById.get(base.groupId)?.name
             : undefined,
+          guildId: base.groupId,
           world: base.pos,
           ...at,
         },
@@ -568,6 +635,7 @@ export class MapController {
               .filter(Boolean)
               .join(' · ') || undefined,
           owner: builder,
+          guildId: builtByPlayer ? s.groupId : undefined,
           holds: s.containerId
             ? index.containerById
                 .get(s.containerId)
@@ -664,6 +732,46 @@ export class MapController {
     }
 
     this.buildMarkers()
+    this.applyTints()
+  }
+
+  /**
+   * Colours bases and player-built structures by the guild that owns them, or
+   * puts them back.
+   *
+   * Only the layers that read as "whose is this", a guild's own markers among
+   * them. Pals keep their element colours, and a pin placed by hand belongs to
+   * no guild and stays as it was.
+   */
+  setTintByGuild(on: boolean) {
+    this.byGuild = on
+    if (this.mounted) this.applyTints()
+  }
+
+  private applyTints() {
+    const pick = (guildId: Guid | undefined, own: number) =>
+      (this.byGuild && guildId ? this.tints.get(guildId)?.color : undefined) ??
+      own
+    for (const [entity, marker] of this.markerOf) {
+      if (!TINTED.has(entity.kind)) continue
+      marker.tint = pick(entity.guildId, marker.ownColor ?? 0xffffff)
+    }
+    for (const { shape, guildId } of this.rings) {
+      shape.tint = pick(guildId, LAYER_STYLES.bases.color)
+    }
+  }
+
+  /** The guilds that have anything on the map to be told apart by colour. */
+  get guildKey(): GuildKey[] {
+    const seen = new Set<Guid>()
+    for (const e of this.entities) if (e.guildId) seen.add(e.guildId)
+    return this.opts.index.guilds
+      .filter((g) => seen.has(g.groupId) && this.tints.has(g.groupId))
+      .map((g) => ({
+        id: g.groupId,
+        name: g.name,
+        css: this.tints.get(g.groupId)!.css,
+      }))
   }
 
   /** Used when the map art is unavailable — still genuinely readable. */

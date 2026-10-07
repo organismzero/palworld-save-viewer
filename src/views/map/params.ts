@@ -92,6 +92,8 @@ export interface MapParams {
   layers: Set<LayerId>
   fog: boolean
   fogOpacity: number
+  /** Colour bases and player-built structures by guild, not by layer. */
+  byGuild: boolean
   /** Absent means "fitted to the window", which is where the map starts. */
   viewport?: MapViewport
   selected?: MapSelection
@@ -101,6 +103,7 @@ export const MAP_DEFAULTS: MapParams = {
   layers: new Set(DEFAULT_LAYERS),
   fog: true,
   fogOpacity: DEFAULT_FOG_OPACITY,
+  byGuild: false,
   viewport: undefined,
   selected: undefined,
 }
@@ -131,6 +134,7 @@ export const mapCodec: ParamCodec<MapParams> = {
     if (v.fogOpacity !== d.fogOpacity) {
       out.fo = String(Math.round(v.fogOpacity * 100))
     }
+    if (v.byGuild) out.by = 'guild'
     // One param for the three numbers: a centre without a zoom, or the other
     // way round, is not a place.
     if (v.viewport) {
@@ -146,6 +150,7 @@ export const mapCodec: ParamCodec<MapParams> = {
       layers: layers(raw, d),
       fog: bool(raw, 'fog', d.fog),
       fogOpacity: clamp(num(raw, 'fo', d.fogOpacity * 100) / 100, 0, 1),
+      byGuild: raw.get('by') === 'guild' ? true : d.byGuild,
       viewport: viewport(raw),
       selected: selection(raw),
     }

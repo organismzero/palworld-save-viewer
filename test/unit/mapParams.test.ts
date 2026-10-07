@@ -36,6 +36,7 @@ describe('mapCodec', () => {
       layers: new Set(['pals', 'bases']),
       fog: false,
       fogOpacity: 0.4,
+      byGuild: true,
       viewport: { mx: 120, my: -340, zoom: 4.25 },
       selected: { layer: 'pals', id: 'abcdef01' },
     }
