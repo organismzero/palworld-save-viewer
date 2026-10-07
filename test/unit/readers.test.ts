@@ -14,6 +14,7 @@ import {
   buildIndexes,
   mergePlayerDetails,
 } from '@/parse/worker/buildIndexes.ts'
+import { jumpedTo } from '@/parse/worker/readers/characters.ts'
 import { buildSaveIndex } from '@/domain/index.ts'
 import type { SaveIndex, SaveWarning, SlimPayload } from '@/domain/types.ts'
 
@@ -189,5 +190,27 @@ describe('fixture redaction', () => {
         (g: any) => g?.value?.RawData?.value?.guild_name,
       )
     expect(guild.value.RawData.value.guild_name).toBe('The Fixture Guild')
+  })
+})
+
+describe('jumpedTo', () => {
+  it('reads a last-jumped location', () => {
+    expect(jumpedTo({ value: { x: 12, y: -3, z: 0 } })).toEqual({
+      x: 12,
+      y: -3,
+      z: 0,
+    })
+  })
+
+  it('reads x 0, y 0 as never having jumped, whatever the height', () => {
+    expect(jumpedTo({ value: { x: 0, y: 0, z: 0 } })).toBeUndefined()
+    // The shape real saves have: the ground under the origin, not zero.
+    expect(jumpedTo({ value: { x: 0, y: 0, z: 7062.14 } })).toBeUndefined()
+    // One axis at zero is an ordinary position.
+    expect(jumpedTo({ value: { x: 0, y: 25, z: 40 } })).toBeDefined()
+  })
+
+  it('reads a missing property as nothing', () => {
+    expect(jumpedTo(undefined)).toBeUndefined()
   })
 })

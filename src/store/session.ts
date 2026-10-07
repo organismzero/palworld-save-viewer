@@ -51,7 +51,9 @@ import { useUiStore } from './uiStore.ts'
 // that metadata is usually added in a gesture of its own.
 // 3: `meta.source` is gone with the `.json` path, and a player record carries
 // `mutations` and `arenaSoloClears`. An old snapshot would restore without them.
-export const SNAPSHOT_VERSION = 3
+// 4: a character that never jumped has no `pos`, where it used to have the
+// world origin. An old snapshot would restore with the pile of pals at one spot.
+export const SNAPSHOT_VERSION = 4
 
 const KEY = 'current'
 const PREF_KEY = 'psv.remember'

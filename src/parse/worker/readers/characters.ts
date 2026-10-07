@@ -27,7 +27,7 @@ import {
 import { nonZero } from '../../guid.ts'
 import type { Warnings } from '../../warnings.ts'
 import { STATUS_NAMES, type StatusKey } from '../../../domain/statusNames.ts'
-import type { Gender, Pal, Player } from '../../../domain/types.ts'
+import type { Gender, Pal, Player, Vec3 } from '../../../domain/types.ts'
 
 export interface CharacterReadResult {
   pals: Pal[]
@@ -109,13 +109,32 @@ function readPal(entry: Node, sp: Node, instanceId: string): Pal {
     groupId: nonZero(characterGroupId(entry)),
     containerId: nonZero(containerIdOf(sp.SlotId)),
     slotIndex: int(sp.SlotId?.value?.SlotIndex),
-    pos: vec3(sp.LastJumpedLocation),
+    pos: jumpedTo(sp.LastJumpedLocation),
     ownedTime: int(sp.OwnedTime),
     sickness: enumTail(sp.WorkerSick),
     physicalHealth: enumTail(sp.PhysicalHealth),
     currentWork: enumTail(sp.CurrentWorkSuitability),
     skinCharacterId: str(sp.SkinAppliedCharacterId),
   }
+}
+
+/**
+ * `LastJumpedLocation`, or nothing when the character has never jumped.
+ *
+ * The property is written for every character, and one that has not moved since
+ * it was created sits at exactly x 0, y 0 — 292 of 3,963 pals in the reference
+ * save, nearly all of them in a palbox. That is "no position", not the world
+ * origin, but read as a position it put every one of them on the same spot on
+ * the map and gave each the same coordinates in its detail panel.
+ *
+ * Tested on x and y alone. The height is not zero for these: it is the ground
+ * under the origin, about 7,062, with a little float noise from one pal to the
+ * next. And exactly zero on both, not merely near it — a real jump landing on
+ * the origin to the last bit of two doubles is not a case worth 292 wrong ones.
+ */
+export function jumpedTo(n: Node): Vec3 | undefined {
+  const at = vec3(n)
+  return at && (at.x !== 0 || at.y !== 0) ? at : undefined
 }
 
 function readPlayer(
@@ -140,7 +159,7 @@ function readPlayer(
     // Ex-status points use the same Japanese keys; flatten both halves into one
     // record since nothing downstream needs them typed.
     exStatusPoints: { ...ex.extra, ...ex.known },
-    pos: vec3(sp.LastJumpedLocation),
+    pos: jumpedTo(sp.LastJumpedLocation),
     groupId: nonZero(characterGroupId(entry)),
     // Container ids live in Players/<uid>.sav, never in Level.sav. Left
     // undefined here on purpose; the UI offers to load that file.
