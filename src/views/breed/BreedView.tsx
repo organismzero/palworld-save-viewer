@@ -25,11 +25,10 @@
 import { useEffect, useMemo } from 'react'
 
 import {
-  buildBreedingTable,
-  buildStock,
   planFor,
-  reachFrom,
   type BreedingPlan,
+  type BreedingTable,
+  type Reach,
   type Stock,
 } from '../../domain/breeding.ts'
 import { busiestPlayer } from '../../domain/guild.ts'
@@ -66,7 +65,8 @@ import {
 import { carrierCounts } from '../../domain/passives.ts'
 import { PlanSteps } from './PlanSteps.tsx'
 import { PassivePicker } from './PassivePicker.tsx'
-import { usePassiveSearch } from './usePassiveSearch.ts'
+import { reachFor, stockFor, tableFor } from './stockCache.ts'
+import { usePassiveSearch, type PassiveSearch } from './usePassiveSearch.ts'
 import { passiveText, type PassiveText } from './passiveText.ts'
 import { speciesText, type SpeciesText } from './speciesText.ts'
 import { ownerText, type OwnerText } from './ownerText.ts'
@@ -120,46 +120,24 @@ export function BreedView({ index }: { index: SaveIndex }) {
 
   // An empty projection means the breeding fetch failed — `slimBreeding` yields
   // empty rather than throwing, so emptiness is the signal, not absence.
-  const table = useMemo(() => {
-    const raw = data?.breeding
-    if (!raw || Object.keys(raw.pals).length === 0) return undefined
-    return buildBreedingTable(raw)
-  }, [data])
-  // `params.includeMembers` is a fresh array on every render, and the stock is
-  // keyed on identity by everything downstream — `reachFrom`'s memo and the
-  // passive search both. So it is re-derived from its own content, which is
-  // stable across renders that did not change the selection.
-  const memberKey = params.includeMembers.join(',')
-  const members = useMemo(
-    () => (memberKey === '' ? [] : (memberKey.split(',') as Guid[])),
-    [memberKey],
-  )
-  const stock = useMemo(
-    () =>
-      buildStock(index, table, ownerUid, {
-        assumeUnknownGender: params.assumeUnknownGender,
-        includeGuild: params.includeGuild,
-        includeBase: params.includeBase,
-        includeMembers: members,
-      }),
-    [
-      index,
-      table,
-      ownerUid,
-      params.assumeUnknownGender,
-      params.includeGuild,
-      params.includeBase,
-      members,
-    ],
-  )
+  const table = tableFor(data?.breeding)
+  // Looked up rather than memoised: the stock is keyed on identity by
+  // everything downstream — the reach and the passive search both — and a memo
+  // dies with the view, which is unmounted on every tab switch. `stockFor`
+  // returns the same object for the same save and settings however many times
+  // the view has come and gone. See `stockCache.ts`.
+  const stock = stockFor(index, table, {
+    ownerUid,
+    assumeUnknownGender: params.assumeUnknownGender,
+    includeGuild: params.includeGuild,
+    includeBase: params.includeBase,
+    includeMembers: params.includeMembers,
+  })
   const owner = useMemo(() => ownerText(index, ownerUid), [index, ownerUid])
   const pairMode = params.mode === 'pair'
   // The expensive one, and the reason for the memo split. Pair mode still pays
   // for it: the rail's "species reachable" tile is shared by both modes.
-  const reach = useMemo(
-    () => (table ? reachFrom(stock, table) : undefined),
-    [table, stock],
-  )
+  const reach = table ? reachFor(stock, table) : undefined
   // The search is keyed on the stock and the passive set, not on the target, so
   // clicking through the species list still costs only the plan. It runs in a
   // worker because it takes seconds at four passives — see `search.worker.ts`.
@@ -389,8 +367,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
             text={text}
             passives={passives}
             owner={owner}
-            pending={search.pending}
-            failed={search.failed}
+            search={search}
             routeIndex={activeRoute(plan, params)}
             onRoute={(i) => patch({ route: plan.options[i] })}
             onDropNoSpares={() => patch({ noSpares: false, route: undefined })}
@@ -467,8 +444,7 @@ function PlanPane({
   text,
   passives,
   owner,
-  pending,
-  failed,
+  search,
   routeIndex,
   onRoute,
   onDropNoSpares,
@@ -479,8 +455,7 @@ function PlanPane({
   text: SpeciesText
   passives: PassiveText
   owner: OwnerText
-  pending: boolean
-  failed: boolean
+  search: PassiveSearch
   routeIndex: number
   onRoute: (i: number) => void
   onDropNoSpares: () => void
@@ -565,8 +540,7 @@ function PlanPane({
         plan={plan}
         stock={stock}
         passives={passives}
-        pending={pending}
-        failed={failed}
+        search={search}
       />
 
       {plan.status === 'plan' ? (
@@ -625,20 +599,33 @@ function PassiveHeader({
   plan,
   stock,
   passives,
-  pending,
-  failed,
+  search,
 }: {
   plan: BreedingPlan
   stock: Stock
   passives: PassiveText
-  pending: boolean
-  failed: boolean
+  search: PassiveSearch
 }) {
+  const { pending, failed, stopped } = search
   const missing = plan.missingPassives ?? []
   const ignored = plan.ignoredPassives ?? []
   /** What the search actually planned for, as against what was asked. */
   const planned = plan.wanted ?? []
-  if (!pending && !failed && missing.length === 0 && ignored.length === 0) {
+  // Only a search long enough to have been noticed is worth timing out loud.
+  const took =
+    search.ms !== undefined && search.ms >= 1000
+      ? `${(search.ms / 1000).toFixed(1)} s`
+      : undefined
+  const truncated = plan.truncated === true
+  if (
+    !pending &&
+    !failed &&
+    !stopped &&
+    !truncated &&
+    took === undefined &&
+    missing.length === 0 &&
+    ignored.length === 0
+  ) {
     return null
   }
 
@@ -650,9 +637,39 @@ function PassiveHeader({
       className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-muted)]"
     >
       {pending && (
+        <div className="flex items-start gap-3">
+          <p className="min-w-0 flex-1">
+            Working out a route that carries those passives. Four of them can
+            take ten seconds or so — the plan below is the species route until
+            it lands.
+          </p>
+          <Button size="sm" onClick={search.cancel}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {stopped && (
+        <div className="flex items-start gap-3">
+          <p className="min-w-0 flex-1">
+            The passive search was cancelled, so this is the species route only.
+          </p>
+          <Button size="sm" onClick={search.retry}>
+            Search again
+          </Button>
+        </div>
+      )}
+      {/* Said here rather than at the foot of the page: it qualifies the route
+          on screen, and a qualification three paragraphs below what it
+          qualifies is one nobody reads. */}
+      {truncated && (
+        <p className="text-[var(--color-gold)]">
+          This search hit its budget before it had looked everywhere, so a
+          better route than this one may exist.
+        </p>
+      )}
+      {took !== undefined && !pending && (
         <p>
-          Working out a route that carries those passives. Four of them can take
-          a few seconds — the plan below is the species route until it lands.
+          The passive search took {took}. It is kept, so coming back is instant.
         </p>
       )}
       {failed && (
@@ -1110,8 +1127,8 @@ function SpeciesList({
   text,
 }: {
   index: SaveIndex
-  table: ReturnType<typeof buildBreedingTable> | undefined
-  reach: ReturnType<typeof reachFrom> | undefined
+  table: BreedingTable | undefined
+  reach: Reach | undefined
   query: string
   selected: string
   onPick: (id: string) => void
@@ -1262,13 +1279,6 @@ function Footnote({ stock, plan }: { stock: Stock; plan?: BreedingPlan }) {
           random fill is never counted as one you wanted, and breeding cakes are
           not modelled at all — each of which makes the real thing a little
           kinder than the number.
-          {plan.truncated && (
-            <>
-              {' '}
-              This search also hit its budget, so a better route may exist that
-              it did not reach.
-            </>
-          )}
         </p>
       )}
     </section>
