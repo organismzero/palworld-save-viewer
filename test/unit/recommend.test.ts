@@ -21,6 +21,7 @@ import {
   ownedWorkers,
   scorePassive,
   sidesFor,
+  opponentPool,
   speciesPool,
   strongSkills,
   workLevel,
@@ -362,6 +363,32 @@ describe('species rankings', () => {
     expect(pool).not.toContain('npc')
   })
 
+  it('offers tower and raid bosses as opponents, once each', () => {
+    const boss = (name: string, element1?: string) => ({ ...species({ element1 }), name }) // prettier-ignore
+    const data = {
+      ...DATA,
+      species: {
+        ...DATA.species,
+        gym_flame: boss('Tower Boss', 'Fire'),
+        // A second phase of the same fight.
+        gym_flame_2: boss('Tower Boss', 'Fire'),
+        raid_jet: boss('Raid Boss', 'Dragon'),
+        // An alpha is the ordinary species again, and a row with no element
+        // is nothing to build a party against.
+        boss_flame: boss('Flame (Boss)', 'Fire'),
+        gym_blank: boss('Blank'),
+      },
+    } as unknown as Refdata
+    const got = opponentPool(data)
+    expect(got).toEqual(expect.arrayContaining(speciesPool(data)))
+    expect(got.filter((id) => !speciesPool(data).includes(id))).toEqual([
+      'gym_flame',
+      'raid_jet',
+    ])
+    // The ranked pool is still only what can be owned.
+    expect(speciesPool(data)).not.toContain('gym_flame')
+  })
+
   it('ranks workers by level, then work speed, then appetite', () => {
     expect(bestWorkers(DATA, pool, 'Mining', 5).map((r) => r.id)).toEqual([
       'digger',
@@ -427,6 +454,22 @@ describe('owned pals', () => {
     const rows = ownedFighters(DATA, [water, fire], nowhere, ['Leaf'], fight, 5)
     expect(rows[0]!.pal).toBe(fire)
     expect(rows[0]!.strongMoves).toEqual(['Fireball'])
+  })
+
+  it('flags a strong move the pal has learned and is not using', () => {
+    const fight = side('fight', {
+      ...INPUT,
+      opponentElements: ['Leaf'],
+      attackElements: ['Fire'],
+    })
+    // `masteredWaza` includes what is equipped, so Aqua is not "learned".
+    const fire = pal('Flame', {
+      equipWaza: ['Aqua'],
+      masteredWaza: ['Aqua', 'Fireball'],
+    })
+    const [row] = ownedFighters(DATA, [fire], nowhere, ['Leaf'], fight, 5)
+    expect(row!.strongMoves).toEqual([])
+    expect(row!.learnedMoves).toEqual(['Fireball'])
   })
 
   // The Fight footnote says condensing orders your pals. For a long time

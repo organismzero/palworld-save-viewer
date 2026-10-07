@@ -33,6 +33,8 @@ export interface BuildsParams {
   query: string
   /** Element names the opponent list is narrowed to. Empty means all. */
   elements: string[]
+  /** Longer lists: more species and more of your own pals in each. */
+  more: boolean
   /** The cake tier a cake base is for, by item id. */
   cake: string
   playerUid?: Guid
@@ -51,6 +53,7 @@ export const BUILDS_DEFAULTS: BuildsParams = {
   opponent: '',
   query: '',
   elements: [],
+  more: false,
   cake: DEFAULT_CAKE,
   playerUid: undefined,
   includeGuild: false,
@@ -78,6 +81,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       if (v.opponent) out.vs = v.opponent
       if (v.query) out.q = v.query
       if (v.elements.length > 0) out.el = encodeList(v.elements)
+      if (v.more) out.more = '1'
       if (v.cake !== d.cake) out.c = v.cake
       if (v.playerUid) out.p = shortId(v.playerUid)
       // `gp` means everything; the finer two only speak when it is off.
@@ -98,6 +102,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
         opponent: str(raw, 'vs', d.opponent).toLowerCase(),
         query: str(raw, 'q', d.query),
         elements: list(raw, 'el').flatMap((e) => element(e)?.name ?? []),
+        more: bool(raw, 'more', d.more),
         // Checked against the typed-in recipes, which need no reference data.
         cake: cakeRecipe(str(raw, 'c', d.cake))?.item ?? d.cake,
         playerUid: resolveShortId(

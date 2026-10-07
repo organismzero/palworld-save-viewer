@@ -30,8 +30,6 @@ import {
 } from '../../components/primitives.tsx'
 import { ListRow } from '../../components/controls.tsx'
 import {
-  MINE,
-  TOP,
   WHERE_LABEL,
   breedHref,
   effectText,
@@ -330,8 +328,15 @@ export function WorkSections({
   return (
     <div className="mt-6 space-y-6">
       {work.map((id) => {
-        const species = bestWorkers(ctx.data, ctx.pool, id, TOP)
-        const mine = ownedWorkers(ctx.data, ctx.pals, ctx.where, id, spec, MINE)
+        const species = bestWorkers(ctx.data, ctx.pool, id, ctx.top)
+        const mine = ownedWorkers(
+          ctx.data,
+          ctx.pals,
+          ctx.where,
+          id,
+          spec,
+          ctx.mine,
+        )
         return (
           <section key={id}>
             <CardTrigger card={{ kind: 'work', id }} as="div">

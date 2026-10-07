@@ -173,6 +173,17 @@ export function conditions(pal: Pal): Condition[] {
    ------------------------------------------------------------------------- */
 
 /**
+ * Moves a pal has learned and is not using.
+ *
+ * A pal equips three and can have learned many more, from fruit or by
+ * levelling. The save keeps both lists and `masteredWaza` includes the
+ * equipped ones, so this is the difference.
+ */
+export function learnedNotEquipped(pal: Pal): string[] {
+  return pal.masteredWaza.filter((w) => !pal.equipWaza.includes(w))
+}
+
+/**
  * A pal's level in a job: its species' level plus any the save has added.
  *
  * Zero when the species cannot do the job at all, whatever bonus is recorded.

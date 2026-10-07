@@ -380,6 +380,35 @@ export function speciesPool(data: Refdata): string[] {
     .map(([id]) => id)
 }
 
+/**
+ * What can be picked as an opponent: every real pal, and the fights that are
+ * not a species you can own.
+ *
+ * Tower bosses and raid bosses have rows of their own in the game data, with
+ * their own elements, and they are exactly what a party gets built for. They
+ * are in no breeding table, which is why the ranked pool above never had them.
+ * A boss has several rows that differ only in phase, so they are folded to one
+ * per name and element set.
+ *
+ * Alphas and rampaging pals are left out on purpose: they are the ordinary
+ * species over again, 371 rows of them, with the same elements.
+ */
+export function opponentPool(data: Refdata): string[] {
+  const out = speciesPool(data)
+  const seen = new Set<string>()
+  for (const [id, s] of Object.entries(data.species)) {
+    if (!/^(gym|raid)_/.test(id)) continue
+    const els = elementsOf(data, id)
+    // Without an element there is nothing to match a party against.
+    if (els.length === 0) continue
+    const key = `${s.name}|${els.join(',')}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(id)
+  }
+  return out
+}
+
 export interface WorkerRow {
   id: string
   level: number
@@ -553,7 +582,7 @@ export function bestMounts(
    The player's own pals
    ------------------------------------------------------------------------- */
 
-import { workLevel, type Where } from './palState.ts'
+import { learnedNotEquipped, workLevel, type Where } from './palState.ts'
 
 export { locator, workLevel, type Where } from './palState.ts'
 
@@ -611,6 +640,11 @@ export interface OwnedFighter extends OwnedRow {
   fight: FighterRow
   /** Equipped active skills of an element that beats the opponent. */
   strongMoves: string[]
+  /**
+   * Skills of such an element the pal has learned and not equipped: a better
+   * answer to this fight that is one trip to the skill menu away.
+   */
+  learnedMoves: string[]
 }
 
 /**
@@ -632,16 +666,18 @@ export function ownedFighters(
   limit: number,
 ): OwnedFighter[] {
   const strong = new Set(strongAgainst(opponent).map((s) => s.element))
+  const isStrong = (w: string) => {
+    const el = data.skills?.[w.toLowerCase()]?.element
+    return el !== undefined && strong.has(el)
+  }
   return pals
     .map((pal) => ({
       pal,
       where: where(pal),
       fight: matchup(data, pal.characterId.toLowerCase(), opponent),
       passiveScore: palPassiveScore(pal, data.passives, spec),
-      strongMoves: pal.equipWaza.filter((w) => {
-        const el = data.skills?.[w.toLowerCase()]?.element
-        return el !== undefined && strong.has(el)
-      }),
+      strongMoves: pal.equipWaza.filter(isStrong),
+      learnedMoves: learnedNotEquipped(pal).filter(isStrong),
     }))
     .sort(
       (a, b) =>

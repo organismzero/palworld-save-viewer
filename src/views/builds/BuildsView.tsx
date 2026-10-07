@@ -38,6 +38,7 @@ import {
   ownedFighters,
   ownedMounts,
   sidesFor,
+  opponentPool,
   speciesHeld,
   speciesPool,
   strongSkills,
@@ -72,8 +73,10 @@ import { passiveText } from '../breed/passiveText.ts'
 import { speciesText, type SpeciesText } from '../breed/speciesText.ts'
 import {
   MINE,
+  MINE_MORE,
   MOUNT_LABEL,
   TOP,
+  TOP_MORE,
   breedHref,
   stockPals,
   workName,
@@ -186,11 +189,14 @@ export function BuildsView({ index }: { index: SaveIndex }) {
   const text = speciesText(data)
   const passives = passiveText(data)
   const pool = useMemo(() => (data ? speciesPool(data) : []), [data])
+  const opponents = useMemo(() => (data ? opponentPool(data) : []), [data])
 
   const ctx: Ctx | undefined = data && {
     index,
     data,
     pool,
+    top: params.more ? TOP_MORE : TOP,
+    mine: params.more ? MINE_MORE : MINE,
     pals,
     where,
     ownerUid,
@@ -232,6 +238,13 @@ export function BuildsView({ index }: { index: SaveIndex }) {
           />
         )}
 
+        <Checkbox
+          checked={params.more}
+          onChange={(more) => patch({ more })}
+          label="longer lists"
+          className="text-xs text-[var(--color-muted)]"
+        />
+
         <div className="space-y-2">
           <div className="label">what for</div>
           {GOALS.map((g) => (
@@ -270,7 +283,7 @@ export function BuildsView({ index }: { index: SaveIndex }) {
       {params.goal === 'fight' && (
         <OpponentPicker
           data={data}
-          pool={pool}
+          pool={opponents}
           text={text}
           query={params.query}
           elements={params.elements}
@@ -360,7 +373,14 @@ function Breeding({ ctx, work }: { ctx: Ctx; work: readonly string[] }) {
         />
         <Owned
           title="yours already carrying one"
-          rows={carriersOf(ctx.data, ctx.pals, ctx.where, farmIds, farm, MINE)}
+          rows={carriersOf(
+            ctx.data,
+            ctx.pals,
+            ctx.where,
+            farmIds,
+            farm,
+            ctx.mine,
+          )}
           ctx={ctx}
           detail={() => null}
           wanted={farm}
@@ -411,7 +431,7 @@ function Work({ ctx, work }: { ctx: Ctx; work: readonly string[] }) {
             ctx.where,
             partyIds,
             party,
-            MINE,
+            ctx.mine,
           )}
           ctx={ctx}
           detail={() => null}
@@ -440,8 +460,8 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
   const advice = advisePassives(ctx.data.passives, party)
   const picks = breedablePicks(advice, ctx.data.passives)
   const held = speciesHeld(ctx.pals)
-  const species = bestFighters(ctx.data, ctx.pool, els, TOP * 2)
-  const mine = ownedFighters(ctx.data, ctx.pals, ctx.where, els, party, TOP)
+  const species = bestFighters(ctx.data, ctx.pool, els, ctx.top * 2)
+  const mine = ownedFighters(ctx.data, ctx.pals, ctx.where, els, party, ctx.top)
   const moves = strongSkills(ctx.data, attackElements, 4)
 
   return (
@@ -513,6 +533,25 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
                       taken={f.fight.taken}
                       element={f.fight.element}
                     />
+                    {f.learnedMoves.map((m) => (
+                      <CardTrigger
+                        key={`learned-${m}`}
+                        card={{
+                          kind: 'skill',
+                          id: m,
+                          note: 'Learned and strong here, but not equipped.',
+                        }}
+                        focusable
+                      >
+                        <Pill
+                          tone="warn"
+                          title="This pal knows it and is not using it. Equip it from the pal’s skill menu."
+                        >
+                          {ctx.data.skills[m.toLowerCase()]?.name ?? m} · not
+                          equipped
+                        </Pill>
+                      </CardTrigger>
+                    ))}
                     {f.strongMoves.map((m) => (
                       <CardTrigger
                         key={m}
@@ -579,7 +618,7 @@ function Travel({ ctx }: { ctx: Ctx }) {
       <PassiveAdviceBlock advice={advice} ctx={ctx} />
       <div className="mt-6 space-y-6">
         {MOUNT_KINDS.map((kind) => {
-          const species = bestMounts(ctx.data, ctx.pool, kind, TOP)
+          const species = bestMounts(ctx.data, ctx.pool, kind, ctx.top)
           if (species.length === 0) return null
           const glider = kind === 'glider'
           return (
@@ -616,7 +655,9 @@ function Travel({ ctx }: { ctx: Ctx }) {
                 ))}
                 right={
                   <Owned
-                    rows={mine.filter((m) => m.kind === kind).slice(0, MINE)}
+                    rows={mine
+                      .filter((m) => m.kind === kind)
+                      .slice(0, ctx.mine)}
                     ctx={ctx}
                     wanted={party}
                     detail={(r) =>

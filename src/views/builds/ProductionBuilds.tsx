@@ -42,7 +42,7 @@ import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Panel, Pill, SectionHeading } from '../../components/primitives.tsx'
 import { ListRow } from '../../components/controls.tsx'
-import { MINE, TOP, breedHref, effectText, type Ctx } from './buildsText.ts'
+import { breedHref, effectText, type Ctx } from './buildsText.ts'
 import {
   Owned,
   PassiveAdviceBlock,
@@ -418,8 +418,15 @@ function PartnerSection({
     advisePassives(ctx.data.passives, spec),
     ctx.data.passives,
   )
-  const species = bestPartners(ctx.data, ctx.pool, wants, TOP)
-  const mine = ownedPartners(ctx.data, ctx.pals, ctx.where, wants, spec, MINE)
+  const species = bestPartners(ctx.data, ctx.pool, wants, ctx.top)
+  const mine = ownedPartners(
+    ctx.data,
+    ctx.pals,
+    ctx.where,
+    wants,
+    spec,
+    ctx.mine,
+  )
 
   return (
     <section className="mt-6 first:mt-0">
@@ -495,14 +502,14 @@ function ProducerSections({
     <div className="space-y-6">
       {items.map(({ item }) => {
         const info = ctx.data.items[item]
-        const species = ranchProducers(ctx.data, ctx.pool, item, TOP)
+        const species = ranchProducers(ctx.data, ctx.pool, item, ctx.top)
         const mine = ownedProducers(
           ctx.data,
           ctx.pals,
           ctx.where,
           item,
           spec,
-          MINE,
+          ctx.mine,
         )
         return (
           <section key={item}>

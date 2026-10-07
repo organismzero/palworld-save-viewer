@@ -173,12 +173,18 @@ export function breedHref(
 /** How many species and how many of your own pals each list shows. */
 export const TOP = 5
 export const MINE = 3
+/** The same two with "longer lists" ticked. */
+export const TOP_MORE = 12
+export const MINE_MORE = 8
 
 /** Everything a section needs, passed as one so the call sites stay legible. */
 export interface Ctx {
   index: SaveIndex
   data: Refdata
   pool: string[]
+  /** How many species a list shows, and how many of the player's own pals. */
+  top: number
+  mine: number
   pals: readonly Pal[]
   where: (pal: Pal) => Where
   ownerUid: Guid | undefined

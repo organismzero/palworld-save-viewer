@@ -11,6 +11,7 @@ import { useUiStore } from '../../store/uiStore.ts'
 import {
   LOW_SANITY,
   conditions,
+  learnedNotEquipped,
   placeText,
   placer,
   spaced,
@@ -904,7 +905,7 @@ function PalDetail({
           that says what a pal could be switched to. */}
       <MoveList
         title="also knows"
-        ids={pal.masteredWaza.filter((w) => !pal.equipWaza.includes(w))}
+        ids={learnedNotEquipped(pal)}
       />
     </aside>
   )
