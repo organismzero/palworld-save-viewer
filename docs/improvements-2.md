@@ -134,23 +134,20 @@ What the save turned out not to support, and what was done instead:
 
 ## Phase 4 — Surface what is parsed: Bases and items
 
-### 4a. Item detail columns — S
+Done.
 
-The slot's hover card is keyboard-reachable and already shows durability against `ItemInfo.durability`, ammo against `magazine`, and item passives; empty slots are already unfocusable. What remains is the tabular half: the contents table in `ContainerGrid` gains durability and ammo columns, and so do `CONTAINER_COLUMNS` and `ITEM_HIT_COLUMNS`.
+- **4a. Item detail columns.** The contents table gives a stack with wear, a loaded magazine or passives its own row instead of merging it, with condition and ammo columns that appear only when the container has something to put in them. `CONTAINER_COLUMNS` gains `durability`, `durability_full`, `ammo` and `magazine`; `ITEM_HIT_COLUMNS`, which is one row per place, gains the most worn of the item there.
+- **4b. Bases filters and base overview.** The structure list narrows to a builder, to damaged and to locked, and can be ordered fullest first. The overview names the guild and camp level and has a health block. The plan is coloured by builder, with a legend, when more than one player built there. The colours are the eight the map uses for guilds, now in `src/lib/categorical.ts`.
+- **4c. Durability audit.** "Worn gear" in the Bases rail: every item at or under a share of its full durability (a slider, 25% by default), worst first, each with its container. Exportable.
+- **4d. Show item hits on the map.** An expanded search result has a "Show on map" row. The map marks each container holding the item, sized by how much, and a row above the layers names the item and clears it. It is carried as `item=` in the Map's link rather than as a layer, so it survives a tab switch.
 
-### 4b. Bases filters and base overview — M
+Where this departs from the plan as written:
 
-- Structure list filters: builder (select from players who built here), damaged, locked; sort by fullness (`usedSlots` against `slotGridSize`'s floor, with the existing honesty caveat).
-- `BaseOverview` names the owning guild, camp level and coordinates together, and adds a **health** block: structures damaged (`hpCurrent < hpMax`, computed inline twice today; extract it), locked chests, workers present against the roster.
-- `BasePlan` dots tinted per builder with a legend, colours from the neutral categorical ramp (never element hues).
+- **Fullness is stacks held, not a share of capacity.** `Container.slotCount` equals `usedSlots` for all 4,599 containers in the reference save: the save lists only occupied slots, so there is no capacity to divide by.
+- **"Workers present against the roster" became workers needing care.** The save has the roster but nothing that says who is present, so the health block counts the sick, hungry, hurt and low on sanity among it, using `conditions()`.
+- **The marks are not a layer.** A mark is a second sprite over the structure's own, and clicking it selects that structure, so there are no new entities and nothing new in `l=`.
 
-### 4c. Durability audit — S
-
-A "Wear" section in the Bases rail under Elsewhere: every `DynamicItem` with durability under a threshold slider, with its container location via `containerLocation()`, sorted worst first, with a jump to the container. Exportable.
-
-### 4d. Show item hits on the map — S
-
-Item search results gain a "Show on map" button that jumps to Map with a new transient `hits` layer: one marker per container that holds the item, sized by count, resolved through `structureByContainer` → `Structure.pos`. The layer is cleared by the next search or by its own layer toggle.
+Not seen in the reference save, which has no damaged structure inside a base: the "list" link beside a non-zero damaged count.
 
 ---
 
@@ -306,7 +303,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
-5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. Then **Phase 4**, **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
+5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. Then **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 

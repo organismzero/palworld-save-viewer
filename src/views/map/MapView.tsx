@@ -11,6 +11,7 @@ import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useSaveStore } from '../../store/saveStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import {
+  HIT_CSS,
   LAYER_STYLES,
   MapController,
   PAN_STEP,
@@ -29,6 +30,8 @@ import {
   type MapViewport,
 } from './params.ts'
 import { useViewParams } from '../../app/viewParams.ts'
+import { itemPlaces } from '../../domain/bases.ts'
+import { itemName } from '../../domain/names.ts'
 import { placer } from '../../domain/palState.ts'
 import { filteredPalIds, unfiltered } from '../pals/filter.ts'
 import { palsCodec } from '../pals/params.ts'
@@ -121,6 +124,14 @@ export function MapView({ index }: { index: SaveIndex }) {
     [palsQs, index, data],
   )
   const [palsShown, setPalsShown] = useState<number>()
+
+  /** The containers holding the item a Bases search asked to see here. */
+  const item = params.item
+  const itemHits = useMemo(
+    () => (item ? itemPlaces(index, item) : undefined),
+    [index, item],
+  )
+  const [hitsShown, setHitsShown] = useState(0)
   const localData = useSaveStore((s) => s.localData)
 
   const setLayers = (next: (prev: Set<LayerId>) => Iterable<LayerId>) =>
@@ -289,6 +300,19 @@ export function MapView({ index }: { index: SaveIndex }) {
     controller.setPalFilter(palIds)
     setPalsShown(controller.palsShown)
   }, [palIds, mounted])
+
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller?.ready) return
+    setHitsShown(
+      controller.setItemHits(
+        itemHits?.places.map((p) => ({
+          structureId: p.structure.instanceId,
+          count: p.count,
+        })),
+      ),
+    )
+  }, [itemHits, mounted])
 
   /**
    * Push the client's own save into Pixi.
@@ -597,6 +621,18 @@ export function MapView({ index }: { index: SaveIndex }) {
                 invert
               </Button>
             </div>
+            {item && itemHits && (
+              <ItemMarks
+                name={itemName(data, item)}
+                shown={hitsShown}
+                // Whatever holds it and is not on the map: carried, in guild
+                // storage, or in the World Tree.
+                elsewhere={
+                  itemHits.places.length + itemHits.unplaced - hitsShown
+                }
+                onClear={() => setParams((p) => ({ ...p, item: undefined }))}
+              />
+            )}
             <ul className="space-y-0.5">
               {legend.map((id) => {
                 const style = LAYER_STYLES[id]
@@ -956,6 +992,53 @@ function SelectionLink({ entity }: { entity: MapEntity }) {
       <Jump view={link.view} focus={link.focus}>
         {link.text}
       </Jump>
+    </div>
+  )
+}
+
+/**
+ * The row for an item search's marks: what is marked, in how many places, and
+ * the way to take the marks off.
+ *
+ * It sits above the layers rather than among them because it is not one. It
+ * has no checkbox to turn back on: once cleared there is no item to mark.
+ */
+function ItemMarks({
+  name,
+  shown,
+  elsewhere,
+  onClear,
+}: {
+  name: string
+  shown: number
+  elsewhere: number
+  onClear: () => void
+}) {
+  return (
+    <div className="mb-2 border-b border-[var(--color-line-faint)] pb-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: HIT_CSS }}
+        />
+        <span className="min-w-0 flex-1 truncate" title={name}>
+          {name}
+        </span>
+        <span className="num text-[var(--color-muted)]">
+          {count(shown)} {shown === 1 ? 'place' : 'places'}
+        </span>
+        <IconButton label={`Stop marking ${name}`} size={18} onClick={onClear}>
+          ×
+        </IconButton>
+      </div>
+      <p className="mt-1 pl-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
+        {shown === 0
+          ? 'Nothing that holds it stands on this map.'
+          : 'Marked from the Bases item search. Larger marks hold more.'}
+        {elsewhere > 0 &&
+          ` ${count(elsewhere)} more ${elsewhere === 1 ? 'holder has' : 'holders have'} no position here: carried, in guild storage, or in the World Tree.`}
+      </p>
     </div>
   )
 }

@@ -16,6 +16,7 @@ import {
   filterStructures,
   hpPercent,
   isDamaged,
+  itemPlaces,
   wearFraction,
   wornItems,
 } from '@/domain/bases.ts'
@@ -337,5 +338,45 @@ describe('the wear audit in a Bases link', () => {
     expect(out.wear).toBeUndefined()
     expect(read('src=wear&wear=900').wear).toBe(100)
     expect(read('src=wear&wear=x').wear).toBe(BASES_DEFAULTS.wear)
+  })
+})
+
+describe('itemPlaces', () => {
+  const carried: Container = {
+    containerId: id('9'),
+    slots: [slot(0, 'Wood', 3)],
+    ownerKind: 'player',
+    confidence: 'exact',
+    slotCount: 1,
+    usedSlots: 1,
+  }
+  const withItems = {
+    ...index,
+    containersByItem: new Map([
+      [
+        'Wood',
+        [
+          { containerId: chest.containerId, count: 100 },
+          { containerId: small.containerId, count: 5 },
+          { containerId: carried.containerId, count: 3 },
+        ],
+      ],
+    ]),
+  } as unknown as SaveIndex
+
+  it('gives the containers that stand somewhere, with how much each holds', () => {
+    const { places } = itemPlaces(withItems, 'Wood')
+    expect(places.map((p) => [p.structure.instanceId[0], p.count])).toEqual([
+      ['7', 100],
+      ['6', 5],
+    ])
+  })
+
+  it('counts what has no position instead of placing it', () => {
+    expect(itemPlaces(withItems, 'Wood').unplaced).toBe(1)
+    expect(itemPlaces(withItems, 'Nothing')).toEqual({
+      places: [],
+      unplaced: 0,
+    })
   })
 })

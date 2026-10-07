@@ -9,6 +9,7 @@ import {
   filterStructures,
   hpPercent,
   isDamaged,
+  itemPlaces,
   searchItems,
   storageTotals,
   wornItems,
@@ -74,6 +75,7 @@ import {
   type Source,
   type StructureSort,
 } from './params.ts'
+import { withItem } from '../map/params.ts'
 import { BasePlan } from './BasePlan.tsx'
 import { ContainerGrid } from './ContainerGrid.tsx'
 
@@ -329,6 +331,13 @@ export function BasesView({ index }: { index: SaveIndex }) {
           onOpen={(id) => {
             openContainer(id)
             setQuery('')
+          }}
+          onShowOnMap={(staticId) => {
+            // Read at the moment of the click: the Map is not mounted while
+            // this view is, so its link lives only in the store.
+            const ui = useUiStore.getState()
+            ui.publishParams('map', withItem(ui.viewParams.map ?? '', staticId))
+            ui.setView('map')
           }}
         >
           {source.kind === 'wear' ? (
@@ -1577,6 +1586,7 @@ function ItemSearch({
   nameOfBase,
   data,
   onOpen,
+  onShowOnMap,
   children,
 }: {
   index: SaveIndex
@@ -1587,6 +1597,8 @@ function ItemSearch({
   nameOfBase: (b: Base) => string
   data: Refdata | undefined
   onOpen: (containerId: Guid) => void
+  /** Mark every container holding this item on the map, and go there. */
+  onShowOnMap: (staticId: string) => void
   /** The list's own filters, which sit under the search box. */
   children?: ReactNode
 }) {
@@ -1665,6 +1677,11 @@ function ItemSearch({
 
                     {expanded === hit.staticId && (
                       <ul className="border-t border-[var(--color-line-faint)] bg-[rgb(3_9_13/0.4)]">
+                        <ShowOnMap
+                          index={index}
+                          hit={hit}
+                          onClick={() => onShowOnMap(hit.staticId)}
+                        />
                         {hit.places.map((place) => {
                           const c = index.containerById.get(place.containerId)
                           if (!c) return null
@@ -1712,6 +1729,42 @@ function ItemSearch({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The way from "it is in these places" to seeing those places.
+ *
+ * Only a container a structure claims stands anywhere, so the row says how many
+ * of the places that is, and is left out when it is none: a button that opens
+ * a map with nothing marked on it would be a dead end.
+ */
+function ShowOnMap({
+  index,
+  hit,
+  onClick,
+}: {
+  index: SaveIndex
+  hit: ItemHit
+  onClick: () => void
+}) {
+  const placed = itemPlaces(index, hit.staticId).places.length
+  if (placed === 0) return null
+  return (
+    <li className="border-b border-[var(--color-line-faint)]">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-baseline gap-3 py-1.5 pr-3 pl-6 text-left text-xs text-[var(--color-signal)] transition-colors hover:bg-[var(--color-signal)]/[0.08]"
+      >
+        Show on map
+        <span className="label ml-auto">
+          {placed === hit.places.length
+            ? `all ${count(placed)}`
+            : `${count(placed)} of ${count(hit.places.length)} places`}
+        </span>
+      </button>
+    </li>
   )
 }
 

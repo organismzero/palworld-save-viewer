@@ -14,6 +14,7 @@ import {
   mapCodec,
   roundViewport,
   sameViewport,
+  withItem,
   type MapParams,
 } from '@/views/map/params.ts'
 
@@ -107,5 +108,31 @@ describe('viewport helpers', () => {
   it('treats fitted as equal only to fitted', () => {
     expect(sameViewport(undefined, undefined)).toBe(true)
     expect(sameViewport(undefined, { mx: 0, my: 0, zoom: 1 })).toBe(false)
+  })
+})
+
+describe('an item marked on the map', () => {
+  it('round-trips, and is absent from an untouched link', () => {
+    expect(qs({})).toBe('')
+    expect(roundTrip({ item: 'Test_Item' }).item).toBe('Test_Item')
+    expect(decode('item=').item).toBeUndefined()
+  })
+
+  it('keeps the layers and fog, and drops the viewport and the selection', () => {
+    const was = qs({
+      layers: new Set(['chests']),
+      fog: false,
+      viewport: { mx: 10, my: 20, zoom: 2 },
+      selected: { layer: 'pals', id: PAL },
+    })
+    const got = decode(withItem(was, 'Test_Item'))
+    expect(got).toMatchObject({ item: 'Test_Item', fog: false })
+    expect([...got.layers]).toEqual(['chests'])
+    expect(got.viewport).toBeUndefined()
+    expect(got.selected).toBeUndefined()
+  })
+
+  it('replaces the item a previous search marked', () => {
+    expect(withItem('item=Old_Item', 'New_Item')).toBe('item=New_Item')
   })
 })

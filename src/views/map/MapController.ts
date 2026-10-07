@@ -172,12 +172,26 @@ export interface MapEntity {
   guildId?: Guid
 }
 
+/** The layers a structure can be plotted on. */
+const STRUCTURE_LAYERS: ReadonlySet<LayerId> = new Set([
+  'structuresBuilt',
+  'structuresWorld',
+  'chests',
+])
+
 /** The layers that colouring by guild repaints. */
 const TINTED: ReadonlySet<LayerId> = new Set([
   'bases',
   'structuresBuilt',
   'markers',
 ])
+
+/** The colour an item search's containers are marked in. */
+export const HIT_COLOR = 0xa3e635
+export const HIT_CSS = '#a3e635'
+
+/** A mark's size on screen: the smallest holding, and the largest. */
+const HIT_SIZE = { min: 10, max: 26 }
 
 /** One row of the guild colour key. */
 export interface GuildKey {
@@ -282,6 +296,13 @@ export class MapController {
   private palFilter?: ReadonlySet<string>
   /** Base build-radius rings, which are drawn shapes rather than markers. */
   private rings: { shape: Graphics; guildId?: Guid }[] = []
+  /**
+   * Marks over the containers that hold a searched-for item. Not one of the
+   * layers: it has no entities of its own, and it is on exactly when there is
+   * an item to mark.
+   */
+  private hitLayer = new Container()
+  private itemHits?: readonly { structureId: Guid; count: number }[]
   private ring = new Graphics()
   /**
    * Holds the fog sprite, and exists so the fog's z-order is decided once in
@@ -328,6 +349,7 @@ export class MapController {
       this.layers.set(id, c)
       this.world.addChild(c)
     }
+    this.world.addChild(this.hitLayer)
     this.world.addChild(this.ring)
 
     this.dot = this.app.renderer.generateTexture(
@@ -435,6 +457,10 @@ export class MapController {
         if (m.baseSize === undefined) continue
         m.width = m.height = m.baseSize / scale
       }
+    }
+    for (const child of this.hitLayer.children) {
+      const m = child as Marker
+      if (m.baseSize !== undefined) m.width = m.height = m.baseSize / scale
     }
     if (this.selectedMarker) this.drawRing(this.selectedMarker)
   }
@@ -736,6 +762,60 @@ export class MapController {
     this.buildMarkers()
     this.applyTints()
     this.applyPalFilter()
+    this.applyItemHits()
+  }
+
+  /**
+   * Marks the containers that hold an item, sized by how much each holds.
+   *
+   * A mark is a second sprite over the structure's own, not a new entity:
+   * clicking one selects the chest underneath, whose card already says what it
+   * is and who built it. That also means a mark shows whether or not the
+   * chest's own layer is on, which is the point, since loot chests are off by
+   * default.
+   *
+   * Returns how many were placed. A container in the World Tree has no place
+   * on this map and is not counted.
+   */
+  setItemHits(
+    hits: readonly { structureId: Guid; count: number }[] | undefined,
+  ): number {
+    this.itemHits = hits
+    return this.mounted ? this.applyItemHits() : 0
+  }
+
+  private applyItemHits(): number {
+    this.hitLayer.removeChildren().forEach((c) => c.destroy())
+    const hits = this.itemHits
+    if (!hits?.length) return 0
+
+    const byId = new Map<string, MapEntity>()
+    for (const e of this.entities) {
+      if (STRUCTURE_LAYERS.has(e.kind)) byId.set(e.id, e)
+    }
+    const most = Math.max(...hits.map((h) => h.count))
+    let placed = 0
+    for (const h of hits) {
+      const entity = byId.get(h.structureId)
+      if (!entity) continue
+      const s = new Sprite(this.dot) as Marker
+      const { px, py } = this.toPixel(entity.mx, entity.my)
+      s.position.set(px, py)
+      s.anchor.set(0.5)
+      s.tint = HIT_COLOR
+      s.alpha = 0.9
+      s.eventMode = 'static'
+      s.cursor = 'pointer'
+      s.entity = entity
+      // By area, so a chest with four times as much looks four times as big
+      // rather than sixteen.
+      s.baseSize =
+        HIT_SIZE.min + (HIT_SIZE.max - HIT_SIZE.min) * Math.sqrt(h.count / most)
+      this.hitLayer.addChild(s)
+      placed++
+    }
+    this.rescaleMarkers()
+    return placed
   }
 
   /**

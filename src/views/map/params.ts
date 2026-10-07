@@ -24,6 +24,7 @@ import {
   encodeList,
   list,
   num,
+  serialiseParams,
   type ParamCodec,
 } from '../../app/viewParams.ts'
 import type { LayerId } from './MapController.ts'
@@ -97,6 +98,12 @@ export interface MapParams {
   /** Absent means "fitted to the window", which is where the map starts. */
   viewport?: MapViewport
   selected?: MapSelection
+  /**
+   * An item whose containers are marked, by asset id. Set from the Bases item
+   * search; it is in the link so the marks survive leaving the map and coming
+   * back, and it stays until the next search replaces it or it is cleared.
+   */
+  item?: string
 }
 
 export const MAP_DEFAULTS: MapParams = {
@@ -106,6 +113,7 @@ export const MAP_DEFAULTS: MapParams = {
   byGuild: false,
   viewport: undefined,
   selected: undefined,
+  item: undefined,
 }
 
 /** `l=none`: an empty list cannot say it, because an empty param is omitted. */
@@ -142,6 +150,7 @@ export const mapCodec: ParamCodec<MapParams> = {
       out.at = [Math.round(mx), Math.round(my), round2(zoom)].join(',')
     }
     if (v.selected) out.sel = `${v.selected.layer}:${linkId(v.selected.id)}`
+    if (v.item) out.item = v.item
     return out
   },
 
@@ -153,8 +162,26 @@ export const mapCodec: ParamCodec<MapParams> = {
       byGuild: raw.get('by') === 'guild' ? true : d.byGuild,
       viewport: viewport(raw),
       selected: selection(raw),
+      item: raw.get('item') || undefined,
     }
   },
+}
+
+/**
+ * The Map's link with an item's containers marked.
+ *
+ * Whatever layers, fog and colouring the map was left with are kept. Where it
+ * was looking and what was selected are not: the marks can be anywhere, and
+ * the fitted map is the one view sure to show all of them.
+ */
+export function withItem(qs: string, staticId: string): string {
+  const was = mapCodec.decode(new URLSearchParams(qs), MAP_DEFAULTS)
+  return serialiseParams(
+    mapCodec.encode(
+      { ...was, item: staticId, viewport: undefined, selected: undefined },
+      MAP_DEFAULTS,
+    ),
+  )
 }
 
 function layers(raw: URLSearchParams, d: MapParams): Set<LayerId> {
