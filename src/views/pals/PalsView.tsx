@@ -13,7 +13,6 @@ import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
-import { useSaveStore } from '../../store/saveStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import {
   LOW_SANITY,
@@ -42,7 +41,7 @@ import {
   type PalsParams,
   type SortKey,
 } from './params.ts'
-import { filterPals, isFiltered, presetChoices } from './filter.ts'
+import { filterPals, isFiltered } from './filter.ts'
 import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
@@ -111,8 +110,7 @@ export function PalsView({ index }: { index: SaveIndex }) {
   )
 
   const { query, elements, minLevel, minIv, owner, flags, sort } = params
-  const { maxLevel, gender, work, workMin, attention, preset, reversed } =
-    params
+  const { maxLevel, gender, work, workMin, attention, reversed } = params
   const patch = (p: Partial<PalsParams>) =>
     setParams((prev) => ({ ...prev, ...p }))
 
@@ -157,17 +155,6 @@ export function PalsView({ index }: { index: SaveIndex }) {
   }, [])
 
   const place = useMemo(() => placer(index), [index])
-  const localData = useSaveStore((s) => s.localData)
-  const presets = useMemo(
-    () => presetChoices(localData?.presets ?? []),
-    [localData],
-  )
-  const presetIds = useMemo(() => {
-    const found = params.preset
-      ? presets.find((p) => p.key === params.preset)
-      : undefined
-    return found ? new Set(found.palIds) : undefined
-  }, [presets, params.preset])
 
   const filtered = useMemo(
     () =>
@@ -175,9 +162,8 @@ export function PalsView({ index }: { index: SaveIndex }) {
         index,
         data,
         place,
-        preset: presetIds,
       }),
-    [index, params, data, place, presetIds],
+    [index, params, data, place],
   )
 
   // The sliders' top end is whatever this world has reached, so a save from a
@@ -317,24 +303,6 @@ export function PalsView({ index }: { index: SaveIndex }) {
             />
           )}
         </div>
-
-        {/* Only with the client's own save: presets live in LocalData.sav and
-            nowhere else. A preset named in a link stays listed without it, so
-            the filter that is narrowing the grid can be seen and cleared. */}
-        {(presets.length > 0 || preset) && (
-          <SelectControl
-            label="party preset"
-            value={preset}
-            onChange={(v) => patch({ preset: v })}
-            options={[
-              { value: '', label: 'Any' },
-              ...presets.map((p) => ({ value: p.key, label: p.label })),
-              ...(preset && !presets.some((p) => p.key === preset)
-                ? [{ value: preset, label: `${preset} (not loaded)` }]
-                : []),
-            ]}
-          />
-        )}
 
         <div className="space-y-1.5">
           <Checkbox

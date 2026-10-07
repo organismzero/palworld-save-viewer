@@ -123,7 +123,7 @@ Done. The shared logic is `src/domain/palState.ts` (where a pal is kept, what co
 
 - **3a. Drawer.** New rows: progress to the next level, soul enhancements by stat, **kept in** (party and slot, palbox page and slot, or the base, which links to Bases), guild, and a **condition** block with what it is working at, health, sickness, sanity, hunger and trust. Work suitability goes through `workLevel()`, the rule Builds uses: none of the 21 work bonuses in the reference save sits on a job its species lacks, so a bonus alone does not make a job.
 - **3b. Card badge.** The worst condition, first in the badge column: dying, injured, sick, starving or low sanity. The hover card lists all of them.
-- **3c. Filters and sorts.** Gender, maximum level, a job at a minimum level, "needs attention", party preset (shown with client data), and two owners that are not players: base workers and nobody. Sorts add HP, species and owner, and any sort can be reversed. The text filter matches a passive's display name.
+- **3c. Filters and sorts.** Gender, maximum level, a job at a minimum level, "needs attention", and two owners that are not players: base workers and nobody. Sorts add HP, species and owner, and any sort can be reversed. The text filter matches a passive's display name.
 - **3d. Export.** IV total, elements, health, hunger, sanity, friendship, current work, caught date, location, equipped and learned moves, and one column per job.
 
 What the save turned out not to support, and what was done instead:

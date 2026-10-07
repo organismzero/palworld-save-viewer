@@ -68,8 +68,6 @@ export interface PalsParams {
   workMin: number
   /** Only pals that are sick, injured, starving or low on sanity. */
   attention: boolean
-  /** A party preset from the client's own save: a `presetChoices` key. */
-  preset: string
   flags: { boss: boolean; rare: boolean; named: boolean }
   sort: SortKey
   /** Each sort has a natural direction; this turns it over. */
@@ -88,7 +86,6 @@ export const PALS_DEFAULTS: PalsParams = {
   work: '',
   workMin: 1,
   attention: false,
-  preset: '',
   flags: { boss: false, rare: false, named: false },
   sort: 'iv',
   reversed: false,
@@ -121,7 +118,6 @@ export function palsCodec(index: SaveIndex): ParamCodec<PalsParams> {
       // params would let a link carry one without the other.
       if (v.work) out.job = `${v.work}:${v.workMin}`
       if (v.attention) out.att = '1'
-      if (v.preset) out.pre = v.preset
       if (v.sort !== d.sort) out.sort = v.sort
       if (v.reversed) out.rev = '1'
       if (v.selectedId) out.sel = shortId(v.selectedId)
@@ -161,7 +157,6 @@ export function palsCodec(index: SaveIndex): ParamCodec<PalsParams> {
               : d.gender,
         ...job(raw, d),
         attention: bool(raw, 'att', d.attention),
-        preset: str(raw, 'pre', d.preset),
         reversed: bool(raw, 'rev', d.reversed),
         flags: {
           boss: flags.has('boss'),

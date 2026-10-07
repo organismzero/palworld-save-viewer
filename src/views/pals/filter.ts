@@ -9,7 +9,7 @@
 import { ivTotal } from '../../domain/index.ts'
 import { palName } from '../../domain/palText.ts'
 import { conditions, workLevel, type PalPlace } from '../../domain/palState.ts'
-import type { Guid, OtomoPreset, Pal, SaveIndex } from '../../domain/types.ts'
+import type { Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import {
   OWNER_BASE,
@@ -23,45 +23,12 @@ export interface FilterContext {
   /** Absent until reference data lands, and for good in degraded mode. */
   data: Refdata | undefined
   place: (pal: Pal) => PalPlace
-  /** The pals in the chosen party preset, when one is chosen and known. */
-  preset?: ReadonlySet<Guid>
-}
-
-export interface PresetChoice {
-  /** What the link carries: the preset's name, or its slot when it has none. */
-  key: string
-  label: string
-  palIds: Guid[]
-}
-
-/**
- * The party presets worth offering as a filter.
- *
- * The game keeps a fixed row of preset slots and most players name only some
- * of them, so a name cannot be the key on its own: an unnamed slot's name is
- * the empty string, which is also what "no preset chosen" looks like, and the
- * grid would narrow to that slot's pals with every filter reading as off.
- * Unnamed slots are keyed and labelled by position, as the Summary tab labels
- * them, and slots holding nobody are left out.
- */
-export function presetChoices(presets: readonly OtomoPreset[]): PresetChoice[] {
-  return presets.flatMap((p, i) =>
-    p.palIds.length === 0
-      ? []
-      : [
-          {
-            key: p.name || `#${i + 1}`,
-            label: p.name || `Preset ${i + 1}`,
-            palIds: p.palIds,
-          },
-        ],
-  )
 }
 
 export function filterPals(
   pals: readonly Pal[],
   params: PalsParams,
-  { index, data, place, preset }: FilterContext,
+  { index, data, place }: FilterContext,
 ): Pal[] {
   const species = (p: Pal) => data?.species[p.characterId.toLowerCase()]
   const speciesName = (p: Pal) => species(p)?.name ?? p.characterId
@@ -80,7 +47,6 @@ export function filterPals(
     if (flags.named && !p.nickname) return false
     if (params.gender && p.gender !== params.gender) return false
     if (params.attention && conditions(p).length === 0) return false
-    if (preset && !preset.has(p.instanceId)) return false
 
     if (owner === OWNER_NONE) {
       if (p.ownerPlayerUid) return false
@@ -148,7 +114,6 @@ export function isFiltered(params: PalsParams): boolean {
     params.gender ||
     params.work ||
     params.attention ||
-    params.preset ||
     params.flags.boss ||
     params.flags.rare ||
     params.flags.named,
