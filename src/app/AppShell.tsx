@@ -56,7 +56,7 @@ import { parseHash } from './viewParams.ts'
 import { cn, tabId } from '../lib/utils.ts'
 import { Button, TabBar } from '../components/controls.tsx'
 import { KeyHint, PromptBar } from '../components/primitives.tsx'
-import { filesFromDrop } from './dropEntries.ts'
+import { TRUNCATED_NOTICE, carriesFiles, filesFromDrop } from './dropEntries.ts'
 import { useFilePicker } from './filePicker.tsx'
 import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
@@ -243,11 +243,6 @@ function useShortcuts() {
   }, [setView, setPalette, setShortcuts])
 }
 
-/** Whether a drag is carrying files rather than, say, a text selection. */
-function carriesFiles(dt: DataTransfer | null): boolean {
-  return dt ? Array.from(dt.types).includes('Files') : false
-}
-
 /**
  * Drop handling for a save that is already open.
  *
@@ -295,7 +290,10 @@ function useShellDrop() {
       e.preventDefault()
       depth.current = 0
       setOver(false)
-      void filesFromDrop(e.dataTransfer).then((files) => {
+      void filesFromDrop(e.dataTransfer).then(({ files, truncated }) => {
+        if (truncated) {
+          useUiStore.getState().notify(TRUNCATED_NOTICE, { tone: 'warn' })
+        }
         if (files.length > 0) void useSaveStore.getState().acceptFiles(files)
       })
     },

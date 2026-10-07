@@ -11,9 +11,29 @@
  * project's entire premise.
  */
 
-/** Guards against someone dropping a whole SaveGames tree. */
+/**
+ * Guards against someone dropping a whole SaveGames tree.
+ *
+ * 256 rather than the 64 this used to be: a busy dedicated server's `Players/`
+ * folder holds a save per player who ever joined, and 64 was fewer than some
+ * real ones — which were then read partly, and silently.
+ */
 const MAX_DEPTH = 3
-const MAX_FILES = 64
+export const MAX_FILES = 256
+
+/** Whether a drag is carrying files rather than, say, a text selection. */
+export function carriesFiles(dt: DataTransfer | null): boolean {
+  return dt ? Array.from(dt.types).includes('Files') : false
+}
+
+export interface Dropped {
+  files: File[]
+  /** The cap was reached, so there may be files that were not read. */
+  truncated: boolean
+}
+
+/** What to say when a drop was cut short. One wording, both drop targets. */
+export const TRUNCATED_NOTICE = `Stopped after ${MAX_FILES} files, so some of what was dropped was not read. Drop the rest separately.`
 
 interface FileSystemEntryLike {
   isFile: boolean
@@ -58,32 +78,36 @@ function readAll(entry: FileSystemEntryLike): Promise<FileSystemEntryLike[]> {
   })
 }
 
+/** Returns true when it stopped because the cap was reached. */
 async function walk(
   entry: FileSystemEntryLike,
   out: File[],
   depth: number,
-): Promise<void> {
-  if (out.length >= MAX_FILES) return
+): Promise<boolean> {
+  if (out.length >= MAX_FILES) return true
 
   if (entry.isFile) {
     const file = await entryFile(entry)
     if (file) out.push(file)
-    return
+    return false
   }
 
   if (entry.isDirectory && depth < MAX_DEPTH) {
     for (const child of await readAll(entry)) {
-      if (out.length >= MAX_FILES) return
-      await walk(child, out, depth + 1)
+      if (await walk(child, out, depth + 1)) return true
     }
   }
+  return false
 }
 
 /**
  * Collects every file from a drop, expanding directories. Falls back to
  * `dataTransfer.files` where the entry API is unavailable.
+ *
+ * Says when it stopped short. The cap used to be applied without a word, and a
+ * folder read partly looks exactly like a folder read whole.
  */
-export async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
+export async function filesFromDrop(dt: DataTransfer): Promise<Dropped> {
   const entries: FileSystemEntryLike[] = []
   for (const item of Array.from(dt.items ?? [])) {
     const entry = (
@@ -94,10 +118,21 @@ export async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
     if (entry) entries.push(entry)
   }
 
-  if (entries.length === 0)
-    return Array.from(dt.files ?? []).slice(0, MAX_FILES)
+  if (entries.length === 0) {
+    const all = Array.from(dt.files ?? [])
+    return {
+      files: all.slice(0, MAX_FILES),
+      truncated: all.length > MAX_FILES,
+    }
+  }
 
-  const out: File[] = []
-  for (const entry of entries) await walk(entry, out, 0)
-  return out
+  const files: File[] = []
+  let truncated = false
+  for (const entry of entries) {
+    if (await walk(entry, files, 0)) {
+      truncated = true
+      break
+    }
+  }
+  return { files, truncated }
 }

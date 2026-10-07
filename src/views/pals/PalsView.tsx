@@ -60,7 +60,7 @@ const CARD_HEIGHT = 148
 const CARD_MIN_WIDTH = 230
 
 export function PalsView({ index }: { index: SaveIndex }) {
-  const { data, ensure } = useRefdataStore()
+  const { data, status, ensure } = useRefdataStore()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Names, icons and passive descriptions all come from reference data, so
@@ -146,8 +146,11 @@ export function PalsView({ index }: { index: SaveIndex }) {
       if (flags.rare && !p.isRare) return false
       if (flags.named && !p.nickname) return false
       if (owner && p.ownerPlayerUid !== owner) return false
-      if (elements.size) {
-        const info = data?.species[p.characterId.toLowerCase()]
+      // Elements come from reference data. Until it has arrived the test
+      // cannot be made, and failing every pal for it emptied the grid and said
+      // "no pals match" about a filter that had not been applied yet.
+      if (elements.size && data) {
+        const info = data.species[p.characterId.toLowerCase()]
         const own = [info?.element1, info?.element2].filter(Boolean) as string[]
         if (!own.some((e) => elements.has(e))) return false
       }
@@ -338,6 +341,12 @@ export function PalsView({ index }: { index: SaveIndex }) {
               <p className="text-sm text-[var(--color-muted)]">
                 No pals match these filters.
               </p>
+              {elements.size > 0 && status === 'degraded' && (
+                <p className="max-w-sm text-center text-xs text-[var(--color-muted)]">
+                  Elements come from reference data, which could not be loaded,
+                  so the element filter is not being applied.
+                </p>
+              )}
               {dirty && <Button onClick={clearAll}>Clear filters</Button>}
             </div>
           ) : (

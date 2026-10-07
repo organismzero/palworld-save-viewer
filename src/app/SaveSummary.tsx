@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+
+import { useRefdataStore } from '../store/refdataStore.ts'
 
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
 import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
@@ -42,6 +44,14 @@ import {
  * allocation, parse timings and warnings.
  */
 export function SaveSummary({ index }: { index: SaveIndex }) {
+  // The hover cards on this page read reference data. Every other view asks
+  // for it; this one did not, so a link straight to `#/summary` gave cards of
+  // raw ids until some other tab had been visited.
+  const ensure = useRefdataStore((r) => r.ensure)
+  useEffect(() => {
+    void ensure()
+  }, [ensure])
+
   const {
     fileName,
     fileBytes,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
 import { bytes, relativeTime } from '../lib/format.ts'
@@ -7,7 +7,8 @@ import {
   restoreSession,
   sessionDescriptor,
 } from '../store/session.ts'
-import { filesFromDrop } from './dropEntries.ts'
+import { useUiStore } from '../store/uiStore.ts'
+import { TRUNCATED_NOTICE, carriesFiles, filesFromDrop } from './dropEntries.ts'
 import { Button } from '../components/controls.tsx'
 import { useFilePicker } from './filePicker.tsx'
 import { ScreenTitle } from '../components/primitives.tsx'
@@ -21,21 +22,45 @@ export function DropZone() {
   const acceptFiles = useSaveStore((s) => s.acceptFiles)
   const error = useSaveStore((s) => s.error)
   const [dragging, setDragging] = useState(false)
+  // A counter, for the reason `useShellDrop` gives: the pointer crossing from
+  // one child to another fires `dragleave` on the one it left, and a boolean
+  // switched the highlight off at every such boundary.
+  const depth = useRef(0)
   const files = useFilePicker()
   const folder = useFilePicker({ directory: true })
 
   return (
     <div
-      onDragOver={(e) => {
-        e.preventDefault()
+      onDragEnter={(e) => {
+        // Only for files. Dragging a selection of the page's own text used to
+        // light the drop zone up as though it could be parsed.
+        if (!carriesFiles(e.dataTransfer)) return
+        depth.current += 1
         setDragging(true)
       }}
-      onDragLeave={() => setDragging(false)}
+      onDragOver={(e) => {
+        if (!carriesFiles(e.dataTransfer)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }}
+      onDragLeave={() => {
+        depth.current = Math.max(0, depth.current - 1)
+        if (depth.current === 0) setDragging(false)
+      }}
       onDrop={(e) => {
         e.preventDefault()
+        depth.current = 0
         setDragging(false)
         void filesFromDrop(e.dataTransfer).then((dropped) => {
-          if (dropped.length > 0) void acceptFiles(dropped)
+          // Long-lived: the landing screen has nowhere to show a notice, so
+          // this has to still be there once the save has parsed and the shell
+          // that does show them has mounted.
+          if (dropped.truncated) {
+            useUiStore
+              .getState()
+              .notify(TRUNCATED_NOTICE, { tone: 'warn', ttl: 60000 })
+          }
+          if (dropped.files.length > 0) void acceptFiles(dropped.files)
         })
       }}
       className="flex min-h-dvh flex-col items-center justify-center gap-7 p-8"

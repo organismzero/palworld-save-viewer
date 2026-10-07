@@ -43,12 +43,25 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
   const warnings = [...s.warnings, ...(localData?.warnings ?? [])]
   const total = warnings.reduce((n, w) => n + w.count, 0)
   const partial = s.playerDetails < s.playersInLevel
-  const attention = warnings.length > 0 || partial
+  // A file that was turned away is the third thing worth flagging, and was the
+  // one this ignored: the only trace of a refused drop was a list inside the
+  // popover, behind a badge still reading "ok".
+  const rejected = Object.values(playerFiles).filter(
+    (f) => f.status === 'rejected',
+  ).length
+  const attention = warnings.length > 0 || partial || rejected > 0
 
-  // The badge has to say which of the two things it is flagging. Showing "ok"
-  // in amber because player saves are missing reads as a contradiction, and
+  // The badge has to say which of the things it is flagging. Showing "ok" in
+  // amber because player saves are missing reads as a contradiction, and
   // teaches people to ignore the colour.
-  const badge = warnings.length > 0 ? count(total) : partial ? 'partial' : 'ok'
+  const badge =
+    warnings.length > 0
+      ? count(total)
+      : rejected > 0
+        ? `${count(rejected)} rejected`
+        : partial
+          ? 'partial'
+          : 'ok'
 
   return (
     <div ref={ref} className="relative">
@@ -59,9 +72,11 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
         aria-label={
           warnings.length > 0
             ? `Save diagnostics — ${warnings.length} warnings`
-            : partial
-              ? `Save diagnostics — ${s.playersInLevel - s.playerDetails} player saves missing`
-              : 'Save diagnostics — no warnings'
+            : rejected > 0
+              ? `Save diagnostics — ${rejected} files rejected`
+              : partial
+                ? `Save diagnostics — ${s.playersInLevel - s.playerDetails} player saves missing`
+                : 'Save diagnostics — no warnings'
         }
         className={cn(
           attention &&

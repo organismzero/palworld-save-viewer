@@ -31,6 +31,7 @@ import {
 import { Field, Meter, Panel, Pill } from '../../components/primitives.tsx'
 import {
   Checkbox,
+  Button,
   IconButton,
   ListRow,
   TextInput,
@@ -277,6 +278,7 @@ export function BasesView({ index }: { index: SaveIndex }) {
                 : worldChests
             }
             storageOnly={storageOnly}
+            onShowAll={() => setStorageOnly(false)}
             nameOfStructure={nameOfStructure}
             selected={selectedStructure}
             onSelect={(s) => {
@@ -519,6 +521,7 @@ function StructureList({
   index,
   structures,
   storageOnly,
+  onShowAll,
   nameOfStructure,
   selected,
   onSelect,
@@ -526,6 +529,8 @@ function StructureList({
   index: SaveIndex
   structures: Structure[]
   storageOnly: boolean
+  /** Turn the storage-only filter off, from the empty state it caused. */
+  onShowAll: () => void
   nameOfStructure: (s: Structure) => string
   selected?: Guid
   onSelect: (s: Structure) => void
@@ -581,9 +586,25 @@ function StructureList({
     <div className="flex min-h-0 flex-1">
       <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
         {rows.length === 0 ? (
-          <p className="p-6 text-sm text-[var(--color-muted)]">
-            Nothing here holds items.
-          </p>
+          // Two different kinds of empty. With the filter on, "nothing holds
+          // items" is the filter's doing and one press undoes it; with it off
+          // there is simply nothing built here.
+          <div className="space-y-3 p-6 text-sm text-[var(--color-muted)]">
+            {storageOnly && structures.length > 0 ? (
+              <>
+                <p>
+                  Nothing here holds items. {count(structures.length)}{' '}
+                  {structures.length === 1 ? 'thing is' : 'things are'} built
+                  here that the storage filter is hiding.
+                </p>
+                <Button size="sm" onClick={onShowAll}>
+                  Show everything built here
+                </Button>
+              </>
+            ) : (
+              <p>Nothing is built here.</p>
+            )}
+          </div>
         ) : (
           <div
             style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
