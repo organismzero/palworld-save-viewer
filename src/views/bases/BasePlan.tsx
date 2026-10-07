@@ -25,6 +25,7 @@ export function BasePlan({
   onSelect,
   chestIds,
   nameOf,
+  tintOf,
 }: {
   base: Base
   structures: Structure[]
@@ -32,8 +33,15 @@ export function BasePlan({
   onSelect: (id: Guid) => void
   /** What a structure is called. The dots carry no other label. */
   nameOf: (s: Structure) => string
-  /** Structures that hold a container, drawn in the storage accent. */
+  /** Structures that hold a container, drawn larger. */
   chestIds: Set<Guid>
+  /**
+   * A colour for a structure, by whoever built it. When given, colour means the
+   * builder and nothing else: storage is told by size alone, and a structure
+   * with no builder is grey. The storage accent is too close to the first
+   * builder's amber to share a plan with it.
+   */
+  tintOf?: (s: Structure) => string | undefined
 }) {
   const [active, setActive] = useState<number>()
   const dots = useRef<(SVGCircleElement | null)[]>([])
@@ -143,6 +151,7 @@ export function BasePlan({
         const isSelected = s.instanceId === selectedId
         const isChest = chestIds.has(s.instanceId)
         const name = nameOf(s)
+        const tint = tintOf?.(s)
         return (
           <circle
             key={s.instanceId}
@@ -155,11 +164,13 @@ export function BasePlan({
             fill={
               isSelected
                 ? 'var(--color-signal)'
-                : isChest
-                  ? 'var(--color-gold)'
-                  : 'var(--color-muted)'
+                : tintOf
+                  ? (tint ?? 'var(--color-muted)')
+                  : isChest
+                    ? 'var(--color-gold)'
+                    : 'var(--color-muted)'
             }
-            opacity={isSelected || isChest ? 1 : 0.55}
+            opacity={isSelected || isChest ? 1 : tint ? 0.8 : 0.55}
             role="button"
             aria-label={name}
             aria-pressed={isSelected}

@@ -37,7 +37,15 @@ export interface BasesParams {
   query: string
   /** Mirrors the "storage only" checkbox; encoded as `all=1` when off. */
   storageOnly: boolean
+  /** Only what this player built. Empty for anyone. */
+  builder: Guid | ''
+  damaged: boolean
+  locked: boolean
+  /** Grouped by what a thing is, or flat with the fullest storage first. */
+  sort: StructureSort
 }
+
+export type StructureSort = 'type' | 'full'
 
 export const BASES_DEFAULTS: BasesParams = {
   source: { kind: 'world' },
@@ -45,9 +53,16 @@ export const BASES_DEFAULTS: BasesParams = {
   structureId: undefined,
   query: '',
   storageOnly: true,
+  builder: '',
+  damaged: false,
+  locked: false,
+  sort: 'type',
 }
 
 export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
+  const builderUids = () =>
+    new Set(index.structures.flatMap((s) => s.buildPlayerUid ?? []))
+
   return {
     encode(v, d) {
       const out: Record<string, string> = {}
@@ -58,6 +73,10 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
       if (v.query !== d.query) out.q = v.query
       // The default is on, so the param records the departure from it.
       if (!v.storageOnly) out.all = '1'
+      if (v.builder) out.by = shortId(v.builder)
+      if (v.damaged) out.dmg = '1'
+      if (v.locked) out.lock = '1'
+      if (v.sort !== d.sort) out.sort = v.sort
       return out
     },
 
@@ -95,6 +114,13 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
           : undefined,
         query: str(raw, 'q', d.query),
         storageOnly: !bool(raw, 'all', false),
+        // A builder is any player uid a structure names, which can be someone
+        // with no record in this save, so it resolves against the structures.
+        builder:
+          resolveShortId(raw.get('by') ?? undefined, builderUids()) ?? '',
+        damaged: bool(raw, 'dmg', d.damaged),
+        locked: bool(raw, 'lock', d.locked),
+        sort: raw.get('sort') === 'full' ? 'full' : d.sort,
       }
     },
 
@@ -110,6 +136,7 @@ export function basesCodec(index: SaveIndex): ParamCodec<BasesParams> {
       if (unresolved(raw, 'c', index.containerById.keys())) {
         out.push('a container')
       }
+      if (unresolved(raw, 'by', builderUids())) out.push('a builder')
       return out
     },
   }

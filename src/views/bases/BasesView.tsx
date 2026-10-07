@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import {
+  baseHealth,
+  buildersOf,
+  byFullness,
   containerLocation,
+  filterStructures,
+  hpPercent,
+  isDamaged,
   searchItems,
   storageTotals,
+  type Builder,
   type ItemHit,
 } from '../../domain/bases.ts'
 import {
@@ -40,6 +47,7 @@ import {
   IconButton,
   ListRow,
   MoreResults,
+  SelectControl,
   TextInput,
 } from '../../components/controls.tsx'
 import {
@@ -47,6 +55,7 @@ import {
   useCombobox,
   type Combobox,
 } from '../../components/combobox.ts'
+import { categoricalCss } from '../../lib/categorical.ts'
 import { compact, count } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -57,6 +66,7 @@ import {
   basesCodec,
   type BasesParams,
   type Source,
+  type StructureSort,
 } from './params.ts'
 import { BasePlan } from './BasePlan.tsx'
 import { ContainerGrid } from './ContainerGrid.tsx'
@@ -198,7 +208,6 @@ export function BasesView({ index }: { index: SaveIndex }) {
   const setSelectedContainer = (containerId: Guid | undefined) =>
     patch({ containerId })
   const setQuery = (query: string) => patch({ query })
-  const setStorageOnly = (storageOnly: boolean) => patch({ storageOnly })
 
   const selectedStructure = params.structureId
   const setSelectedStructure = (structureId: Guid | undefined) =>
@@ -211,20 +220,45 @@ export function BasesView({ index }: { index: SaveIndex }) {
     ? index.structureById.get(selectedStructure)
     : undefined
 
+  /** Everything at the chosen source, before the list's own filters. */
+  const sourceStructures = useMemo(
+    () =>
+      source.kind === 'base'
+        ? (index.structuresByBase.get(source.baseId) ?? [])
+        : source.kind === 'world'
+          ? worldChests
+          : [],
+    [index, source, worldChests],
+  )
+  const builders = useMemo(
+    () => buildersOf(index, sourceStructures),
+    [index, sourceStructures],
+  )
+  const { builder, damaged, locked, sort } = params
+  const listed = useMemo(
+    () =>
+      filterStructures(sourceStructures, {
+        storageOnly,
+        builder,
+        damaged,
+        locked,
+      }),
+    [sourceStructures, storageOnly, builder, damaged, locked],
+  )
+  const narrowed = storageOnly || !!builder || damaged || locked
+  const clearFilters = () =>
+    patch({ storageOnly: false, builder: '', damaged: false, locked: false })
+
   /** What the centre column is showing, resolved to containers, for export. */
   const visibleContainers = useMemo(() => {
     if (source.kind === 'unattributed') return orphans
-    const structures =
-      source.kind === 'base'
-        ? (index.structuresByBase.get(source.baseId) ?? [])
-        : worldChests
-    return structures.flatMap((s) => {
+    return listed.flatMap((s) => {
       const c = s.containerId
         ? index.containerById.get(s.containerId)
         : undefined
       return c ? [c] : []
     })
-  }, [index, source, orphans, worldChests])
+  }, [index, source, orphans, listed])
 
   const openContainer = (containerId: Guid) => {
     const { source: next, structureId } = locate(index, containerId)
@@ -242,11 +276,16 @@ export function BasesView({ index }: { index: SaveIndex }) {
         worldChests={worldChests}
         orphans={orphans}
         source={source}
-        onSelect={(s) => {
-          setSource(s)
-          setSelectedContainer(undefined)
-          setSelectedStructure(undefined)
-        }}
+        onSelect={(s) =>
+          // The builder goes with the place: whoever built one base may have
+          // built nothing at the next, and the list would open empty.
+          patch({
+            source: s,
+            containerId: undefined,
+            structureId: undefined,
+            builder: '',
+          })
+        }
       />
 
       {/*
@@ -268,10 +307,15 @@ export function BasesView({ index }: { index: SaveIndex }) {
             openContainer(id)
             setQuery('')
           }}
-          storageOnly={storageOnly}
-          onStorageOnly={setStorageOnly}
-          showStorageToggle={source.kind !== 'unattributed'}
-        />
+        >
+          {source.kind !== 'unattributed' && (
+            <StructureFilters
+              params={params}
+              builders={builders}
+              onChange={patch}
+            />
+          )}
+        </ItemSearch>
 
         {source.kind === 'unattributed' ? (
           <OrphanList
@@ -288,13 +332,11 @@ export function BasesView({ index }: { index: SaveIndex }) {
         ) : (
           <StructureList
             index={index}
-            structures={
-              source.kind === 'base'
-                ? (index.structuresByBase.get(source.baseId) ?? [])
-                : worldChests
-            }
-            storageOnly={storageOnly}
-            onShowAll={() => setStorageOnly(false)}
+            structures={listed}
+            total={sourceStructures.length}
+            narrowed={narrowed}
+            onShowAll={clearFilters}
+            sort={sort}
             nameOfStructure={nameOfStructure}
             selected={selectedStructure}
             onSelect={(s) => {
@@ -360,6 +402,9 @@ export function BasesView({ index }: { index: SaveIndex }) {
             }
             selected={selectedStructure}
             nameOfStructure={nameOfStructure}
+            onDamaged={() =>
+              patch({ damaged: true, storageOnly: false, builder: '' })
+            }
             onSelect={(id) => {
               const st = index.structureById.get(id)
               if (!st) return
@@ -530,6 +575,75 @@ function RailButton({
    Centre — what is there
    ------------------------------------------------------------------------- */
 
+/**
+ * What narrows the structure list.
+ *
+ * The builder select only appears where somebody built something: world chests
+ * have no builder, and a select with one option is not a choice.
+ */
+function StructureFilters({
+  params,
+  builders,
+  onChange,
+}: {
+  params: BasesParams
+  builders: Builder[]
+  onChange: (p: Partial<BasesParams>) => void
+}) {
+  const check = 'gap-2 text-xs text-[var(--color-muted)]'
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        <Checkbox
+          checked={params.storageOnly}
+          onChange={(storageOnly) => onChange({ storageOnly })}
+          label="storage only"
+          className={check}
+        />
+        <Checkbox
+          checked={params.damaged}
+          onChange={(damaged) => onChange({ damaged })}
+          label="damaged"
+          className={check}
+        />
+        <Checkbox
+          checked={params.locked}
+          onChange={(locked) => onChange({ locked })}
+          label="locked"
+          className={check}
+        />
+      </div>
+      <div className="flex gap-2">
+        {builders.length > 0 && (
+          <SelectControl
+            aria-label="Built by"
+            className="min-w-0 flex-1"
+            value={params.builder}
+            onChange={(builder) => onChange({ builder })}
+            options={[
+              { value: '', label: 'Built by anyone' },
+              ...builders.map((b) => ({
+                value: b.uid,
+                label: `${b.name ?? 'Unknown player'} · ${count(b.count)}`,
+              })),
+            ]}
+          />
+        )}
+        <SelectControl
+          aria-label="Order"
+          className="min-w-0 flex-1"
+          value={params.sort}
+          onChange={(sort) => onChange({ sort: sort as StructureSort })}
+          options={[
+            { value: 'type', label: 'Grouped by kind' },
+            { value: 'full', label: 'Fullest first' },
+          ]}
+        />
+      </div>
+    </div>
+  )
+}
+
 type Row =
   | { kind: 'group'; key: string; label: string; n: number; open: boolean }
   | { kind: 'structure'; key: string; structure: Structure }
@@ -537,17 +651,24 @@ type Row =
 function StructureList({
   index,
   structures,
-  storageOnly,
+  total,
+  narrowed,
   onShowAll,
+  sort,
   nameOfStructure,
   selected,
   onSelect,
 }: {
   index: SaveIndex
+  /** What the filters let through. */
   structures: Structure[]
-  storageOnly: boolean
-  /** Turn the storage-only filter off, from the empty state it caused. */
+  /** How many there are here before the filters. */
+  total: number
+  /** Whether any filter is on. */
+  narrowed: boolean
+  /** Turn the filters off, from the empty state they caused. */
   onShowAll: () => void
+  sort: StructureSort
   nameOfStructure: (s: Structure) => string
   selected?: Guid
   onSelect: (s: Structure) => void
@@ -555,15 +676,21 @@ function StructureList({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [closed, setClosed] = useState<Set<string>>(new Set())
 
-  const visible = storageOnly
-    ? structures.filter((s) => s.containerId)
-    : structures
-
   // Grouped by asset id rather than by friendly name: two assets can share a
   // display name, and merging them would make the counts wrong.
   const rows = useMemo(() => {
+    // Fullest first is a ranking across kinds, so it has no groups: the point
+    // is which chest to empty, whatever it is made of.
+    if (sort === 'full') {
+      return byFullness(index, structures).map((s): Row => ({
+        kind: 'structure',
+        key: s.instanceId,
+        structure: s,
+      }))
+    }
+
     const groups = new Map<string, Structure[]>()
-    for (const s of visible) {
+    for (const s of structures) {
       const bucket = groups.get(s.mapObjectId)
       if (bucket) bucket.push(s)
       else groups.set(s.mapObjectId, [s])
@@ -589,7 +716,7 @@ function StructureList({
       }
     }
     return out
-  }, [visible, closed, nameOfStructure])
+  }, [index, structures, sort, closed, nameOfStructure])
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -603,16 +730,16 @@ function StructureList({
     <div className="flex min-h-0 flex-1">
       <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
         {rows.length === 0 ? (
-          // Two different kinds of empty. With the filter on, "nothing holds
-          // items" is the filter's doing and one press undoes it; with it off
-          // there is simply nothing built here.
+          // Two different kinds of empty. With a filter on, "nothing matches"
+          // is the filter's doing and one press undoes it; with none on there
+          // is simply nothing built here.
           <div className="space-y-3 p-6 text-sm text-[var(--color-muted)]">
-            {storageOnly && structures.length > 0 ? (
+            {narrowed && total > 0 ? (
               <>
                 <p>
-                  Nothing here holds items. {count(structures.length)}{' '}
-                  {structures.length === 1 ? 'thing is' : 'things are'} built
-                  here that the storage filter is hiding.
+                  Nothing here matches. {count(total)}{' '}
+                  {total === 1 ? 'thing is' : 'things are'} built here that the
+                  filters are hiding.
                 </p>
                 <Button size="sm" onClick={onShowAll}>
                   Show everything built here
@@ -657,6 +784,7 @@ function StructureList({
                       name={nameOfStructure(row.structure)}
                       selected={row.structure.instanceId === selected}
                       onSelect={() => onSelect(row.structure)}
+                      grouped={sort === 'type'}
                     />
                   )}
                 </div>
@@ -683,6 +811,7 @@ function BaseOverview({
   name,
   selected,
   onSelect,
+  onDamaged,
   nameOfStructure,
 }: {
   index: SaveIndex
@@ -690,6 +819,8 @@ function BaseOverview({
   name?: string
   selected?: Guid
   onSelect: (id: Guid) => void
+  /** Narrow the structure list to what is damaged. */
+  onDamaged: () => void
   nameOfStructure: (s: Structure) => string
 }) {
   if (!base) {
@@ -706,9 +837,18 @@ function BaseOverview({
   const chestIds = new Set(
     structures.flatMap((s) => (s.containerId ? [s.instanceId] : [])),
   )
-  const workers = base.workerContainerId
-    ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
-    : 0
+  const health = baseHealth(index, base)
+  const guild = base.groupId ? index.guildById.get(base.groupId) : undefined
+
+  // One colour per builder, and only when there is more than one: a plan drawn
+  // all in one colour says nothing its legend would not.
+  const builders = buildersOf(index, structures)
+  const tints = new Map(
+    builders.length > 1
+      ? builders.map((b, i) => [b.uid, categoricalCss(i)])
+      : [],
+  )
+  const unbuilt = structures.filter((s) => !s.buildPlayerUid).length
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -721,29 +861,141 @@ function BaseOverview({
             selectedId={selected}
             onSelect={onSelect}
             nameOf={nameOfStructure}
+            tintOf={
+              tints.size > 0
+                ? (s) =>
+                    s.buildPlayerUid ? tints.get(s.buildPlayerUid) : undefined
+                : undefined
+            }
           />
+          {tints.size > 0 && (
+            <ul
+              aria-label="Who built what"
+              className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--color-muted)]"
+            >
+              {builders.map((b) => (
+                <li key={b.uid} className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: tints.get(b.uid) }}
+                  />
+                  {b.name ?? 'Unknown player'}
+                  <span className="num">{count(b.count)}</span>
+                </li>
+              ))}
+              {unbuilt > 0 && (
+                <li
+                  className="flex items-center gap-1.5"
+                  title="World scenery, or placed by a pal rather than a player."
+                >
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full bg-[var(--color-muted)] opacity-55"
+                  />
+                  no builder
+                  <span className="num">{count(unbuilt)}</span>
+                </li>
+              )}
+            </ul>
+          )}
         </div>
         <div className="min-w-[220px] flex-1">
           <div className="text-lg leading-tight">{name}</div>
-          <div className="label mt-1.5">plan</div>
+          <div className="label mt-1.5">
+            {guild
+              ? `${guild.name} · camp level ${guild.baseCampLevel}`
+              : 'no guild recorded'}
+          </div>
           <dl className="mt-4">
             <Field label="centre" value={formatMapPos(posToMap(base.pos))} />
             <Field
               label="build radius"
               value={`${base.areaRange.toFixed(0)} units`}
             />
-            <Field label="structures" value={count(structures.length)} />
+            <Field label="structures" value={count(health.structures)} />
             <Field label="with storage" value={count(chestIds.size)} />
-            <Field label="workers" value={count(workers)} />
+          </dl>
+
+          <div className="label mt-5">health</div>
+          <dl className="mt-1.5">
+            <HealthField
+              label="damaged"
+              n={health.damaged}
+              of={health.structures}
+              action={
+                health.damaged > 0
+                  ? { label: 'list', onClick: onDamaged }
+                  : undefined
+              }
+            />
+            <HealthField
+              label="locked"
+              n={health.locked}
+              of={health.structures}
+              neutral
+            />
+            <HealthField
+              label="workers needing care"
+              n={health.workersAiling}
+              of={health.workers}
+            />
           </dl>
           <p className="mt-4 text-[11px] leading-relaxed text-[var(--color-muted)]">
             Every dot is a structure, drawn from the same coordinates as the
-            world map. The ring is the camp's build radius; buildings outside it
-            are normal.
+            world map{tints.size > 0 && ', in the colour of whoever built it'}.
+            Larger dots hold storage. The ring is the camp's build radius;
+            buildings outside it are normal.
           </p>
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * "3 of 853", in the warning colour when the 3 is something to act on.
+ *
+ * A locked chest is not a fault, so it can ask to stay neutral.
+ */
+function HealthField({
+  label,
+  n,
+  of,
+  neutral,
+  action,
+}: {
+  label: string
+  n: number
+  of: number
+  neutral?: boolean
+  action?: { label: string; onClick: () => void }
+}) {
+  return (
+    <Field
+      label={label}
+      value={
+        <>
+          {action && (
+            <button
+              type="button"
+              onClick={action.onClick}
+              className="mr-3 font-sans text-[11px] text-[var(--color-signal)] underline-offset-2 hover:underline"
+            >
+              {action.label}
+            </button>
+          )}
+          <span
+            className={
+              n > 0 && !neutral ? 'text-[var(--color-stamina)]' : undefined
+            }
+          >
+            {count(n)}
+          </span>
+          <span className="text-[var(--color-muted)]"> of {count(of)}</span>
+        </>
+      }
+    />
   )
 }
 
@@ -781,22 +1033,22 @@ function StructureRow({
   name,
   selected,
   onSelect,
+  grouped,
 }: {
   index: SaveIndex
   structure: Structure
   name: string
   selected: boolean
   onSelect: () => void
+  /** Under a group heading, and so indented beneath it. */
+  grouped: boolean
 }) {
   const { data } = useRefdataStore()
   const info = data?.structures[structure.mapObjectId.toLowerCase()]
   const container = structure.containerId
     ? index.containerById.get(structure.containerId)
     : undefined
-  const damaged =
-    structure.hpMax !== undefined &&
-    structure.hpCurrent !== undefined &&
-    structure.hpCurrent < structure.hpMax
+  const damaged = isDamaged(structure)
   const builder = structure.buildPlayerUid
     ? index.playerByUid.get(structure.buildPlayerUid)?.name
     : undefined
@@ -806,7 +1058,7 @@ function StructureRow({
       selected={selected}
       onClick={onSelect}
       card={{ kind: 'structure', id: structure.instanceId }}
-      className="h-full pl-6"
+      className={cn('h-full', grouped && 'pl-6')}
     >
       <GameIcon path={info?.icon} name={name} size={22} />
       <span className="min-w-0 flex-1">
@@ -818,14 +1070,16 @@ function StructureRow({
           )}
         >
           {formatMapPos(posToMap(structure.pos))}
-          {damaged &&
-            ` · ${Math.round((structure.hpCurrent! / structure.hpMax!) * 100)}% hp`}
+          {damaged && ` · ${hpPercent(structure)}% hp`}
           {builder && ` · ${builder}`}
         </span>
       </span>
       {structure.locked && <Pill tone="warn">locked</Pill>}
       {container && (
-        <span className="num shrink-0 text-xs text-[var(--color-gold)]">
+        <span
+          className="num shrink-0 text-xs text-[var(--color-gold)]"
+          title="Stacks held"
+        >
           {container.slots.length}
         </span>
       )}
@@ -1001,10 +1255,7 @@ function StructureDetail({
   const builder = structure.buildPlayerUid
     ? index.playerByUid.get(structure.buildPlayerUid)
     : undefined
-  const damaged =
-    structure.hpMax !== undefined &&
-    structure.hpCurrent !== undefined &&
-    structure.hpCurrent < structure.hpMax
+  const damaged = isDamaged(structure)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1057,9 +1308,7 @@ function StructureDetail({
               <div className="label mb-1.5">
                 condition
                 <span className="ml-2 normal-case">
-                  {damaged
-                    ? `${Math.round((structure.hpCurrent! / structure.hpMax!) * 100)}% — damaged`
-                    : 'undamaged'}
+                  {damaged ? `${hpPercent(structure)}% — damaged` : 'undamaged'}
                 </span>
               </div>
               {/* The one HP in this app with a maximum the save actually
@@ -1123,9 +1372,7 @@ function ItemSearch({
   nameOfBase,
   data,
   onOpen,
-  storageOnly,
-  onStorageOnly,
-  showStorageToggle,
+  children,
 }: {
   index: SaveIndex
   query: string
@@ -1135,9 +1382,8 @@ function ItemSearch({
   nameOfBase: (b: Base) => string
   data: Refdata | undefined
   onOpen: (containerId: Guid) => void
-  storageOnly: boolean
-  onStorageOnly: (v: boolean) => void
-  showStorageToggle: boolean
+  /** The list's own filters, which sit under the search box. */
+  children?: ReactNode
 }) {
   // Every match, not the first forty: the export wants them all, and the list
   // says how many it is holding back.
@@ -1178,14 +1424,7 @@ function ItemSearch({
           {...combo.inputProps}
           placeholder="Find an item anywhere…"
         />
-        {showStorageToggle && (
-          <Checkbox
-            checked={storageOnly}
-            onChange={onStorageOnly}
-            label="storage only"
-            className="text-xs text-[var(--color-muted)]"
-          />
-        )}
+        {children}
       </div>
 
       {open && (

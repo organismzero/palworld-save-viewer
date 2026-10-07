@@ -3,13 +3,10 @@
  *
  * On a dedicated server several guilds build on one island, and with every
  * structure the same grey and every base the same cyan there is no telling
- * whose anything is. These are data colours — they distinguish categories, as
- * the element hues do — so they sit outside the interface's own palette.
- *
- * Pink is left out: hand-placed pins already use it on the same layer the
- * guild markers are drawn on.
+ * whose anything is. The colours are the shared categorical ones.
  */
 
+import { categorical, categoricalCss } from '../../lib/categorical.ts'
 import type { Guid, Guild } from '../../domain/types.ts'
 
 export interface Tint {
@@ -18,17 +15,6 @@ export interface Tint {
   /** The same colour for CSS. */
   css: string
 }
-
-const PALETTE: readonly number[] = [
-  0xf59e0b, // amber
-  0x34d399, // green
-  0x60a5fa, // blue
-  0xa78bfa, // violet
-  0xfb7185, // rose
-  0x22d3ee, // cyan
-  0xfacc15, // yellow
-  0xfb923c, // orange
-]
 
 /**
  * Player guilds only, the one with most players first, so the guild most of the map belongs to
@@ -48,11 +34,7 @@ export function guildTints(guilds: readonly Guild[]): Map<Guid, Tint> {
         a.groupId.localeCompare(b.groupId),
     )
   for (const [i, g] of ordered.entries()) {
-    const color = PALETTE[i % PALETTE.length]!
-    out.set(g.groupId, {
-      color,
-      css: `#${color.toString(16).padStart(6, '0')}`,
-    })
+    out.set(g.groupId, { color: categorical(i), css: categoricalCss(i) })
   }
   return out
 }

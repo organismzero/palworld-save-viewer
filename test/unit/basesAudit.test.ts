@@ -7,7 +7,18 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { containerContents, wearFraction } from '@/domain/bases.ts'
+import { serialiseParams } from '@/app/viewParams.ts'
+import {
+  baseHealth,
+  buildersOf,
+  byFullness,
+  containerContents,
+  filterStructures,
+  hpPercent,
+  isDamaged,
+  wearFraction,
+} from '@/domain/bases.ts'
+import { BASES_DEFAULTS, basesCodec } from '@/views/bases/params.ts'
 import {
   CONTAINER_COLUMNS,
   ITEM_HIT_COLUMNS,
@@ -15,10 +26,13 @@ import {
   itemHitRows,
 } from '@/domain/exportRows.ts'
 import type {
+  Base,
   Container,
   DynamicItem,
   ItemStack,
+  Pal,
   SaveIndex,
+  Structure,
 } from '@/domain/types.ts'
 import type { Refdata } from '@/refdata/refdata.ts'
 
@@ -53,15 +67,57 @@ const chest: Container = {
   usedSlots: 7,
 }
 
+const ANN = id('e')
+const BOB = id('f')
+const CAMP = id('b')
+
+function structure(n: string, over: Partial<Structure> = {}): Structure {
+  return {
+    instanceId: id(n),
+    mapObjectId: 'Thing',
+    pos: { x: 0, y: 0, z: 0 },
+    baseCampId: CAMP,
+    locked: false,
+    isBuilt: true,
+    ...over,
+  }
+}
+
+const small: Container = {
+  containerId: id('c'),
+  slots: [slot(0, 'Wood', 5)],
+  ownerKind: 'structure',
+  confidence: 'exact',
+  slotCount: 1,
+  usedSlots: 1,
+}
+
+const structures = [
+  structure('5', { buildPlayerUid: ANN, hpCurrent: 40, hpMax: 80 }),
+  structure('6', { buildPlayerUid: ANN, containerId: small.containerId, locked: true }), // prettier-ignore
+  structure('7', { buildPlayerUid: BOB, containerId: chest.containerId, hpCurrent: 80, hpMax: 80 }), // prettier-ignore
+  // Scenery inside the camp: nobody built it and it records no hit points.
+  structure('8'),
+]
+
+const base = { baseId: CAMP, workerContainerId: id('d') } as Base
+const workers = [{ sickness: 'Cold' }, {}, {}] as Pal[]
+
 const index = {
-  containers: [chest],
-  containerById: new Map([[chest.containerId, chest]]),
+  containers: [chest, small],
+  containerById: new Map([chest, small].map((c) => [c.containerId, c])),
   dynamicItemById: new Map(dynamics.map((d) => [d.localId, d])),
-  structureById: new Map(),
-  structureByContainer: new Map(),
-  baseById: new Map(),
-  bases: [],
-  playerByUid: new Map(),
+  structures,
+  structureById: new Map(structures.map((s) => [s.instanceId, s])),
+  structuresByBase: new Map([[CAMP, structures]]),
+  structureByContainer: new Map([
+    [small.containerId, id('6')],
+    [chest.containerId, id('7')],
+  ]),
+  baseById: new Map([[CAMP, base]]),
+  bases: [base],
+  palsByContainer: new Map([[id('d'), workers]]),
+  playerByUid: new Map([[ANN, { name: 'Ann' }]]),
   guildById: new Map(),
 } as unknown as SaveIndex
 
@@ -141,5 +197,85 @@ describe('the item search export', () => {
       },
     ])
     expect(row).toMatchObject({ durabilityLowest: 50, durabilityFull: 200 })
+  })
+})
+
+describe('damage', () => {
+  it('needs both halves of the hit points to call a thing damaged', () => {
+    expect(structures.map(isDamaged)).toEqual([true, false, false, false])
+    expect(hpPercent(structures[0]!)).toBe(50)
+    expect(hpPercent(structures[3]!)).toBeUndefined()
+  })
+})
+
+describe('filterStructures', () => {
+  const off = { storageOnly: false, builder: '', damaged: false, locked: false }
+  const got = (over: Partial<typeof off>) =>
+    filterStructures(structures, { ...off, ...over }).map(
+      (s) => s.instanceId[0],
+    )
+
+  it('lets everything through with nothing on', () => {
+    expect(got({})).toEqual(['5', '6', '7', '8'])
+  })
+
+  it('narrows by storage, builder, damage and lock, and by all at once', () => {
+    expect(got({ storageOnly: true })).toEqual(['6', '7'])
+    expect(got({ builder: ANN })).toEqual(['5', '6'])
+    expect(got({ damaged: true })).toEqual(['5'])
+    expect(got({ locked: true })).toEqual(['6'])
+    expect(got({ builder: ANN, storageOnly: true, damaged: true })).toEqual([])
+  })
+})
+
+describe('buildersOf', () => {
+  it('counts per builder, most first, and keeps one the save cannot name', () => {
+    expect(buildersOf(index, structures)).toEqual([
+      { uid: ANN, name: 'Ann', count: 2 },
+      { uid: BOB, name: undefined, count: 1 },
+    ])
+  })
+})
+
+describe('byFullness', () => {
+  it('orders by stacks held, with what holds nothing last', () => {
+    const order = byFullness(index, structures).map((s) => s.instanceId[0])
+    expect(order.slice(0, 2)).toEqual(['7', '6'])
+    expect(order.slice(2).sort()).toEqual(['5', '8'])
+  })
+})
+
+describe('baseHealth', () => {
+  it('counts what is damaged, locked and ailing against the totals', () => {
+    expect(baseHealth(index, base)).toEqual({
+      structures: 4,
+      damaged: 1,
+      locked: 1,
+      workers: 3,
+      workersAiling: 1,
+    })
+  })
+})
+
+describe('the structure list in a Bases link', () => {
+  const codec = basesCodec(index)
+  const source = { kind: 'base' as const, baseId: CAMP }
+
+  it('writes nothing extra for an untouched list', () => {
+    const out = codec.encode({ ...BASES_DEFAULTS, source }, BASES_DEFAULTS)
+    expect(Object.keys(out)).toEqual(['src'])
+  })
+
+  it('round-trips the builder, both flags and the order', () => {
+    const value = { ...BASES_DEFAULTS, source, builder: BOB, damaged: true, locked: true, sort: 'full' as const } // prettier-ignore
+    const qs = serialiseParams(codec.encode(value, BASES_DEFAULTS))
+    expect(codec.decode(new URLSearchParams(qs), BASES_DEFAULTS)).toEqual(value)
+  })
+
+  it('accepts a builder with no player record, and reports one nobody is', () => {
+    expect(codec.missing!(new URLSearchParams('by=ffffffff'))).toEqual([])
+    expect(codec.missing!(new URLSearchParams('by=99999999'))).toEqual(['a builder']) // prettier-ignore
+    const got = codec.decode(new URLSearchParams('by=99999999&sort=nope'), BASES_DEFAULTS) // prettier-ignore
+    expect(got).toMatchObject({ builder: '', sort: 'type' })
   })
 })

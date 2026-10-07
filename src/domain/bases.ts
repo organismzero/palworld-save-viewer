@@ -205,8 +205,8 @@ export function hpPercent(s: Structure): number | undefined {
 export interface BaseHealth {
   structures: number
   damaged: number
-  /** Structures with storage and a password set. */
-  lockedChests: number
+  /** Structures with a password set: chests, and doors. */
+  locked: number
   workers: number
   /** Workers that are sick, hungry, hurt or low on sanity. */
   workersAiling: number
@@ -218,7 +218,7 @@ export function baseHealth(index: SaveIndex, base: Base): BaseHealth {
   return {
     structures: structures.length,
     damaged: structures.filter(isDamaged).length,
-    lockedChests: structures.filter((s) => s.locked && s.containerId).length,
+    locked: structures.filter((s) => s.locked).length,
     workers: workers.length,
     workersAiling: workers.filter((p) => conditions(p).length > 0).length,
   }
