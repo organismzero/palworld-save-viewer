@@ -39,6 +39,25 @@ export function App() {
     )
   }
 
+  if (status === 'restoring') {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-3">
+        <div className="font-display text-xl font-[200] tracking-[0.08em] uppercase">
+          {fileName}
+        </div>
+        <div className="label" role="status" aria-live="polite">
+          Restoring the save kept in this browser
+          {fileBytes ? ` · ${bytes(fileBytes)}` : ''}
+        </div>
+        {/* A way out, because this waits on the browser's storage and nothing
+            here can make that answer. */}
+        <Button size="sm" tone="ghost" onClick={reset}>
+          Open a different save
+        </Button>
+      </main>
+    )
+  }
+
   if (status === 'error') {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8">

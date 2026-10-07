@@ -224,8 +224,14 @@ async function persistOrigin(): Promise<void> {
  *
  * Sets `restoredFrom` so the readers of `timings` can say the session was
  * restored rather than dropping their content and looking broken.
+ *
+ * `stillWanted` is asked once the read comes back, and a no leaves the store
+ * alone: an automatic restore can be abandoned for a different file while the
+ * read is still out, and must not then land on top of it.
  */
-export async function restoreSession(): Promise<boolean> {
+export async function restoreSession(
+  stillWanted: () => boolean = () => true,
+): Promise<boolean> {
   const snap = await readSnapshot()
   if (!snap) {
     // The descriptor promised something that is no longer there — most likely
@@ -233,6 +239,7 @@ export async function restoreSession(): Promise<boolean> {
     writeDescriptor(undefined)
     return false
   }
+  if (!stillWanted()) return false
 
   useSaveStore.setState({
     status: 'ready',
@@ -324,6 +331,48 @@ export async function flushSessionWrite(): Promise<void> {
   if (!snap || rememberPref() !== 'on') return
   inFlight = inFlight.then(() => writeSnapshot(snap)).catch(() => {})
   await inFlight
+}
+
+/**
+ * Bring the remembered save back without being asked, once, at page load.
+ *
+ * "Keep this save" has always been described as the save coming back after a
+ * reload, and until this it came back only as a button to press. That one
+ * press was also the whole cost of a second tab: a duplicated tab, or a link
+ * opened in a new one, carried the view and its params in the hash and then
+ * stopped at the landing screen.
+ *
+ * The status is set before the first render rather than in an effect, so the
+ * landing screen is never drawn only to be replaced. If the snapshot turns out
+ * to be gone — evicted, most likely — the app falls back to the landing screen,
+ * which is where it would have been.
+ *
+ * Only ever at load. "Load another" goes to the landing screen and stays
+ * there, with its Reopen button, because that was a request for a different
+ * save.
+ */
+export function autoRestore(): void {
+  if (rememberPref() !== 'on') return
+  const descriptor = sessionDescriptor()
+  if (!descriptor) return
+
+  const restoring = () => useSaveStore.getState().status === 'restoring'
+  useSaveStore.setState({
+    status: 'restoring',
+    fileName: descriptor.fileName,
+    fileBytes: descriptor.fileBytes,
+  })
+  const giveUp = () => {
+    if (!restoring()) return
+    useSaveStore.setState({
+      status: 'idle',
+      fileName: undefined,
+      fileBytes: undefined,
+    })
+  }
+  restoreSession(restoring).then((ok) => {
+    if (!ok) giveUp()
+  }, giveUp)
 }
 
 /**

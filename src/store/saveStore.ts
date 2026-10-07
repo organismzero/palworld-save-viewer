@@ -22,7 +22,12 @@ import type {
   ToWorker,
 } from '../parse/worker/protocol.ts'
 
-export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
+/**
+ * `restoring` is a remembered save being read back out of this browser, as
+ * against `loading`, which is a file being parsed. Nothing is in flight in the
+ * worker, so it has no phase and no progress to show.
+ */
+export type LoadStatus = 'idle' | 'restoring' | 'loading' | 'ready' | 'error'
 
 export interface PlayerFileState {
   fileName: string
