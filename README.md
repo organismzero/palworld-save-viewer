@@ -54,6 +54,8 @@ Seven views, switchable with the tabs or the number keys:
 
 Press <kbd>⌘K</kbd> to search pals, items, players and bases from anywhere.
 
+Press <kbd>T</kbd> for the **utility tray**, which sits beside whichever view is open: a cheat sheet of every passive and what it does, searchable by name or effect and marked with how many of your pals carry each; the element chart; and your saved breeding paths. Save a path from Breed and it is one click away from any view, with how far along its route was when you last looked. The tray floats over the view or pins beside it.
+
 Hovering almost anything named — a pal, species, passive, item, player, guild member, active skill, element, work type, base or structure — opens an in-game-style card with its stats and details, on the map as well. Keyboard focus opens the same card, and screen readers get its text as the trigger's description.
 
 ## Using it

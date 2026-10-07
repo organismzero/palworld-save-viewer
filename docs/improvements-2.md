@@ -1,6 +1,6 @@
 # Cross-view links, surfacing parsed data, and honest recommendations
 
-**Status, 2026-10-07.** Every item below was re-checked against the code on this date. Only 0g had been done. Since the original review the app gained the shared hover-card layer (`src/components/cards/`), dropped JSON loading in favour of raw `.sav` only, split the Builds tab into `parts.tsx` and `ProductionBuilds.tsx`, added four Builds purposes (fishing, food, cake, ranch) and added Pick-a-pair to Breed. Items those changes made obsolete are removed, items they half-built are shrunk to what remains, and code is named by symbol because the original line numbers had all drifted. Eight items are taken by the utility tray work, listed under "Utility tray" below and marked **(tray)** where they appear.
+**Status, 2026-10-07.** Every item below was re-checked against the code on this date. Only 0g had been done. Since the original review the app gained the shared hover-card layer (`src/components/cards/`), dropped JSON loading in favour of raw `.sav` only, split the Builds tab into `parts.tsx` and `ProductionBuilds.tsx`, added four Builds purposes (fishing, food, cake, ranch) and added Pick-a-pair to Breed. Items those changes made obsolete are removed, items they half-built are shrunk to what remains, and code is named by symbol because the original line numbers had all drifted. Eight items were taken by the utility tray work, listed under "Utility tray" below and marked **(tray)** where they appear. That work is done, so those eight are done; everything else here is still open.
 
 ## Context
 
@@ -25,7 +25,7 @@ Sizes below are S (an hour or two), M (half a day to a day), L (several days). E
 
 ## Utility tray
 
-A fly-out tray, opened from the header or with `T`, available on every tab. It opens as an overlay over the right edge and can be pinned so the view narrows instead. It holds reference sheets and saved breeding paths. In order:
+**Done.** A fly-out tray, opened from the header or with `T`, available on every tab. It opens as an overlay over the right edge and can be pinned so the view narrows instead. It holds reference sheets and saved breeding paths. Built in this order:
 
 1. **Shell plumbing**: 0c, 0d and 1g from this document.
 2. **Tray shell**: the frame, tabs, pin, shortcut.
@@ -377,7 +377,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 
 ## Implementation order
 
-1. **The utility tray**, in the order listed under that heading. It takes 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
+1. ~~**The utility tray**~~, done. It took 0c, 0d, 1g, 1h, 2f, 7d, 7e and 8c with it.
 2. **8a** on its own: it is a correctness fix to a claim the app makes today.
 3. **The rest of Phase 1.** All small, all user-visible, no design decisions beyond 1l.
 4. **0a and 0e, then Phase 2, then Phase 3.** Links first because they make every later addition reachable; the drawer additions because they are the cheapest new value in the document.
