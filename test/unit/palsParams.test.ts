@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { serialiseParams } from '@/app/viewParams.ts'
 import type { Pal, SaveIndex } from '@/domain/types.ts'
 import type { Refdata } from '@/refdata/refdata.ts'
-import { filterPals, isFiltered } from '@/views/pals/filter.ts'
+import { filterPals, isFiltered, presetChoices } from '@/views/pals/filter.ts'
 import {
   OWNER_BASE,
   OWNER_NONE,
@@ -232,5 +232,34 @@ describe('isFiltered', () => {
     ] as Partial<PalsParams>[]) {
       expect(isFiltered({ ...PALS_DEFAULTS, ...over })).toBe(true)
     }
+  })
+})
+
+describe('presetChoices', () => {
+  const P1 = '11111111'.padEnd(32, '0')
+  const P2 = '22222222'.padEnd(32, '0')
+
+  it('keys an unnamed slot by position, never by its empty name', () => {
+    const got = presetChoices([
+      { name: 'Raid team', palIds: [P1] },
+      { name: '', palIds: [P2] },
+    ])
+    expect(got.map((p) => [p.key, p.label])).toEqual([
+      ['Raid team', 'Raid team'],
+      ['#2', 'Preset 2'],
+    ])
+    // The regression: '' is also "no preset chosen", and matching on it
+    // narrowed the grid to the first unnamed slot with no filter set.
+    expect(got.some((p) => p.key === '')).toBe(false)
+  })
+
+  it('leaves out a slot holding nobody', () => {
+    expect(
+      presetChoices([
+        { name: '', palIds: [] },
+        { name: 'Empty but named', palIds: [] },
+        { name: '', palIds: [P1] },
+      ]).map((p) => p.key),
+    ).toEqual(['#3'])
   })
 })

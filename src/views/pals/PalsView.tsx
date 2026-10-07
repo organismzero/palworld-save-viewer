@@ -42,7 +42,7 @@ import {
   type PalsParams,
   type SortKey,
 } from './params.ts'
-import { filterPals, isFiltered } from './filter.ts'
+import { filterPals, isFiltered, presetChoices } from './filter.ts'
 import { palColumns } from '../../domain/exportRows.ts'
 import {
   ElementBadge,
@@ -158,11 +158,16 @@ export function PalsView({ index }: { index: SaveIndex }) {
 
   const place = useMemo(() => placer(index), [index])
   const localData = useSaveStore((s) => s.localData)
-  const presets = localData?.presets ?? []
+  const presets = useMemo(
+    () => presetChoices(localData?.presets ?? []),
+    [localData],
+  )
   const presetIds = useMemo(() => {
-    const found = localData?.presets.find((p) => p.name === params.preset)
+    const found = params.preset
+      ? presets.find((p) => p.key === params.preset)
+      : undefined
     return found ? new Set(found.palIds) : undefined
-  }, [localData, params.preset])
+  }, [presets, params.preset])
 
   const filtered = useMemo(
     () =>
@@ -323,8 +328,8 @@ export function PalsView({ index }: { index: SaveIndex }) {
             onChange={(v) => patch({ preset: v })}
             options={[
               { value: '', label: 'Any' },
-              ...presets.map((p) => ({ value: p.name, label: p.name })),
-              ...(preset && !presets.some((p) => p.name === preset)
+              ...presets.map((p) => ({ value: p.key, label: p.label })),
+              ...(preset && !presets.some((p) => p.key === preset)
                 ? [{ value: preset, label: `${preset} (not loaded)` }]
                 : []),
             ]}

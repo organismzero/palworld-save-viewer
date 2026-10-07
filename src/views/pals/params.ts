@@ -68,7 +68,7 @@ export interface PalsParams {
   workMin: number
   /** Only pals that are sick, injured, starving or low on sanity. */
   attention: boolean
-  /** A party preset from the client's own save, by name. */
+  /** A party preset from the client's own save: a `presetChoices` key. */
   preset: string
   flags: { boss: boolean; rare: boolean; named: boolean }
   sort: SortKey
