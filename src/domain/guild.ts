@@ -155,7 +155,18 @@ export interface WorkCoverage {
   display: string
   /** Pals with any level in this work type. */
   pals: number
-  /** Summed levels — a single level-4 miner beats four level-1 ones. */
+  /**
+   * The highest level any pal has in it, 0 when none can do it. This is the
+   * figure that matters: work speed comes from the level of the pal doing the
+   * job, so one level-four miner is not matched by any number of level-ones.
+   */
+  best: number
+  /** How many pals are at that best level. */
+  atBest: number
+  /**
+   * Summed levels. Kept for anyone who wants bulk, and kept out of the chart:
+   * it says four level-one miners equal one level-four, which is not so.
+   */
   levels: number
 }
 
@@ -175,24 +186,36 @@ export function workCoverage(
     id: t.id,
     display: t.display,
     pals: 0,
+    best: 0,
+    atBest: 0,
     levels: 0,
   }))
   const byId = new Map(out.map((w) => [w.id, w]))
 
   for (const pal of pals) {
-    const base = species(pal.characterId)?.work ?? {}
-    // A pal's own bonuses stack on top of its species' base suitability.
-    const ids = new Set([
-      ...Object.keys(base),
-      ...Object.keys(pal.workSuitabilityBonus),
-    ])
-    for (const id of ids) {
-      const level = (base[id] ?? 0) + (pal.workSuitabilityBonus[id] ?? 0)
+    const info = species(pal.characterId)
+    // A species nothing is known about, which is every species without
+    // reference data. Its base levels are unknown, so the pal's own bonuses
+    // are all there is: the chart is sparse then, by design, not absent.
+    const levels = info
+      ? Object.entries(info.work ?? {}).flatMap(([id, own]) =>
+          // The rule `workLevel` follows: a bonus stacks on a job the species
+          // can do, and never invents one it cannot.
+          own > 0
+            ? [[id, own + (pal.workSuitabilityBonus[id] ?? 0)] as const]
+            : [],
+        )
+      : Object.entries(pal.workSuitabilityBonus)
+    for (const [id, level] of levels) {
       if (level <= 0) continue
       const row = byId.get(id)
       if (!row) continue
       row.pals += 1
       row.levels += level
+      if (level > row.best) {
+        row.best = level
+        row.atBest = 1
+      } else if (level === row.best) row.atBest += 1
     }
   }
   return out

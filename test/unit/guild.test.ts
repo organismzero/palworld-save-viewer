@@ -115,13 +115,48 @@ describe('workCoverage', () => {
     expect(flame.levels).toBe(3)
   })
 
-  it('counts a bonus for work the species cannot do at all', () => {
+  it('does not invent a job from a bonus alone', () => {
+    // The rule `workLevel` follows, so the chart and the drawer agree.
     const rows = workCoverage(
       [pal(1, { workSuitabilityBonus: { Watering: 1 } })],
       species,
       WORK_TYPES,
     )
-    expect(rows.find((r) => r.id === 'Watering')!.levels).toBe(1)
+    expect(rows.find((r) => r.id === 'Watering')!.pals).toBe(0)
+  })
+
+  it('falls back on the bonus alone for a species nothing is known about', () => {
+    const rows = workCoverage(
+      [
+        pal(1, {
+          characterId: 'Mystery',
+          workSuitabilityBonus: { Watering: 2 },
+        }),
+      ],
+      species,
+      WORK_TYPES,
+    )
+    expect(rows.find((r) => r.id === 'Watering')).toMatchObject({ pals: 1, best: 2 }) // prettier-ignore
+  })
+
+  it('gives the best level and how many pals are at it, not only the sum', () => {
+    const rows = workCoverage(
+      [
+        pal(1),
+        pal(2),
+        pal(3),
+        pal(4, { workSuitabilityBonus: { EmitFlame: 2 } }),
+      ],
+      species,
+      WORK_TYPES,
+    )
+    // Three at level 2 and one at 4: the sum says 10, the answer is "4, once".
+    expect(rows.find((r) => r.id === 'EmitFlame')).toMatchObject({
+      pals: 4,
+      best: 4,
+      atBest: 1,
+      levels: 10,
+    })
   })
 
   it('keeps zero-coverage work types, because the gap is the point', () => {
@@ -131,6 +166,8 @@ describe('workCoverage', () => {
       id: 'Watering',
       display: 'Watering',
       pals: 0,
+      best: 0,
+      atBest: 0,
       levels: 0,
     })
   })

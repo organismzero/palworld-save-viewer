@@ -617,9 +617,23 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
     [index, guild],
   )
 
-  if (pals.length === 0) return null
+  // Said, not skipped: a guild with members and no pals used to end at the
+  // contribution board, as if the rest of the page had failed to load.
+  if (pals.length === 0) {
+    return (
+      <section className="mb-10">
+        <SectionHeading title="Roster" />
+        <p className="text-sm text-[var(--color-muted)]">
+          No pals in this guild yet.
+        </p>
+      </section>
+    )
+  }
 
-  const weakest = [...work].sort((a, b) => a.levels - b.levels)[0]
+  // Lowest best level, then fewest pals able to do it at all.
+  const weakest = [...work].sort(
+    (a, b) => a.best - b.best || a.pals - b.pals,
+  )[0]
 
   return (
     <section className="mb-10">
@@ -652,18 +666,43 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
         <Panel padded>
           <div className="label mb-1">work suitability coverage</div>
           <p className="mb-2 text-xs text-[var(--color-muted)]">
-            {weakest && weakest.levels === 0
+            {weakest && weakest.best === 0
               ? `No pal in this guild can do ${weakest.display}.`
               : weakest
-                ? `Weakest on ${weakest.display} — ${count(weakest.pals)} pals.`
-                : ''}
+                ? `Weakest on ${weakest.display}: the best is level ${weakest.best}.`
+                : ''}{' '}
+            The chart is the best level anyone has in each job, which is what
+            sets how fast it gets done.
           </p>
           <div className="px-8 py-4">
             <Radar
               size={220}
-              axes={work.map((w) => ({ label: w.display, value: w.levels }))}
+              axes={work.map((w) => ({ label: w.display, value: w.best }))}
             />
           </div>
+          <dl className="mt-2 grid grid-cols-2 gap-x-6 text-xs">
+            {work.map((w) => (
+              <div
+                key={w.id}
+                className="flex items-baseline gap-2 border-b border-[var(--color-line-faint)] py-1"
+              >
+                <dt className="min-w-0 flex-1 truncate">{w.display}</dt>
+                <dd
+                  className={cn(
+                    'num shrink-0',
+                    w.best === 0 && 'text-[var(--color-stamina)]',
+                  )}
+                >
+                  {w.best === 0 ? 'none' : `lv ${w.best}`}
+                </dd>
+                <dd className="num w-16 shrink-0 text-right text-[var(--color-muted)]">
+                  {w.best === 0
+                    ? ''
+                    : `${count(w.atBest)} ${w.atBest === 1 ? 'pal' : 'pals'}`}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </Panel>
 
         <Panel padded className="lg:col-span-2">
@@ -721,7 +760,17 @@ function PaldexRollup({ index, guild }: { index: SaveIndex; guild: Guild }) {
     [index, guild, data],
   )
 
-  if (rows.length === 0) return null
+  if (rows.length === 0) {
+    return (
+      <Panel padded className="mb-4">
+        <div className="label mb-1">paldex by member</div>
+        <p className="text-xs text-[var(--color-muted)]">
+          No paldex progress to show: no member of this guild has a character in
+          this save.
+        </p>
+      </Panel>
+    )
+  }
 
   return (
     <Panel padded className="mb-4">
