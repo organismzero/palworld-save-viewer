@@ -69,6 +69,13 @@ import { reachFor, stockFor, tableFor } from './stockCache.ts'
 import { usePassiveSearch, type PassiveSearch } from './usePassiveSearch.ts'
 import { passiveText, type PassiveText } from './passiveText.ts'
 import { speciesText, type SpeciesText } from './speciesText.ts'
+import {
+  filterSpecies,
+  speciesFiltered,
+  type SpeciesFilter,
+  type SpeciesRow,
+} from './speciesFilter.ts'
+import { ElementToggles } from '../../components/ElementToggles.tsx'
 import { ownerText, type OwnerText } from './ownerText.ts'
 import {
   BREED_DEFAULTS,
@@ -339,7 +346,21 @@ export function BreedView({ index }: { index: SaveIndex }) {
               index={index}
               table={table}
               reach={reach}
-              query={params.query}
+              filter={{
+                query: params.query,
+                elements: new Set(params.listElements),
+                reachable: params.listReachable,
+                unowned: params.listUnowned,
+                sort: params.listSort,
+              }}
+              onFilter={(f) =>
+                patch({
+                  listElements: [...f.elements].sort(),
+                  listReachable: f.reachable,
+                  listUnowned: f.unowned,
+                  listSort: f.sort,
+                })
+              }
               selected={params.target}
               onPick={(id) => patch({ target: id, route: undefined })}
               text={text}
@@ -1166,7 +1187,8 @@ function SpeciesList({
   index,
   table,
   reach,
-  query,
+  filter,
+  onFilter,
   selected,
   onPick,
   text,
@@ -1174,35 +1196,90 @@ function SpeciesList({
   index: SaveIndex
   table: BreedingTable | undefined
   reach: Reach | undefined
-  query: string
+  filter: SpeciesFilter
+  onFilter: (next: SpeciesFilter) => void
   selected: string
   onPick: (id: string) => void
   text: SpeciesText
 }) {
   const { data } = useRefdataStore()
 
-  const rows = useMemo(() => {
+  const all = useMemo(() => {
     const ids = table
       ? [...table.rank.keys()]
       : // Degraded: whatever this world contains, which is short but honest.
         [...new Set(index.pals.map((p) => p.characterId.toLowerCase()))]
-    const q = query.trim().toLowerCase()
-    return ids
-      .filter(
-        (id) => !q || id.includes(q) || text.name(id).toLowerCase().includes(q),
-      ) // prettier-ignore
-      .map((id) => ({
-        id,
-        name: text.name(id),
-        // Absent `zukan` sorts last rather than being dropped, as the paldex
-        // grid does — a species with no paldex slot is still breedable.
-        zukan: data?.species[id]?.zukan ?? Number.MAX_SAFE_INTEGER,
-        depth: reach?.depth.get(id),
-      }))
-      .sort((a, b) => a.zukan - b.zukan || a.name.localeCompare(b.name))
+    return ids.map((id) => ({
+      id,
+      name: text.name(id),
+      // Absent `zukan` sorts last rather than being dropped, as the paldex
+      // grid does — a species with no paldex slot is still breedable.
+      zukan: data?.species[id]?.zukan ?? Number.MAX_SAFE_INTEGER,
+      elements: text.elements(id),
+      depth: reach?.depth.get(id),
+    }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, reach, query, data, index.pals])
+  }, [table, reach, data, index.pals])
+  const rows = filterSpecies(all, filter)
+  const check = 'gap-2 text-xs text-[var(--color-muted)]'
 
+  return (
+    <>
+      <div className="space-y-2 px-4 pb-3">
+        <ElementToggles
+          size={18}
+          value={filter.elements}
+          onChange={(elements) => onFilter({ ...filter, elements })}
+        />
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          <Checkbox
+            checked={filter.reachable}
+            onChange={(reachable) => onFilter({ ...filter, reachable })}
+            label="reachable"
+            className={check}
+          />
+          <Checkbox
+            checked={filter.unowned}
+            onChange={(unowned) => onFilter({ ...filter, unowned })}
+            label="not held"
+            className={check}
+          />
+          <Checkbox
+            checked={filter.sort === 'gen'}
+            onChange={(on) =>
+              onFilter({ ...filter, sort: on ? 'gen' : 'paldex' })
+            }
+            label="nearest first"
+            className={check}
+          />
+        </div>
+        {(filter.query.trim() !== '' || speciesFiltered(filter)) && (
+          <p className="text-[11px] text-[var(--color-muted)]">
+            {count(rows.length)} of {count(all.length)} species
+          </p>
+        )}
+      </div>
+      <SpeciesRows
+        rows={rows}
+        selected={selected}
+        onPick={onPick}
+        text={text}
+      />
+    </>
+  )
+}
+
+function SpeciesRows({
+  rows,
+  selected,
+  onPick,
+  text,
+}: {
+  rows: SpeciesRow[]
+  selected: string
+  onPick: (id: string) => void
+  text: SpeciesText
+}) {
   return (
     // `flex-1` inside the rail's flex column, not a hardcoded `calc` of the
     // header's height: the passive picker above this grows and shrinks with the

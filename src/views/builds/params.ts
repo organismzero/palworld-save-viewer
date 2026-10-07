@@ -7,6 +7,7 @@
  * it here would reject every cold deep link.
  */
 
+import { element } from '../../lib/color.ts'
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import type { GoalId } from '../../domain/recommend.ts'
 import { DEFAULT_CAKE, cakeRecipe } from '../../domain/recipes.ts'
@@ -28,6 +29,8 @@ export interface BuildsParams {
   opponent: string
   /** The opponent search box. */
   query: string
+  /** Element names the opponent list is narrowed to. Empty means all. */
+  elements: string[]
   /** The cake tier a cake base is for, by item id. */
   cake: string
   playerUid?: Guid
@@ -38,6 +41,7 @@ export const BUILDS_DEFAULTS: BuildsParams = {
   work: [],
   opponent: '',
   query: '',
+  elements: [],
   cake: DEFAULT_CAKE,
   playerUid: undefined,
 }
@@ -61,6 +65,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       if (v.work.length > 0) out.w = encodeList(v.work)
       if (v.opponent) out.vs = v.opponent
       if (v.query) out.q = v.query
+      if (v.elements.length > 0) out.el = encodeList(v.elements)
       if (v.cake !== d.cake) out.c = v.cake
       if (v.playerUid) out.p = shortId(v.playerUid)
       return out
@@ -72,6 +77,7 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
         work: [...new Set(list(raw, 'w'))].sort(),
         opponent: str(raw, 'vs', d.opponent).toLowerCase(),
         query: str(raw, 'q', d.query),
+        elements: list(raw, 'el').flatMap((e) => element(e)?.name ?? []),
         // Checked against the typed-in recipes, which need no reference data.
         cake: cakeRecipe(str(raw, 'c', d.cake))?.item ?? d.cake,
         playerUid: resolveShortId(

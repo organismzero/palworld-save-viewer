@@ -100,10 +100,18 @@ export function canonicalPath(
   const playerUid = params.playerUid ?? busiestPlayer(index)?.playerUid
   if (!playerUid || !isSaveable(params)) return undefined
 
+  // How the species list is filtered is not part of what is being bred.
+  const list = {
+    listElements: [],
+    listReachable: false,
+    listUnowned: false,
+    listSort: 'paldex' as const,
+  }
   const kept: BreedParams =
     params.mode === 'pair'
       ? {
           ...params,
+          ...list,
           playerUid,
           query: '',
           target: '',
@@ -111,7 +119,7 @@ export function canonicalPath(
           passives: [],
           noSpares: false,
         }
-      : { ...params, playerUid, query: '' }
+      : { ...params, ...list, playerUid, query: '' }
 
   return {
     qs: serialiseParams(breedCodec(index).encode(kept, BREED_DEFAULTS)),

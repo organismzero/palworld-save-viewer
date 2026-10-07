@@ -95,6 +95,16 @@ describe('canonicalPath', () => {
     )
   })
 
+  it('ignores how the species list is filtered and ordered', () => {
+    const filtered = plan({
+      listElements: ['Fire'],
+      listReachable: true,
+      listUnowned: true,
+      listSort: 'gen',
+    })
+    expect(canonicalPath(filtered, index)).toEqual(canonicalPath(plan(), index))
+  })
+
   it('keeps everything that changes the plan', () => {
     const base = canonicalPath(plan(), index)!.qs
     for (const over of [
@@ -140,6 +150,7 @@ describe('defaultName', () => {
     name: (id: string) => id.toUpperCase(),
     icon: () => undefined,
     element: () => undefined,
+    elements: () => [],
   }
   const passives = {
     name: (id: string) => `<${id}>`,

@@ -21,6 +21,8 @@ import { useEffect, useMemo } from 'react'
 import { busiestPlayer } from '../../domain/guild.ts'
 import type { Player, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
+import { ElementToggles } from '../../components/ElementToggles.tsx'
+import { NO_SPECIES_FILTER, filterSpecies } from '../breed/speciesFilter.ts'
 import {
   BREEDING_WORK,
   FOOD_WORK,
@@ -244,6 +246,8 @@ export function BuildsView({ index }: { index: SaveIndex }) {
           pool={pool}
           text={text}
           query={params.query}
+          elements={params.elements}
+          onElements={(elements) => patch({ elements })}
           selected={params.opponent}
           onQuery={(q) => patch({ query: q })}
           onPick={(id) => patch({ opponent: id })}
@@ -681,6 +685,8 @@ function OpponentPicker({
   pool,
   text,
   query,
+  elements,
+  onElements,
   selected,
   onQuery,
   onPick,
@@ -689,25 +695,28 @@ function OpponentPicker({
   pool: readonly string[]
   text: SpeciesText
   query: string
+  /** Element names the list is narrowed to. */
+  elements: readonly string[]
+  onElements: (next: string[]) => void
   selected: string
   onQuery: (q: string) => void
   onPick: (id: string) => void
 }) {
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return pool
-      .filter(
-        (id) => !q || id.includes(q) || text.name(id).toLowerCase().includes(q),
-      )
-      .map((id) => ({
-        id,
-        name: text.name(id),
-        zukan: data?.species[id]?.zukan ?? Number.MAX_SAFE_INTEGER,
-      }))
-      .sort((a, b) => a.zukan - b.zukan || a.name.localeCompare(b.name))
+  const rows = useMemo(
+    () =>
+      filterSpecies(
+        pool.map((id) => ({
+          id,
+          name: text.name(id),
+          zukan: data?.species[id]?.zukan ?? Number.MAX_SAFE_INTEGER,
+          elements: text.elements(id),
+        })),
+        { ...NO_SPECIES_FILTER, query, elements: new Set(elements) },
+      ),
     // `text` is rebuilt every render from `data`, which is in the list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, query, data])
+    [pool, query, elements, data],
+  )
 
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-[var(--color-line)]">
@@ -718,6 +727,15 @@ function OpponentPicker({
           onChange={onQuery}
           placeholder="Search species"
         />
+        {/* Only the element: "reachable" and "not held" are questions about
+            what you can breed, and an opponent is something you meet. */}
+        <div className="mt-3">
+          <ElementToggles
+            size={18}
+            value={new Set(elements)}
+            onChange={(next) => onElements([...next].sort())}
+          />
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {rows.map((r) => (

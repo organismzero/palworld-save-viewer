@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { Pill } from '../../components/primitives.tsx'
 import { ListRow, TextInput } from '../../components/controls.tsx'
+import { ElementToggles } from '../../components/ElementToggles.tsx'
 import type { OwnerText } from './ownerText.ts'
 import type { PassiveText } from './passiveText.ts'
 import type { SpeciesText } from './speciesText.ts'
@@ -54,6 +55,7 @@ export function PairPicker({
   onPick: (slot: Slot, pal: Pal | undefined) => void
 }) {
   const [query, setQuery] = useState('')
+  const [elements, setElements] = useState<ReadonlySet<string>>(new Set())
   const [active, setActive] = useState<Slot>(a && !b ? 'b' : 'a')
 
   // Every pal in the pool once. With the unknown-gender switch on, `buildStock`
@@ -78,12 +80,14 @@ export function PairPicker({
       })
       .filter(
         ({ pal, id, name }) =>
-          !q ||
-          name.toLowerCase().includes(q) ||
-          text.name(id).toLowerCase().includes(q) ||
-          pal.passives.some((p) =>
-            passives.name(p.toLowerCase()).toLowerCase().includes(q),
-          ),
+          (elements.size === 0 ||
+            text.elements(id).some((e) => elements.has(e))) &&
+          (!q ||
+            name.toLowerCase().includes(q) ||
+            text.name(id).toLowerCase().includes(q) ||
+            pal.passives.some((p) =>
+              passives.name(p.toLowerCase()).toLowerCase().includes(q),
+            )),
       )
       .sort(
         (x, y) =>
@@ -91,7 +95,7 @@ export function PairPicker({
           ivTotal(y.pal) - ivTotal(x.pal) ||
           y.pal.level - x.pal.level,
       )
-  }, [pals, query, text, passives])
+  }, [pals, query, elements, text, passives])
 
   // Checked against whichever parent is *not* being filled, since that is the
   // one the new pick has to go with.
@@ -128,6 +132,7 @@ export function PairPicker({
           placeholder="Species, nickname or passive"
           className="pt-2"
         />
+        <ElementToggles size={18} value={elements} onChange={setElements} />
         {other && (
           <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
             Dimmed pals cannot pair with parent {active === 'a' ? 'B' : 'A'}:{' '}

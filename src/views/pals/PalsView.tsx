@@ -3,12 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ivTotal } from '../../domain/index.ts'
 import type { Pal, SaveIndex } from '../../domain/types.ts'
-import {
-  ELEMENTS,
-  WORK_TYPES,
-  element,
-  type ElementDef,
-} from '../../lib/color.ts'
+import { WORK_TYPES, element } from '../../lib/color.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
 import { CONDENSER_RANK_HELP, palName } from '../../domain/palText.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
@@ -28,6 +23,7 @@ import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Jump, MapJump } from '../../components/Jump.tsx'
 import { breedHref } from '../builds/buildsText.ts'
 import { useHoverCard } from '../../components/cards/hoverCard.ts'
+import { ElementToggles } from '../../components/ElementToggles.tsx'
 import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import { useViewParams } from '../../app/viewParams.ts'
@@ -208,23 +204,10 @@ export function PalsView({ index }: { index: SaveIndex }) {
 
         <div>
           <div className="label mb-2">element</div>
-          <div className="flex flex-wrap gap-1.5">
-            {ELEMENTS.map((el) => (
-              <ElementToggle
-                key={el.name}
-                el={el}
-                on={elements.has(el.name)}
-                onToggle={() =>
-                  setElements((s) => {
-                    const next = new Set(s)
-                    if (next.has(el.name)) next.delete(el.name)
-                    else next.add(el.name)
-                    return next
-                  })
-                }
-              />
-            ))}
-          </div>
+          <ElementToggles
+            value={elements}
+            onChange={(next) => setElements(() => next)}
+          />
         </div>
 
         <RangeControl
@@ -1030,38 +1013,5 @@ function MoveList({ title, ids }: { title: string; ids: string[] }) {
         })}
       </ul>
     </>
-  )
-}
-
-/** One colour-only element filter, whose hover card names the element. */
-function ElementToggle({
-  el,
-  on,
-  onToggle,
-}: {
-  el: ElementDef
-  on: boolean
-  onToggle: () => void
-}) {
-  const hover = useHoverCard({ kind: 'element', name: el.name })
-  return (
-    <button
-      type="button"
-      {...hover}
-      // Colour-only toggles: the card shows the name to the eye, but the
-      // accessible name has to be explicit — and `aria-pressed` is the only
-      // thing carrying on/off, since visually that is a scale and an opacity
-      // change.
-      aria-label={el.display}
-      aria-pressed={on}
-      onClick={onToggle}
-      className={cn(
-        'h-[22px] w-[22px] rounded-full border transition-all',
-        on
-          ? 'border-[var(--color-signal)] shadow-[var(--glow-signal)]'
-          : 'border-[var(--color-line)] opacity-40',
-      )}
-      style={{ background: el.oklch }}
-    />
   )
 }

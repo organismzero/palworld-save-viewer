@@ -28,6 +28,8 @@ import {
   type ParamCodec,
 } from '../../app/viewParams.ts'
 import type { BreedPair } from '../../domain/breeding.ts'
+import { element } from '../../lib/color.ts'
+import type { SpeciesSort } from './speciesFilter.ts'
 import {
   DEFAULT_PAIR_PURPOSE,
   PAIR_PURPOSES,
@@ -86,6 +88,14 @@ export interface BreedParams {
    * passive breeding cannot supply has to be implanted into.
    */
   noSpares: boolean
+  /**
+   * How the species list is narrowed and ordered. None of it changes the plan,
+   * so a saved path leaves it out, as it does the search box.
+   */
+  listElements: string[]
+  listReachable: boolean
+  listUnowned: boolean
+  listSort: SpeciesSort
 }
 
 export const BREED_DEFAULTS: BreedParams = {
@@ -103,6 +113,10 @@ export const BREED_DEFAULTS: BreedParams = {
   includeMembers: [],
   passives: [],
   noSpares: false,
+  listElements: [],
+  listReachable: false,
+  listUnowned: false,
+  listSort: 'paldex',
 }
 
 export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
@@ -141,11 +155,20 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         if (v.pairB) out.b = shortId(v.pairB)
         if (v.purpose !== DEFAULT_PAIR_PURPOSE) out.for = v.purpose
       }
+      if (v.listElements.length > 0) out.le = encodeList(v.listElements)
+      if (v.listReachable) out.lr = '1'
+      if (v.listUnowned) out.ln = '1'
+      if (v.listSort !== 'paldex') out.ls = v.listSort
       return out
     },
 
     decode(raw, d) {
       return {
+        // By the name `lib/color.ts` gives it, whatever case the link used.
+        listElements: list(raw, 'le').flatMap((e) => element(e)?.name ?? []),
+        listReachable: bool(raw, 'lr', d.listReachable),
+        listUnowned: bool(raw, 'ln', d.listUnowned),
+        listSort: raw.get('ls') === 'gen' ? 'gen' : d.listSort,
         // Ambiguous prefixes resolve to nothing rather than to a guess, so a
         // link from another world plans from the default player instead of
         // silently from the wrong one.
