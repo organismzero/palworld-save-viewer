@@ -175,33 +175,22 @@ Found on the way:
 
 ## Phase 6 — Guild
 
-### 6a. Contribution board — M
+Done.
 
-Summary's Progression table already shows the `PlayerRecord` columns (caught, bosses, crafted, condensed and more), fixed-sorted by pals caught, for every player in the save. `Table` has no sorting. So:
+- **6a. Contribution board.** `Table` takes a plain value per cell (`sort.keys`) and its headings become buttons; `sortOrder` and `nextSort` in `src/lib/sortRows.ts` are the testable half. Summary's Progression table uses it. Guild has a board under the player cards: member, role, level, last seen, built, pals, then the player-save columns, opening with whoever has been away longest on top. `builtBy(index)` in `guild.ts` is worked out once per save and used by `playerSummary`, the board and `PlayerDetailPanel`; the summaries are memoised in `GuildView`.
+- **6b. Base triage.** "Needs attention" lists each base with a damaged structure or an ailing worker, the workers by name with what is wrong. The base opens in Bases, the damaged count opens it narrowed to damaged (`basesLink` in `src/views/bases/params.ts`), a worker opens in Pals.
+- **6c. Empty states.** A guild with no pals shows the Roster heading and says so; the paldex panel says when there is no member to measure.
+- **6d. Work coverage.** `workCoverage` gives `best` and `atBest` beside the sum. The radar draws the best level and a list under it gives the level and how many pals are at it.
+- **6e. Paldex.** The fraction counts only species with a paldex number. Alpha-held and lucky-held bars. A search box, "missing only" and "breedable only". A cell the player holds is a button that opens those pals; one they can breed is a link to the Breed plan, badged with its generations; anything else is inert. The reach comes from the Breed view's own cache with its default settings, so the badge and the plan agree.
 
-- Add sorting to `Table` (a `sort` prop and clickable headers), and turn it on in Summary.
-- In Guild, a board under the player cards scoped to the guild: member, role, level, last seen, structures built, pals owned, then the same `PlayerRecord` columns. Cells without a player save show "—" with the existing "add player saves" hint. Default sort last seen. This answers "who is inactive and what did they leave behind".
+Where this departs from the plan as written:
 
-Precompute `builtByPlayer: Map<Guid, number>` once per index in `guild.ts` and use it from `playerSummary` and `PlayerDetailPanel`, both of which scan every structure per player per render today. Memoise the summaries in `GuildView`.
+- **Last seen sorts on the uptime clock for everyone.** It is the one clock every member has. Mixing it with the dates player saves give would order two different things against each other.
+- **Locked chests are not in the triage.** A lock is a choice, not a fault. The Bases overview still counts them.
+- **A species with no paldex number is shown only when the player has it.** The reference data has 450 of them, mostly bosses and humans, and greying them all out under the real paldex was most of the grid. The member bars drop from "of 753" to "of 303" for the same reason.
+- **Work coverage no longer counts a bonus toward a job the species is known not to do**, the rule `workLevel` follows. Without reference data nothing is known about any species, and the bonuses alone still fill the chart.
 
-### 6b. Base triage — M
-
-Per base: damaged structures, locked chests, and pals in the worker roster that are sick, dying, starving or depressed, from the same fields as 3b. Rendered as a compact list with jumps to Bases and Pals. Shown in Guild because it is the "what needs doing" view; the Bases overview (4b) shows the structure half for one base.
-
-### 6c. Empty states — S
-
-`Aggregates` and `PaldexRollup` in `GuildView` return `null`. Render the section heading with "no pals in this guild yet" and "no paldex progress without player saves".
-
-### 6d. Work coverage — S
-
-`workCoverage` in `guild.ts` sums suitability levels, which says four level-one miners equal one level-four. Show best level per job as the primary figure and the count of pals at that level as the hint; keep the sum out of the radar.
-
-### 6e. Paldex — M
-
-- Denominator counts only species with a `zukan` number; variants without one are shown but not counted.
-- Alpha and lucky sub-bars from `PaldexCell.alpha`/`lucky`.
-- Filters: missing only, breedable only. Search box.
-- Cells become focusable buttons that keep their hover card. Owned → Pals with `{kind:'species'}`; missing and breedable → Breed via `breedHref`, with the generation count as the badge (`reachFrom().depth`, computed once per player).
+Not seen in the reference save: the damaged link in the triage (no base has a damaged structure) and the two empty states (the guild has pals and members).
 
 ---
 
@@ -303,7 +292,7 @@ A cancel button that terminates the worker and returns to the drop zone. The pha
 2. ~~**8a**~~, done.
 3. ~~**What is left of Phase 1**~~, done.
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
-5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. Then **Phase 6**, **Phase 7**, remaining **Phase 8**, in that order. Each phase is independently shippable.
+5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. Then **Phase 7** and what remains of **Phase 8**, in that order. Each phase is independently shippable.
 6. **Phase 9** last, except 9a, which can go any time after Phase 1 and is worth doing early for the project's front page.
 7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 

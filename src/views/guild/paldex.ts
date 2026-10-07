@@ -25,17 +25,34 @@ export interface PaldexCell {
   name: string
   icon?: string
   zukan: number
+  /**
+   * Whether the paldex has a slot for it. Crossover and variant species have
+   * no number: one you hold is still shown, but it is not progress and is
+   * left out of both halves of the fraction.
+   */
+  counted: boolean
   caught: boolean
   /** How many of this species the player holds right now. */
   owned: number
   alpha: boolean
   lucky: boolean
+  /**
+   * Generations of breeding from what this player holds: 0 when they hold it,
+   * absent when it cannot be bred from their pals or nothing is known.
+   */
+  generations?: number
+  /** The id the breeding table knows it by, for a link into Breed. */
+  breedId?: string
 }
 
 export interface PaldexView {
   cells: PaldexCell[]
+  /** Numbered species caught, and numbered species there are. */
   caught: number
   total: number
+  /** Numbered species this player holds an alpha of, and a lucky one of. */
+  alpha: number
+  lucky: number
   /** Which question the cells answer. Drives the wording, not just a flag. */
   basis: 'ever-caught' | 'owned-now'
 }
@@ -53,6 +70,8 @@ export function buildPaldex(
   refdata: Refdata | undefined,
   record: PlayerRecord | undefined,
   ownerUid: string,
+  /** Species → generations from this player's pals, as `reachFrom` gives it. */
+  depth?: ReadonlyMap<string, number>,
 ): PaldexView {
   const species = refdata?.species ?? {}
 
@@ -77,6 +96,13 @@ export function buildPaldex(
 
   const basis: PaldexView['basis'] = record ? 'ever-caught' : 'owned-now'
 
+  // The breeding table keeps the game's own casing; everything here is keyed
+  // lowercase.
+  const reach = new Map<string, { id: string; generations: number }>()
+  for (const [id, generations] of depth ?? []) {
+    reach.set(id.toLowerCase(), { id, generations })
+  }
+
   // The universe of species is reference data when available. Degraded, it is
   // whatever this player owns — a short grid, but an honest one.
   const ids = refdata
@@ -92,6 +118,11 @@ export function buildPaldex(
         name: info?.name ?? id,
         icon: info?.icon,
         zukan: info?.zukan ?? Number.MAX_SAFE_INTEGER,
+        // Degraded, nothing has a number and everything shown is something
+        // the player has, so all of it counts or the fraction would be 0/0.
+        counted: refdata ? info?.zukan !== undefined : true,
+        generations: reach.get(id)?.generations,
+        breedId: reach.get(id)?.id,
         caught:
           basis === 'ever-caught'
             ? (everCaught.get(id) ?? 0) > 0
@@ -101,12 +132,40 @@ export function buildPaldex(
         lucky: here?.lucky ?? false,
       }
     })
+    // A species with no number that the player has never had is not a gap in
+    // anything: it is a raid boss or a human, and five hundred of them greyed
+    // out under the real paldex is noise.
+    .filter((c) => c.counted || c.caught || c.owned > 0)
     .sort((a, b) => a.zukan - b.zukan || a.name.localeCompare(b.name))
 
+  const counted = cells.filter((c) => c.counted)
   return {
     cells,
-    caught: cells.filter((c) => c.caught).length,
-    total: cells.length,
+    caught: counted.filter((c) => c.caught).length,
+    total: counted.length,
+    alpha: counted.filter((c) => c.alpha).length,
+    lucky: counted.filter((c) => c.lucky).length,
     basis,
   }
+}
+
+export interface PaldexFilter {
+  query: string
+  /** Only what has not been caught. */
+  missing: boolean
+  /** Only what can be bred from what the player holds, and is not held. */
+  breedable: boolean
+}
+
+export function filterPaldex(
+  cells: readonly PaldexCell[],
+  f: PaldexFilter,
+): PaldexCell[] {
+  const q = f.query.trim().toLowerCase()
+  return cells.filter(
+    (c) =>
+      (!q || c.name.toLowerCase().includes(q) || c.id.includes(q)) &&
+      (!f.missing || !c.caught) &&
+      (!f.breedable || (c.generations ?? 0) > 0),
+  )
 }

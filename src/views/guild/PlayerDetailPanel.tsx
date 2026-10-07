@@ -29,6 +29,10 @@ import { tabId } from '../../lib/utils.ts'
 import { CapacityNote, ContainerGrid } from '../bases/ContainerGrid.tsx'
 import { PaldexGrid } from './Paldex.tsx'
 import { buildPaldex } from './paldex.ts'
+import { BREED_DEFAULTS } from '../breed/params.ts'
+import { reachFor, stockFor, tableFor } from '../breed/stockCache.ts'
+import { breedHref } from '../builds/buildsText.ts'
+import { useUiStore } from '../../store/uiStore.ts'
 
 /** Ties the tab pair to the panel it drives, for `aria-controls`. */
 const PLAYER_TABS = 'player'
@@ -76,10 +80,27 @@ export function PlayerDetailPanel({
   // why this stays local rather than joining the view's hash params: which tab
   // is open is not something worth sending anybody.
   const [tab, setTab] = useState<'overview' | 'paldex'>('overview')
+  // The reach Breed would work out for this player with nothing ticked, from
+  // the same cache, so a cell's number and the plan it opens agree.
+  const table = tableFor(data?.breeding)
+  const reach = table
+    ? reachFor(
+        stockFor(index, table, {
+          ownerUid: player.playerUid,
+          assumeUnknownGender: BREED_DEFAULTS.assumeUnknownGender,
+          includeGuild: BREED_DEFAULTS.includeGuild,
+          includeBase: BREED_DEFAULTS.includeBase,
+          includeMembers: BREED_DEFAULTS.includeMembers,
+        }),
+        table,
+      )
+    : undefined
   const paldex = useMemo(
-    () => buildPaldex(index, data, detail?.record, player.playerUid),
-    [index, data, detail, player.playerUid],
+    () =>
+      buildPaldex(index, data, detail?.record, player.playerUid, reach?.depth),
+    [index, data, detail, player.playerUid, reach],
   )
+  const jump = useUiStore((s) => s.jump)
 
   return (
     <aside
@@ -123,7 +144,22 @@ export function PlayerDetailPanel({
       >
         {tab === 'paldex' && (
           <div className="p-4">
-            <PaldexGrid view={paldex} />
+            <PaldexGrid
+              view={paldex}
+              onOwned={(c) =>
+                jump('pals', {
+                  kind: 'species',
+                  id: c.id,
+                  label: c.name,
+                  owner: player.playerUid,
+                })
+              }
+              breedHref={(c) =>
+                c.breedId && (c.generations ?? 0) > 0
+                  ? breedHref(index, player.playerUid, c.breedId, [])
+                  : undefined
+              }
+            />
           </div>
         )}
 
