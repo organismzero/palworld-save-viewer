@@ -219,3 +219,10 @@ export function workName(data: Refdata, id: string): string {
     id
   )
 }
+
+/** Whether the save says which pals are in this player's party. */
+export function partyKnown(ctx: Ctx): boolean {
+  return ctx.index.playerDetails.some(
+    (d) => d.playerUid === ctx.ownerUid && d.otomoContainerId,
+  )
+}

@@ -679,16 +679,122 @@ export function ownedFighters(
       strongMoves: pal.equipWaza.filter(isStrong),
       learnedMoves: learnedNotEquipped(pal).filter(isStrong),
     }))
-    .sort(
-      (a, b) =>
-        byMatchup(a.fight, b.fight) ||
-        b.passiveScore - a.passiveScore ||
-        b.pal.level - a.pal.level ||
-        b.pal.rank - a.pal.rank ||
-        b.pal.rankAttack + b.pal.rankHp - (a.pal.rankAttack + a.pal.rankHp) ||
-        (b.pal.ivAttack ?? 0) - (a.pal.ivAttack ?? 0),
-    )
+    .sort((a, b) => {
+      for (const [, cmp] of FIGHT_ORDER) {
+        const c = cmp(a, b)
+        if (c !== 0) return c
+      }
+      return 0
+    })
     .slice(0, limit)
+}
+
+/**
+ * What orders two fighters, in order, each with the words for it.
+ *
+ * One list for the sort and for the explanation, so "swap this for that
+ * because of a better matchup" cannot say something the ranking did not do.
+ */
+const FIGHT_ORDER: readonly [
+  why: string,
+  cmp: (a: OwnedFighter, b: OwnedFighter) => number,
+][] = [
+  ['a better matchup', (a, b) => byMatchup(a.fight, b.fight)],
+  ['better passives for it', (a, b) => b.passiveScore - a.passiveScore],
+  ['a higher level', (a, b) => b.pal.level - a.pal.level],
+  ['more condensing', (a, b) => b.pal.rank - a.pal.rank],
+  [
+    'more attack and health souls',
+    (a, b) =>
+      b.pal.rankAttack + b.pal.rankHp - (a.pal.rankAttack + a.pal.rankHp),
+  ],
+  [
+    'a higher attack IV',
+    (a, b) => (b.pal.ivAttack ?? 0) - (a.pal.ivAttack ?? 0),
+  ],
+]
+
+/** Why `better` ranks above `worse`: the first thing that separates them. */
+export function fightReason(better: OwnedFighter, worse: OwnedFighter): string {
+  return FIGHT_ORDER.find(([, cmp]) => cmp(better, worse) < 0)?.[0] ?? ''
+}
+
+/* -------------------------------------------------------------------------
+   The party as it stands
+   ------------------------------------------------------------------------- */
+
+export interface PartySwap<T> {
+  out: T
+  in: T
+}
+
+export interface PartyAdvice<T> {
+  /** The player's party, in the ranking's order. */
+  party: T[]
+  /** Party members the ranking would also have chosen. */
+  keep: T[]
+  /** Who to take out and who to put in, weakest out for strongest in. */
+  swaps: PartySwap<T>[]
+}
+
+/**
+ * The party the player has, held against the ranking.
+ *
+ * `ranked` is every candidate, best first. The party is whichever of them are
+ * the player's own and in a party slot; the ideal party is the same number
+ * from the top of the list. What is in both stays, and the rest pair off: the
+ * worst of what is carried for the best of what is not.
+ *
+ * It keeps the party's size and does not fill empty slots: an empty slot is
+ * the player's choice, and "carry a fifth" is not a swap.
+ */
+export function partyAdvice<T extends OwnedRow>(
+  ranked: readonly T[],
+  ownerUid: string | undefined,
+): PartyAdvice<T> {
+  const inParty = (r: T) =>
+    r.where === 'party' && r.pal.ownerPlayerUid === ownerUid
+  const party = ranked.filter(inParty)
+  const ideal = ranked.slice(0, party.length)
+  const keep = party.filter((r) => ideal.includes(r))
+  const incoming = ideal.filter((r) => !inParty(r))
+  const outgoing = party.filter((r) => !ideal.includes(r)).reverse()
+  return {
+    party,
+    keep,
+    swaps: outgoing.map((out, i) => ({ out, in: incoming[i]! })),
+  }
+}
+
+export interface MountGap {
+  kind: MountKind
+  /** The fastest of this kind among the candidates. */
+  best: OwnedMount
+  /** The fastest of this kind in the party, if there is one. */
+  carried?: OwnedMount
+}
+
+/**
+ * Kinds of mount where the party is not carrying the best one on offer.
+ *
+ * Per kind and not per slot: nobody rides five mounts, and the question a
+ * travel party answers is "is my fastest flyer with me".
+ */
+export function mountGaps(
+  ranked: readonly OwnedMount[],
+  ownerUid: string | undefined,
+): MountGap[] {
+  const out: MountGap[] = []
+  for (const kind of MOUNT_KINDS) {
+    const ofKind = ranked.filter((m) => m.kind === kind)
+    const best = ofKind[0]
+    if (!best) continue
+    const carried = ofKind.find(
+      (m) => m.where === 'party' && m.pal.ownerPlayerUid === ownerUid,
+    )
+    if (carried !== best) out.push({ kind, best, carried })
+  }
+  return out
 }
 
 export interface OwnedMount extends OwnedRow {

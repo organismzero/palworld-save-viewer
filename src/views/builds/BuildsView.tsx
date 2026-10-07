@@ -34,9 +34,12 @@ import {
   breedablePicks,
   carriersOf,
   elementsOf,
+  fightReason,
   locator,
+  mountGaps,
   ownedFighters,
   ownedMounts,
+  partyAdvice,
   sidesFor,
   opponentPool,
   speciesHeld,
@@ -90,6 +93,7 @@ import {
   WorkSections,
 } from './parts.tsx'
 import { BUILDS_DEFAULTS, buildsCodec, type BuildsParams } from './params.ts'
+import { FightParty, TravelParty } from './Party.tsx'
 import { Cake, CakePicker, Fishing, Food, Ranch } from './ProductionBuilds.tsx'
 
 const GOALS: { id: GoalId; label: string; hint: string }[] = [
@@ -461,7 +465,10 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
   const picks = breedablePicks(advice, ctx.data.passives)
   const held = speciesHeld(ctx.pals)
   const species = bestFighters(ctx.data, ctx.pool, els, ctx.top * 2)
-  const mine = ownedFighters(ctx.data, ctx.pals, ctx.where, els, party, ctx.top)
+  // Ranked in full once: the list shows the top of it, and the party strip
+  // needs to know where every carried pal falls.
+  const ranked = ownedFighters(ctx.data, ctx.pals, ctx.where, els, party, Infinity) // prettier-ignore
+  const mine = ranked.slice(0, ctx.top)
   const moves = strongSkills(ctx.data, attackElements, 4)
 
   return (
@@ -502,6 +509,19 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
           )}
         </div>
       </div>
+
+      <FightParty
+        ctx={ctx}
+        advice={partyAdvice(ranked, ctx.ownerUid)}
+        reason={fightReason}
+        detail={(f) => (
+          <Matchup
+            dealt={f.fight.dealt}
+            taken={f.fight.taken}
+            element={f.fight.element}
+          />
+        )}
+      />
 
       <Panel title="In your party" padded>
         <TwoLists
@@ -614,68 +634,79 @@ function Travel({ ctx }: { ctx: Ctx }) {
   const mine = ownedMounts(ctx.data, ctx.pals, ctx.where, party, 1000)
 
   return (
-    <Panel title="In your party" padded>
-      <PassiveAdviceBlock advice={advice} ctx={ctx} />
-      <div className="mt-6 space-y-6">
-        {MOUNT_KINDS.map((kind) => {
-          const species = bestMounts(ctx.data, ctx.pool, kind, ctx.top)
-          if (species.length === 0) return null
-          const glider = kind === 'glider'
-          return (
-            <section key={kind}>
-              <SectionHeading
-                title={MOUNT_LABEL[kind]}
-                hint={
-                  glider
-                    ? 'never ridden — they change your glider while in the party'
-                    : 'by sprint speed while ridden'
-                }
-              />
-              <TwoLists
-                left={species.map((r) => (
-                  <SpeciesRow
-                    key={r.id}
-                    id={r.id}
-                    ctx={ctx}
-                    held={held.has(r.id)}
-                    href={breedHref(
-                      ctx.index,
-                      ctx.ownerUid,
-                      r.id,
-                      picks,
-                      ctx.also,
-                    )}
-                  >
-                    {!glider && (
-                      <Pill tone="signal" title="ride_sprint_speed">
-                        {count(r.speed)}
-                      </Pill>
-                    )}
-                  </SpeciesRow>
-                ))}
-                right={
-                  <Owned
-                    rows={mine
-                      .filter((m) => m.kind === kind)
-                      .slice(0, ctx.mine)}
-                    ctx={ctx}
-                    wanted={party}
-                    detail={(r) =>
-                      glider ? null : (
+    <>
+      <TravelParty
+        ctx={ctx}
+        gaps={mountGaps(mine, ctx.ownerUid)}
+        carried={
+          mine.filter(
+            (m) => m.where === 'party' && m.pal.ownerPlayerUid === ctx.ownerUid,
+          ).length
+        }
+      />
+      <Panel title="In your party" padded>
+        <PassiveAdviceBlock advice={advice} ctx={ctx} />
+        <div className="mt-6 space-y-6">
+          {MOUNT_KINDS.map((kind) => {
+            const species = bestMounts(ctx.data, ctx.pool, kind, ctx.top)
+            if (species.length === 0) return null
+            const glider = kind === 'glider'
+            return (
+              <section key={kind}>
+                <SectionHeading
+                  title={MOUNT_LABEL[kind]}
+                  hint={
+                    glider
+                      ? 'never ridden — they change your glider while in the party'
+                      : 'by sprint speed while ridden'
+                  }
+                />
+                <TwoLists
+                  left={species.map((r) => (
+                    <SpeciesRow
+                      key={r.id}
+                      id={r.id}
+                      ctx={ctx}
+                      held={held.has(r.id)}
+                      href={breedHref(
+                        ctx.index,
+                        ctx.ownerUid,
+                        r.id,
+                        picks,
+                        ctx.also,
+                      )}
+                    >
+                      {!glider && (
                         <Pill tone="signal" title="ride_sprint_speed">
-                          {count((r as (typeof mine)[number]).speed)}
+                          {count(r.speed)}
                         </Pill>
-                      )
-                    }
-                    empty="This player has none."
-                  />
-                }
-              />
-            </section>
-          )
-        })}
-      </div>
-    </Panel>
+                      )}
+                    </SpeciesRow>
+                  ))}
+                  right={
+                    <Owned
+                      rows={mine
+                        .filter((m) => m.kind === kind)
+                        .slice(0, ctx.mine)}
+                      ctx={ctx}
+                      wanted={party}
+                      detail={(r) =>
+                        glider ? null : (
+                          <Pill tone="signal" title="ride_sprint_speed">
+                            {count((r as (typeof mine)[number]).speed)}
+                          </Pill>
+                        )
+                      }
+                      empty="This player has none."
+                    />
+                  }
+                />
+              </section>
+            )
+          })}
+        </div>
+      </Panel>
+    </>
   )
 }
 

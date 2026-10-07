@@ -15,6 +15,9 @@ import {
   bestMounts,
   bestWorkers,
   breedablePicks,
+  fightReason,
+  mountGaps,
+  partyAdvice,
   locator,
   matchup,
   ownedFighters,
@@ -470,6 +473,99 @@ describe('owned pals', () => {
     const [row] = ownedFighters(DATA, [fire], nowhere, ['Leaf'], fight, 5)
     expect(row!.strongMoves).toEqual([])
     expect(row!.learnedMoves).toEqual(['Fireball'])
+  })
+
+  it('says why one fighter ranks above another, by the first difference', () => {
+    const fight = side('fight', {
+      ...INPUT,
+      opponentElements: ['Leaf'],
+      attackElements: ['Fire'],
+    })
+    const pals = [
+      pal('Flame', { level: 30 }),
+      pal('Flame', { level: 10 }),
+      pal('Splash', { level: 60 }),
+    ]
+    const [high, low, water] = ownedFighters(DATA, pals, nowhere, ['Leaf'], fight, 5) // prettier-ignore
+    expect(fightReason(high!, water!)).toBe('a better matchup')
+    expect(fightReason(high!, low!)).toBe('a higher level')
+    // Not better, so no reason: the ranking never claims it.
+    expect(fightReason(low!, high!)).toBe('')
+  })
+
+  describe('the party against the ranking', () => {
+    const ME = 'a'.repeat(32)
+    const MATE = 'b'.repeat(32)
+    const row = (
+      n: number,
+      where: 'party' | 'palbox',
+      ownerPlayerUid = ME,
+    ) => ({
+      pal: pal('Flame', {
+        instanceId: `${n}`.padStart(32, '0'),
+        ownerPlayerUid,
+      }),
+      where,
+      passiveScore: 0,
+    })
+
+    it('keeps who the ranking would pick and pairs off the rest', () => {
+      // Best first. The party is ranks 1, 4 and 6; the ideal three are 1 to 3.
+      const ranked = [
+        row(1, 'party'),
+        row(2, 'palbox'),
+        row(3, 'palbox'),
+        row(4, 'party'),
+        row(5, 'palbox'),
+        row(6, 'party'),
+      ]
+      const got = partyAdvice(ranked, ME)
+      expect(got.party).toEqual([ranked[0], ranked[3], ranked[5]])
+      expect(got.keep).toEqual([ranked[0]])
+      // The worst carried goes out for the best that is not.
+      expect(got.swaps).toEqual([
+        { out: ranked[5], in: ranked[1] },
+        { out: ranked[3], in: ranked[2] },
+      ])
+    })
+
+    it('changes nothing when the party is already the top of the list', () => {
+      const ranked = [row(1, 'party'), row(2, 'party'), row(3, 'palbox')]
+      expect(partyAdvice(ranked, ME).swaps).toEqual([])
+    })
+
+    it('does not take a guildmate’s party for the player’s own', () => {
+      const ranked = [row(1, 'party', MATE), row(2, 'party'), row(3, 'palbox')]
+      const got = partyAdvice(ranked, ME)
+      expect(got.party).toEqual([ranked[1]])
+      // And a guildmate's pal can still be the one to bring in.
+      expect(got.swaps).toEqual([{ out: ranked[1], in: ranked[0] }])
+    })
+
+    it('finds the kinds of mount whose fastest is not carried', () => {
+      const mount = (
+        n: number,
+        kind: 'flying' | 'ground',
+        speed: number,
+        where: 'party' | 'palbox',
+      ) =>
+        // prettier-ignore
+        ({ ...row(n, where), kind, speed })
+      const ranked = [
+        mount(1, 'flying', 3000, 'palbox'),
+        mount(2, 'flying', 1400, 'party'),
+        mount(3, 'ground', 900, 'party'),
+        mount(4, 'ground', 500, 'palbox'),
+      ]
+      const gaps = mountGaps(ranked, ME)
+      expect(gaps).toEqual([
+        { kind: 'flying', best: ranked[0], carried: ranked[1] },
+      ])
+      // Nothing of a kind in the party at all is a gap too.
+      expect(mountGaps([ranked[0]!], ME)).toEqual([
+        { kind: 'flying', best: ranked[0], carried: undefined },
+      ])
+    })
   })
 
   // The Fight footnote says condensing orders your pals. For a long time
