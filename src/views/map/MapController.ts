@@ -36,6 +36,9 @@ import type {
 } from '../../domain/types.ts'
 import type { Refdata, TileSet } from '../../refdata/refdata.ts'
 import { getTile } from '../../refdata/refdata.ts'
+import { DEFAULT_FOG_OPACITY, type MapViewport } from './params.ts'
+
+export { DEFAULT_FOG_OPACITY }
 
 export type LayerId =
   | 'structuresBuilt'
@@ -163,25 +166,29 @@ interface Options {
   local?: LocalDataPayload
   onHover: (e: MapEntity | undefined, screen: { x: number; y: number }) => void
   onSelect: (e: MapEntity | undefined) => void
-  onView: (v: { zoom: number; mx: number; my: number }) => void
+  /** The user moved the map. Not fired for `fit`, `setView` or an export. */
+  onView: (v: MapViewport) => void
 }
 
 const MIN_ZOOM = 0.35
 const MAX_ZOOM = 14
 
 /**
- * How dark unexplored ground gets, by default.
+ * The map size a zoom figure is quoted against.
  *
- * Near-opaque, because the reason to load a fog mask at all is usually to
- * *avoid* seeing where you have not been. A default that leaks terrain spoils
- * the one thing the feature is for, and someone who wanted the whole map
- * visible would simply not have loaded the file.
- *
- * Not quite 1: the last couple of percent leave the coastline faintly legible,
- * which is enough to orient by without showing what is there. The slider covers
- * everything from that to fully transparent.
+ * Pixi's scale is screen pixels per pixel of the map image, so the same number
+ * means something else over art baked at another size. Everything that leaves
+ * this class (`onView`) or enters it (`setView`) is in terms of a 4096px map.
  */
-export const DEFAULT_FOG_OPACITY = 0.98
+const ZOOM_BASIS = 4096
+
+/** Further than this between press and release and it was a drag, not a click. */
+const CLICK_SLOP = 4
+
+/** One press of an arrow key, in screen pixels. */
+export const PAN_STEP = 80
+/** One press of `+` or a zoom button. */
+export const ZOOM_STEP = 1.5
 
 /**
  * The canvas chrome, kept in step with the CSS tokens by hand.
@@ -232,6 +239,8 @@ export class MapController {
   private layers = new Map<LayerId, Container>()
   private dot = Texture.WHITE
   private entities: MapEntity[] = []
+  private markerOf = new Map<MapEntity, Marker>()
+  private unbind: (() => void)[] = []
   private ring = new Graphics()
   /**
    * Holds the fog sprite, and exists so the fog's z-order is decided once in
@@ -422,6 +431,7 @@ export class MapController {
     s.baseSize = size
     this.layers.get(e.kind)!.addChild(s)
     this.entities.push(e)
+    this.markerOf.set(e, s)
   }
 
   /** The hand-placed pins, rebuilt from scratch. Cheap: there are a handful. */
@@ -429,6 +439,9 @@ export class MapController {
     const layer = this.layers.get('markers')
     if (!layer) return
     layer.removeChildren().forEach((c) => c.destroy())
+    for (const e of this.entities) {
+      if (e.kind === 'markers') this.markerOf.delete(e)
+    }
     this.entities = this.entities.filter((e) => e.kind !== 'markers')
 
     for (const [i, m] of (this.opts.local?.markers ?? []).entries()) {
@@ -689,8 +702,11 @@ export class MapController {
           const sprite = new Sprite(texture)
           sprite.position.set(x * tileWorld, y * tileWorld)
           sprite.width = sprite.height = tileWorld
-          // Coarser levels sit behind finer ones as they arrive.
-          sprite.zIndex = ideal
+          // Coarser levels sit behind finer ones as they arrive. Level 0 is
+          // the sharpest, so the order is the level negated: the other way
+          // round, the fitted view's coarse tiles stayed on top for good and
+          // zooming in never got any sharper.
+          sprite.zIndex = -ideal
           this.tileLayer.addChild(sprite)
           this.tileLayer.sortableChildren = true
         } finally {
@@ -706,15 +722,28 @@ export class MapController {
     const canvas = this.app.canvas
     let dragging = false
     let last = { x: 0, y: 0 }
+    let down = { x: 0, y: 0 }
+
+    const hit = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      return this.app.renderer.events.rootBoundary.hitTest(
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      ) as Marker | undefined
+    }
 
     canvas.addEventListener('pointerdown', (e) => {
       dragging = true
-      last = { x: e.clientX, y: e.clientY }
+      last = down = { x: e.clientX, y: e.clientY }
     })
-    window.addEventListener('pointerup', () => {
+    // On the window, so a drag that ends outside the canvas still ends.
+    const onUp = () => {
       dragging = false
       void this.refreshTiles()
-    })
+    }
+    window.addEventListener('pointerup', onUp)
+    this.unbind.push(() => window.removeEventListener('pointerup', onUp))
+
     canvas.addEventListener('pointermove', (e) => {
       if (dragging) {
         this.world.x += e.clientX - last.x
@@ -723,13 +752,7 @@ export class MapController {
         this.emitView()
         return
       }
-      const rect = canvas.getBoundingClientRect()
-      const hit = this.app.renderer.events.rootBoundary.hitTest(
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-      )
-      const entity = (hit as Marker)?.entity
-      this.opts.onHover(entity, { x: e.clientX, y: e.clientY })
+      this.opts.onHover(hit(e)?.entity, { x: e.clientX, y: e.clientY })
     })
 
     canvas.addEventListener(
@@ -737,43 +760,47 @@ export class MapController {
       (e) => {
         e.preventDefault()
         const rect = canvas.getBoundingClientRect()
-        const p = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-        const before = this.world.toLocal(p)
-        const next = clamp(
-          this.world.scale.x * Math.exp(-e.deltaY * 0.0015),
-          MIN_ZOOM,
-          MAX_ZOOM,
+        this.zoomAbout(
+          { x: e.clientX - rect.left, y: e.clientY - rect.top },
+          Math.exp(-e.deltaY * 0.0015),
         )
-        this.world.scale.set(next)
-        const after = this.world.toLocal(p)
-        this.world.x += (after.x - before.x) * next
-        this.world.y += (after.y - before.y) * next
-        this.rescaleMarkers()
-        this.emitView()
-        void this.refreshTiles()
       },
       { passive: false },
     )
 
-    canvas.addEventListener('click', (e) => {
-      const rect = canvas.getBoundingClientRect()
-      const hit = this.app.renderer.events.rootBoundary.hitTest(
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-      )
-      const sprite = hit as Marker
-      this.select(sprite?.entity ? sprite : undefined)
-      this.opts.onSelect(sprite?.entity)
+    // `pointerup`, not `click`: a click fires at the end of every drag too, so
+    // panning the map with the pointer over a marker selected it, and panning
+    // from open ground threw the selection away.
+    canvas.addEventListener('pointerup', (e) => {
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > CLICK_SLOP)
+        return
+      const entity = hit(e)?.entity
+      this.setSelection(entity)
+      this.opts.onSelect(entity)
     })
   }
 
+  /** Zooms by `factor`, keeping the screen point `p` over the same ground. */
+  private zoomAbout(p: { x: number; y: number }, factor: number) {
+    const before = this.world.toLocal(p)
+    const next = clamp(this.world.scale.x * factor, MIN_ZOOM, MAX_ZOOM)
+    this.world.scale.set(next)
+    const after = this.world.toLocal(p)
+    this.world.x += (after.x - before.x) * next
+    this.world.y += (after.y - before.y) * next
+    this.rescaleMarkers()
+    this.emitView()
+    void this.refreshTiles()
+  }
+
+  private get centre() {
+    return { x: this.app.screen.width / 2, y: this.app.screen.height / 2 }
+  }
+
   private emitView() {
-    const c = this.world.toLocal({
-      x: this.app.screen.width / 2,
-      y: this.app.screen.height / 2,
-    })
+    const c = this.world.toLocal(this.centre)
     this.opts.onView({
-      zoom: this.world.scale.x,
+      zoom: (this.world.scale.x * this.mapSize) / ZOOM_BASIS,
       ...pixelToMap(c.x, c.y, this.mapSize, this.mapSize),
     })
   }
@@ -785,8 +812,15 @@ export class MapController {
     return pixelToMap(p.x, p.y, this.mapSize, this.mapSize)
   }
 
-  private select(sprite: Sprite | undefined) {
-    this.selectedMarker = sprite as Marker | undefined
+  /**
+   * Rings a marker, or nothing.
+   *
+   * Public because a selection is as often made from outside the canvas (the
+   * search box, a link, a jump from another view) as by clicking on it, and
+   * those used to select without the ring ever being drawn.
+   */
+  setSelection(entity: MapEntity | undefined) {
+    this.selectedMarker = entity ? this.markerOf.get(entity) : undefined
     this.drawRing(this.selectedMarker)
   }
 
@@ -795,11 +829,19 @@ export class MapController {
     if (!marker) return
     const scale = this.world.scale.x
     this.ring
-      .circle(marker.x, marker.y, (marker.baseSize ?? 8) * 1.8) // world units
+      // In screen pixels, like the marker it surrounds: a fixed margin outside
+      // the dot at every zoom. Sized in map pixels it was a speck when fitted
+      // and swallowed the neighbourhood when zoomed in.
+      .circle(marker.x, marker.y, ((marker.baseSize ?? 8) / 2 + 6) / scale)
       .stroke({ color: SELECTION, width: 2 / scale, alpha: 0.9 })
   }
 
   /* --- public API ----------------------------------------------------- */
+
+  /** Whether `mount` has finished, so there are entities to ask about. */
+  get ready(): boolean {
+    return this.mounted && !this.destroyed
+  }
 
   setLayerVisible(id: LayerId, visible: boolean) {
     const layer = this.layers.get(id)
@@ -816,6 +858,40 @@ export class MapController {
     void this.refreshTiles()
   }
 
+  /** Looks at a place a link or an earlier visit named. */
+  setView(v: MapViewport) {
+    const scale = clamp(
+      (v.zoom * ZOOM_BASIS) / this.mapSize,
+      MIN_ZOOM,
+      MAX_ZOOM,
+    )
+    const { px, py } = this.toPixel(v.mx, v.my)
+    this.world.scale.set(scale)
+    this.world.x = this.centre.x - px * scale
+    this.world.y = this.centre.y - py * scale
+    this.rescaleMarkers()
+    void this.refreshTiles()
+  }
+
+  /** A zoom button or key: about the middle of the screen. */
+  zoomBy(factor: number) {
+    this.zoomAbout(this.centre, factor)
+  }
+
+  /** An arrow key. Positive `dx` looks further east, so the map slides west. */
+  panBy(dx: number, dy: number) {
+    this.world.x -= dx
+    this.world.y -= dy
+    this.emitView()
+    void this.refreshTiles()
+  }
+
+  /**
+   * Zooms out until the whole island is in view.
+   *
+   * Does not report itself through `onView`: fitted is where the map starts,
+   * and a view that has never been moved should not put a position in its link.
+   */
   fit() {
     const pad = 40
     const scale = Math.min(
@@ -826,7 +902,6 @@ export class MapController {
     this.world.x = (this.app.screen.width - this.mapSize * scale) / 2
     this.world.y = (this.app.screen.height - this.mapSize * scale) / 2
     this.rescaleMarkers()
-    this.emitView()
     void this.refreshTiles()
   }
 
@@ -880,6 +955,24 @@ export class MapController {
     return this.entities.find((e) => e.id === id)
   }
 
+  /**
+   * The marker a link named: a layer and an id, or the start of one.
+   *
+   * An ambiguous prefix resolves to nothing rather than to the first match, on
+   * the rule `resolveShortId` follows everywhere else.
+   */
+  resolve(layer: LayerId, id: string): MapEntity | undefined {
+    let found: MapEntity | undefined
+    for (const e of this.entities) {
+      if (e.kind !== layer) continue
+      if (e.id === id) return e
+      if (!e.id.startsWith(id)) continue
+      if (found) return undefined
+      found = e
+    }
+    return found
+  }
+
   search(query: string, limit = 8): MapEntity[] {
     const q = query.trim().toLowerCase()
     if (!q) return []
@@ -898,6 +991,7 @@ export class MapController {
 
   destroy() {
     this.destroyed = true
+    for (const off of this.unbind) off()
     try {
       this.app.destroy(true, { children: true })
     } catch {

@@ -1,16 +1,31 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 
 import type { SaveIndex } from '../../domain/types.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useSaveStore } from '../../store/saveStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import {
-  DEFAULT_FOG_OPACITY,
   LAYER_STYLES,
   MapController,
+  PAN_STEP,
+  ZOOM_STEP,
   type LayerId,
   type MapEntity,
 } from './MapController.ts'
+import {
+  LAYER_IDS,
+  MAP_DEFAULTS,
+  mapCodec,
+  roundViewport,
+  sameViewport,
+  type MapViewport,
+} from './params.ts'
+import { useViewParams } from '../../app/viewParams.ts'
 import { KeyHint, Panel, PromptBar } from '../../components/primitives.tsx'
 import {
   Button,
@@ -46,42 +61,52 @@ const LEGEND_ORDER: LayerId[] = [
   'landmarks',
 ]
 
-/**
- * What is on by default.
- *
- * Tuned for the question the map is usually opened to answer — "where is my
- * stuff" — rather than for showing everything at once. The world's own
- * scenery, its loot boxes and 1,098 pal markers are all opt-in, because
- * together they bury the handful of things you actually placed.
- */
-const DEFAULT_VISIBLE: Record<LayerId, boolean> = {
-  players: true,
-  bases: true,
-  structuresBuilt: true,
-  pals: false,
-  chests: false,
-  structuresWorld: false,
-  dungeons: false,
-  landmarks: false,
-  // On: you placed these deliberately, and there are only ever a handful.
-  markers: true,
-}
-
 export function MapView({ index }: { index: SaveIndex }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const controllerRef = useRef<MapController>(null)
   const { data, tiles, status, bakeLabel, ensure } = useRefdataStore()
 
-  const [selected, setSelected] = useState<MapEntity | undefined>()
+  const [params, setParams] = useViewParams('map', MAP_DEFAULTS, mapCodec)
+  const { layers, fog: fogOn, fogOpacity, viewport, selected: wanted } = params
+
+  /**
+   * The marker the link's selection resolves to on the current controller.
+   *
+   * Derived from `params.selected` by the effect below rather than set directly:
+   * a rebuild makes new entity objects, and the one held from before would name
+   * a marker the new controller has never heard of.
+   */
+  const [resolved, setSelected] = useState<MapEntity | undefined>()
+  // Nothing wanted is nothing selected, whatever was resolved last.
+  const selected = wanted ? resolved : undefined
   const [cursor, setCursor] = useState<{ mx: number; my: number }>()
-  const [visible, setVisible] =
-    useState<Record<LayerId, boolean>>(DEFAULT_VISIBLE)
   const [filterOpen, setFilterOpen] = useState(true)
   const [query, setQuery] = useState('')
   const [counts, setCounts] = useState<Record<LayerId, number>>()
   const localData = useSaveStore((s) => s.localData)
-  const [fogOn, setFogOn] = useState(true)
-  const [fogOpacity, setFogOpacity] = useState(DEFAULT_FOG_OPACITY)
+
+  const setLayers = (next: (prev: Set<LayerId>) => Iterable<LayerId>) =>
+    setParams((p) => ({ ...p, layers: new Set(next(p.layers)) }))
+  const pick = (e: MapEntity | undefined) =>
+    setParams((p) => ({
+      ...p,
+      selected: e ? { layer: e.kind, id: e.id } : undefined,
+    }))
+  // The controller is built in an effect that must not re-run when these
+  // change, so it reaches them through refs kept current below.
+  const pickRef = useRef(pick)
+  const viewportRef = useRef(viewport)
+  useEffect(() => {
+    pickRef.current = pick
+    viewportRef.current = viewport
+  })
+  /** What the controller is looking at, and which controller that was. */
+  const shown = useRef<MapViewport | undefined>(undefined)
+  const shownOn = useRef(0)
+  const viewTimer = useRef<number | undefined>(undefined)
+  /** Whether a link's selection has been centred on once already. */
+  const restored = useRef(false)
+
   /**
    * Bumped each time a controller finishes mounting.
    *
@@ -112,7 +137,7 @@ export function MapView({ index }: { index: SaveIndex }) {
   useEffect(() => {
     const controller = controllerRef.current
     const id = pending.current
-    if (!controller || !id || mounted === 0) return
+    if (!controller?.ready || !id) return
     pending.current = undefined
     const entity = controller.find(id)
     if (!entity) {
@@ -122,10 +147,13 @@ export function MapView({ index }: { index: SaveIndex }) {
       return
     }
     // Its layer may be one that is off by default — most pals are.
-    setVisible((v) => (v[entity.kind] ? v : { ...v, [entity.kind]: true }))
-    setSelected(entity)
+    setParams((p) => ({
+      ...p,
+      layers: new Set([...p.layers, entity.kind]),
+      selected: { layer: entity.kind, id: entity.id },
+    }))
     controller.focus(entity)
-  }, [mounted, notify])
+  }, [mounted, notify, setParams])
 
   // Rebuild when the art arrives, so a cold start shows the procedural map
   // first and upgrades in place rather than blocking on the network.
@@ -143,20 +171,58 @@ export function MapView({ index }: { index: SaveIndex }) {
         if (e) showCardAt(at.x, at.y, cardFor(e, index), `${e.kind}:${e.id}`)
         else hideCardAt()
       },
-      onSelect: setSelected,
-      onView: () => {},
+      onSelect: (e) => pickRef.current(e),
+      onView: (v) => {
+        // Held back, not published per frame: a drag fires this on every
+        // pointermove, and each publish is a render of the whole view.
+        const next = roundViewport(v)
+        shown.current = next
+        window.clearTimeout(viewTimer.current)
+        viewTimer.current = window.setTimeout(() => {
+          setParams((p) =>
+            sameViewport(p.viewport, next) ? p : { ...p, viewport: next },
+          )
+        }, 250)
+      },
     })
     controllerRef.current = controller
     void controller.mount(host).then(() => {
+      // A controller torn down while it was still mounting has nothing plotted,
+      // and announcing it would send every effect below to ask it questions.
+      if (controllerRef.current !== controller || !controller.ready) return
       setCounts(controller.counts)
       setMounted((n) => n + 1)
     })
 
     return () => {
+      window.clearTimeout(viewTimer.current)
       controller.destroy()
       controllerRef.current = null
     }
-  }, [index, data, tiles, status])
+  }, [index, data, tiles, status, setParams])
+
+  /**
+   * Put the map where the link says it was.
+   *
+   * A fresh controller starts fitted to the window, and one is built whenever
+   * the art, the reference data or a player save arrives — so without this the
+   * map would jump back out to the whole island each time. `shown` is what the
+   * controller is looking at as far as this component knows, which is what
+   * tells a viewport the user just dragged to (already there) from one a Back
+   * button brought in (not yet).
+   */
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller?.ready) return
+    if (shownOn.current !== mounted) {
+      shownOn.current = mounted
+      shown.current = undefined
+    }
+    if (sameViewport(viewport, shown.current)) return
+    shown.current = viewport
+    if (viewport) controller.setView(viewport)
+    else controller.fit()
+  }, [viewport, mounted])
 
   /**
    * Push layer visibility into Pixi.
@@ -171,10 +237,8 @@ export function MapView({ index }: { index: SaveIndex }) {
   useEffect(() => {
     const controller = controllerRef.current
     if (!controller) return
-    for (const [id, on] of Object.entries(visible)) {
-      controller.setLayerVisible(id as LayerId, on)
-    }
-  }, [visible, mounted])
+    for (const id of LAYER_IDS) controller.setLayerVisible(id, layers.has(id))
+  }, [layers, mounted])
 
   /**
    * Push the client's own save into Pixi.
@@ -204,6 +268,36 @@ export function MapView({ index }: { index: SaveIndex }) {
   }, [fogOn, fogOpacity, localData, mounted])
 
   /**
+   * Resolve the link's selection against whatever is plotted now.
+   *
+   * After the client-data effect above, so a pin named in a link is on the map
+   * by the time it is looked for.
+   */
+  const wantedLayer = wanted?.layer
+  const wantedId = wanted?.id
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller?.ready) return
+    if (!wantedLayer || !wantedId) {
+      controller.setSelection(undefined)
+      return
+    }
+    const entity = controller.resolve(wantedLayer, wantedId)
+    if (!entity) {
+      notify('This link names a marker that is not on this map.', {
+        tone: 'warn',
+      })
+      setParams((p) => ({ ...p, selected: undefined }))
+      return
+    }
+    setSelected(entity)
+    controller.setSelection(entity)
+    // A link with a selection and no position means "show me this".
+    if (!restored.current && !viewportRef.current) controller.focus(entity)
+    restored.current = true
+  }, [wantedLayer, wantedId, mounted, notify, setParams])
+
+  /**
    * PNG export. Held as the in-flight scope rather than a boolean so the
    * button that was pressed is the one that shows it is working.
    */
@@ -230,7 +324,7 @@ export function MapView({ index }: { index: SaveIndex }) {
   // Escape only, not focus: a selection is as often made from the search box
   // as from the map, and pulling focus out of the box after each pick would
   // end the search the user was in the middle of.
-  useEscape(selected !== undefined, () => setSelected(undefined))
+  useEscape(selected !== undefined, () => pick(undefined))
 
   /**
    * The two keys this screen prints, and the only two it claims.
@@ -273,6 +367,39 @@ export function MapView({ index }: { index: SaveIndex }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [selected])
 
+  const onMapKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const controller = controllerRef.current
+    if (!controller || e.metaKey || e.ctrlKey || e.altKey) return
+    const pan: Record<string, [number, number]> = {
+      ArrowLeft: [-PAN_STEP, 0],
+      ArrowRight: [PAN_STEP, 0],
+      ArrowUp: [0, -PAN_STEP],
+      ArrowDown: [0, PAN_STEP],
+    }
+    const by = pan[e.key]
+    if (by) controller.panBy(...by)
+    else if (e.key === '+' || e.key === '=') controller.zoomBy(ZOOM_STEP)
+    else if (e.key === '-' || e.key === '_') controller.zoomBy(1 / ZOOM_STEP)
+    else return
+    e.preventDefault()
+    hideCardAt()
+  }
+
+  /** Back out to the whole island, which is also what a bare link shows. */
+  const fit = () => {
+    window.clearTimeout(viewTimer.current)
+    shown.current = undefined
+    setParams((p) => (p.viewport ? { ...p, viewport: undefined } : p))
+    controllerRef.current?.fit()
+  }
+
+  // The save records dungeons but not where they are, so that layer is empty by
+  // design. A row that can never count above zero is left out rather than
+  // shown permanently switched to nothing.
+  const legend = LEGEND_ORDER.filter(
+    (id) => id !== 'dungeons' || (counts?.dungeons ?? 0) > 0,
+  )
+
   // Computed in the change handler rather than during render: the entity list
   // lives on the controller behind a ref, and reading a ref while rendering
   // can leave the UI stale.
@@ -288,7 +415,14 @@ export function MapView({ index }: { index: SaveIndex }) {
     <div className="corner-ticks relative isolate m-2 h-[calc(100%-1rem)] overflow-hidden border border-[var(--color-line)]">
       <div
         ref={hostRef}
-        className="absolute inset-0"
+        // A tab stop, so the map can be moved without a pointer. The arrow and
+        // zoom keys are bound here rather than on the window: they mean
+        // something else everywhere else on the page.
+        tabIndex={0}
+        role="application"
+        aria-label="World map. Arrow keys pan, plus and minus zoom."
+        onKeyDown={onMapKey}
+        className="absolute inset-0 outline-none after:pointer-events-none after:absolute after:inset-0 focus-visible:after:border-2 focus-visible:after:border-[var(--color-signal)]"
         onPointerMove={(e) =>
           setCursor(controllerRef.current?.screenToMap(e.clientX, e.clientY))
         }
@@ -324,7 +458,7 @@ export function MapView({ index }: { index: SaveIndex }) {
                     type="button"
                     onClick={() => {
                       controllerRef.current?.focus(r)
-                      setSelected(r)
+                      pick(r)
                       runSearch('')
                     }}
                     className="flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--color-signal)]/[0.08]"
@@ -346,15 +480,37 @@ export function MapView({ index }: { index: SaveIndex }) {
       {filterOpen && (
         <div className="absolute top-3 right-3 w-[248px]">
           <Panel title="Filter" padded>
+            <div className="mb-1.5 flex items-center gap-1">
+              <span className="label flex-1">layers</span>
+              <Button size="sm" onClick={() => setLayers(() => legend)}>
+                all
+              </Button>
+              <Button size="sm" onClick={() => setLayers(() => [])}>
+                none
+              </Button>
+              <Button
+                size="sm"
+                title="Show what is hidden and hide what is shown"
+                onClick={() =>
+                  setLayers((v) => legend.filter((id) => !v.has(id)))
+                }
+              >
+                invert
+              </Button>
+            </div>
             <ul className="space-y-0.5">
-              {LEGEND_ORDER.map((id) => {
+              {legend.map((id) => {
                 const style = LAYER_STYLES[id]
                 return (
                   <li key={id}>
                     <Checkbox
-                      checked={visible[id]}
-                      onChange={(on) => setVisible((v) => ({ ...v, [id]: on }))}
-                      className={cn('w-full', !visible[id] && 'opacity-60')}
+                      checked={layers.has(id)}
+                      onChange={(on) =>
+                        setLayers((v) =>
+                          on ? [...v, id] : [...v].filter((l) => l !== id),
+                        )
+                      }
+                      className={cn('w-full', !layers.has(id) && 'opacity-60')}
                       label={
                         <span
                           title={`${style.label} — ${style.hint}`}
@@ -383,7 +539,7 @@ export function MapView({ index }: { index: SaveIndex }) {
                 <>
                   <Checkbox
                     checked={fogOn}
-                    onChange={setFogOn}
+                    onChange={(fog) => setParams((p) => ({ ...p, fog }))}
                     className={cn('w-full', !fogOn && 'opacity-60')}
                     label={
                       <span
@@ -401,7 +557,9 @@ export function MapView({ index }: { index: SaveIndex }) {
                   <RangeControl
                     label="opacity"
                     value={Math.round(fogOpacity * 100)}
-                    onChange={(v) => setFogOpacity(v / 100)}
+                    onChange={(v) =>
+                      setParams((p) => ({ ...p, fogOpacity: v / 100 }))
+                    }
                     className={cn('mt-1.5', !fogOn && 'opacity-40')}
                   />
                 </>
@@ -410,14 +568,28 @@ export function MapView({ index }: { index: SaveIndex }) {
               )}
             </div>
 
-            <Button
-              size="sm"
-              onClick={() => controllerRef.current?.fit()}
-              title="Zoom out until the whole island is in view"
-              className="mt-3 w-full"
-            >
-              Fit
-            </Button>
+            <div className="mt-3 flex items-center gap-1">
+              <IconButton
+                label="Zoom out"
+                onClick={() => controllerRef.current?.zoomBy(1 / ZOOM_STEP)}
+              >
+                −
+              </IconButton>
+              <Button
+                size="sm"
+                onClick={fit}
+                title="Zoom out until the whole island is in view"
+                className="flex-1"
+              >
+                Fit
+              </Button>
+              <IconButton
+                label="Zoom in"
+                onClick={() => controllerRef.current?.zoomBy(ZOOM_STEP)}
+              >
+                +
+              </IconButton>
+            </div>
 
             {/* Two scopes, one row, so nothing here widens the panel. */}
             <div className="mt-2 flex items-center gap-1">
@@ -490,7 +662,7 @@ export function MapView({ index }: { index: SaveIndex }) {
                 label="Close"
                 tone="ghost"
                 size={24}
-                onClick={() => setSelected(undefined)}
+                onClick={() => pick(undefined)}
               >
                 ×
               </IconButton>
