@@ -13,6 +13,7 @@ import {
   resolvePresetOwner,
 } from '../domain/verify.ts'
 import { explainParseError } from '../parse/explain.ts'
+import { useUiStore } from './uiStore.ts'
 import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
 import type {
   FromWorker,
@@ -534,6 +535,17 @@ async function applyLocal(
   await parseLocal(file, set)
 }
 
+/** Says that files were refused, and where the reason for each one is. */
+function noteTurnedAway(n: number) {
+  if (n === 0) return
+  useUiStore
+    .getState()
+    .notify(
+      `${n === 1 ? 'One file was' : `${n} files were`} not used. The diagnostics panel says why.`,
+      { tone: 'warn' },
+    )
+}
+
 export const useSaveStore = create<SaveState>((set, get) => ({
   status: 'idle',
   playerFiles: {},
@@ -612,6 +624,7 @@ async function ingestWorld(
       set((s) => ({
         playerFiles: { ...s.playerFiles, ...ledgerFrom(rejected, 'rejected') },
       }))
+      if (get().index) noteTurnedAway(rejected.length)
     }
     return
   }
@@ -649,6 +662,9 @@ async function ingestWorld(
         ...(rejected.length === 0 ? ledgerFrom(ignored, 'rejected') : {}),
       },
     }))
+    // The ledger is behind the diagnostics button, so on its own this was a
+    // drop that visibly did nothing.
+    noteTurnedAway(rejected.length > 0 ? rejected.length : ignored.length)
     return
   }
 

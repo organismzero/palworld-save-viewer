@@ -46,9 +46,9 @@ import {
   setRememberPref,
   type RememberPref,
 } from '../store/session.ts'
-import { useUiStore, type ViewId } from '../store/uiStore.ts'
+import { runEscape, useUiStore, type ViewId } from '../store/uiStore.ts'
 import { parseHash } from './viewParams.ts'
-import { tabId } from '../lib/utils.ts'
+import { cn, tabId } from '../lib/utils.ts'
 import { Button, TabBar } from '../components/controls.tsx'
 import { KeyHint, PromptBar } from '../components/primitives.tsx'
 import { filesFromDrop } from './dropEntries.ts'
@@ -190,9 +190,26 @@ function useShortcuts() {
         target?.isContentEditable ||
         /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '')
 
+      // Read at the keypress rather than subscribed to: a handler rebuilt on
+      // every open and close would be re-registered for no gain.
+      const { paletteOpen, aboutOpen, shortcutsOpen } = useUiStore.getState()
+      // The two native dialogs sit in the top layer and contain focus, so
+      // anything opened from a key while one is up opens *behind* it — and a
+      // digit used to switch the view underneath, out of sight.
+      const modal = aboutOpen || shortcutsOpen
+
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        setPalette(true)
+        if (!modal) setPalette(!paletteOpen)
+        return
+      }
+      // The dialogs and the palette each handle their own Escape.
+      if (modal || paletteOpen) return
+
+      // Before the typing guard, deliberately: Escape from a drawer's own
+      // search box should still close the drawer.
+      if (e.key === 'Escape') {
+        if (runEscape()) e.preventDefault()
         return
       }
       if (isTyping || e.metaKey || e.ctrlKey || e.altKey) return
@@ -376,7 +393,21 @@ export function AppShell({ index }: { index: SaveIndex }) {
             Add files
           </Button>
 
-          <Button size="sm" onClick={reset}>
+          <Button
+            size="sm"
+            onClick={() => {
+              reset()
+              // The params described the world being closed. Left in place, the
+              // next save would open on this one's filters, selections and
+              // breeding target, most of which name things it does not contain.
+              useUiStore.getState().clearViewParams()
+              history.replaceState(
+                null,
+                '',
+                window.location.pathname + window.location.search,
+              )
+            }}
+          >
             Load another
           </Button>
           {add.input}
@@ -411,6 +442,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
         </ErrorBoundary>
       </main>
 
+      <Notices />
       <Prompts />
 
       {drop.over && <DropOverlay />}
@@ -433,7 +465,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
  */
 function Prompts() {
   const anyOpen = useUiStore(
-    (s) => s.paletteOpen || s.aboutOpen || s.shortcutsOpen,
+    (s) => s.paletteOpen || s.aboutOpen || s.shortcutsOpen || s.escapeDepth > 0,
   )
 
   return (
@@ -443,6 +475,46 @@ function Prompts() {
       <Prompt keys="?">Shortcuts</Prompt>
       {anyOpen && <Prompt keys="Esc">Close</Prompt>}
     </PromptBar>
+  )
+}
+
+/**
+ * Things that happened, stacked above the footer.
+ *
+ * Positioned over the view rather than in the column, so a notice arriving does
+ * not shove the map up by its own height and back down five seconds later.
+ * `role="status"` on the stack, not on each row: a live region has to exist
+ * before its content changes for the change to be announced.
+ */
+function Notices() {
+  const notices = useUiStore((s) => s.notices)
+  const dismiss = useUiStore((s) => s.dismiss)
+
+  return (
+    <div className="relative shrink-0">
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-none absolute right-4 bottom-2 z-40 flex flex-col items-end gap-1.5"
+      >
+        {notices.map((n) => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => dismiss(n.id)}
+            title="Dismiss"
+            className={cn(
+              'pointer-events-auto max-w-md animate-[pw-panel-in_var(--dur-fast)_var(--ease-out)] rounded-panel border bg-[var(--color-panel-solid)] px-3 py-1.5 text-left text-sm',
+              n.tone === 'warn'
+                ? 'border-[var(--color-gold)]/60 text-[var(--color-gold)]'
+                : 'border-[var(--color-line-strong)]',
+            )}
+          >
+            {n.text}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

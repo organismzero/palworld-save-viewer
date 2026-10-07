@@ -25,6 +25,40 @@ export type Focus =
 export type ViewId =
   'map' | 'pals' | 'bases' | 'guild' | 'breed' | 'summary' | 'builds'
 
+/**
+ * Something that happened, said without a dialog.
+ *
+ * For outcomes the user caused but cannot otherwise see: a file that was
+ * turned away, a link that reached the clipboard, a preference the app had to
+ * reverse. Not for errors that block — those keep their own screens.
+ */
+export interface Notice {
+  id: number
+  text: string
+  tone: 'info' | 'warn'
+}
+
+const NOTICE_TTL = 5000
+let noticeSeq = 0
+
+/**
+ * What Escape closes, innermost last.
+ *
+ * Kept beside the store rather than in it: these are callbacks, and putting
+ * functions that change on every render into state would notify every
+ * subscriber each time a drawer re-rendered. The store carries only the depth,
+ * which is all the footer needs to know.
+ */
+const escapes: (() => void)[] = []
+
+/** Close the innermost open drawer. False when there was nothing to close. */
+export function runEscape(): boolean {
+  const top = escapes[escapes.length - 1]
+  if (!top) return false
+  top()
+  return true
+}
+
 interface UiState {
   view: ViewId
   focus?: Focus
@@ -50,6 +84,10 @@ interface UiState {
    */
   paramsEpoch: number
 
+  notices: Notice[]
+  /** How many drawers Escape could close right now. */
+  escapeDepth: number
+
   setView: (view: ViewId) => void
   /** From a view, on every state change. Never triggers a re-decode. */
   publishParams: (view: ViewId, qs: string) => void
@@ -71,6 +109,17 @@ interface UiState {
   setPalette: (open: boolean) => void
   setAbout: (open: boolean) => void
   setShortcuts: (open: boolean) => void
+  /**
+   * Forget every view's params, for when the world they described is gone.
+   *
+   * The view itself stays: which tab somebody was on says nothing about the
+   * save, and landing back on it with the next one is what they would expect.
+   */
+  clearViewParams: () => void
+  notify: (text: string, opts?: { tone?: Notice['tone']; ttl?: number }) => void
+  dismiss: (id: number) => void
+  /** Register something for Escape to close. Returns the unregister. */
+  pushEscape: (close: () => void) => () => void
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -80,6 +129,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   shortcutsOpen: false,
   viewParams: {},
   paramsEpoch: 0,
+  notices: [],
+  escapeDepth: 0,
 
   setView: (view) => set({ view }),
 
@@ -114,4 +165,28 @@ export const useUiStore = create<UiState>((set, get) => ({
   setPalette: (paletteOpen) => set({ paletteOpen }),
   setAbout: (aboutOpen) => set({ aboutOpen }),
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
+
+  clearViewParams: () => set({ viewParams: {}, focus: undefined }),
+
+  notify: (text, opts) => {
+    const id = ++noticeSeq
+    set((s) => ({
+      notices: [...s.notices, { id, text, tone: opts?.tone ?? 'info' }],
+    }))
+    setTimeout(() => get().dismiss(id), opts?.ttl ?? NOTICE_TTL)
+  },
+  dismiss: (id) => {
+    if (!get().notices.some((n) => n.id === id)) return
+    set((s) => ({ notices: s.notices.filter((n) => n.id !== id) }))
+  },
+
+  pushEscape: (close) => {
+    escapes.push(close)
+    set({ escapeDepth: escapes.length })
+    return () => {
+      const i = escapes.lastIndexOf(close)
+      if (i !== -1) escapes.splice(i, 1)
+      set({ escapeDepth: escapes.length })
+    }
+  },
 }))

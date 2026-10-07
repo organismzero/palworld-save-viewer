@@ -17,6 +17,7 @@ import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { useHoverCard } from '../../components/cards/hoverCard.ts'
+import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { ExportMenu } from '../../components/ExportMenu.tsx'
 import { useViewParams } from '../../app/viewParams.ts'
 import {
@@ -523,6 +524,9 @@ function PalDetail({
   onClose: () => void
 }) {
   const { data } = useRefdataStore()
+  const ref = useRef<HTMLElement>(null)
+  useEscape(pal !== undefined, onClose)
+  useDrawerFocus(ref, pal !== undefined)
   const info = pal ? data?.species[pal.characterId.toLowerCase()] : undefined
   const owner = pal?.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)
@@ -569,7 +573,13 @@ function PalDetail({
   }
 
   return (
-    <aside className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4">
+    <aside
+      ref={ref}
+      tabIndex={-1}
+      role="region"
+      aria-label="Pal details"
+      className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)] p-4 outline-none"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <GameIcon

@@ -36,6 +36,7 @@ import type {
   SlimPayload,
 } from '../domain/types.ts'
 import { useSaveStore, type PlayerFileState } from './saveStore.ts'
+import { useUiStore } from './uiStore.ts'
 
 /**
  * Bump on **any** change to `SlimPayload`'s shape.
@@ -178,6 +179,14 @@ export async function writeSnapshot(snap: SessionSnapshot): Promise<void> {
     if (err instanceof DOMException && err.name === 'QuotaExceededError') {
       await setRememberPref(false)
       console.warn('[psv] Storage is full; stopped remembering this save.')
+      // This reverses something the user asked for, so it has to be said
+      // where they will see it rather than only in the console.
+      useUiStore
+        .getState()
+        .notify(
+          'This browser is out of storage, so the save is no longer being kept.',
+          { tone: 'warn', ttl: 12000 },
+        )
       return
     }
     console.warn('[psv] Could not save the session.', err)

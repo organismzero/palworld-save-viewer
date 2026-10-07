@@ -16,6 +16,7 @@ import { bytes, count, relativeTime } from '../lib/format.ts'
 import { useSaveStore } from '../store/saveStore.ts'
 import { cn } from '../lib/utils.ts'
 import { Button } from '../components/controls.tsx'
+import { useEscape } from '../components/drawer.ts'
 import { Panel } from '../components/primitives.tsx'
 
 export function Diagnostics({ index }: { index: SaveIndex }) {
@@ -31,16 +32,10 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
     const onDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
     document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('pointerdown', onDown)
   }, [open])
+  useEscape(open, () => setOpen(false))
 
   // The client save is parsed on its own path, so its warnings never reach
   // `stats.warnings`. They are the same kind of canary and belong in the same

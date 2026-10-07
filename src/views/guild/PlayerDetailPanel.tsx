@@ -9,13 +9,14 @@
  * as an affordance — a drop target for exactly that file.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { ivTotal } from '../../domain/index.ts'
 import { baseLabel } from '../../domain/bases.ts'
 import { playerSummary } from '../../domain/guild.ts'
 import { palName } from '../../domain/palText.ts'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
+import { useDrawerFocus, useEscape } from '../../components/drawer.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import type { Guild, Player, SaveIndex } from '../../domain/types.ts'
 import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
@@ -46,6 +47,10 @@ export function PlayerDetailPanel({
   onClose: () => void
 }) {
   const { data } = useRefdataStore()
+  // Mounted only while a player is picked, so "open" is simply "exists".
+  const ref = useRef<HTMLElement>(null)
+  useEscape(true, onClose)
+  useDrawerFocus(ref, true)
   const summary = playerSummary(index, player, guild)
   const detail = index.playerDetails.find(
     (d) => d.playerUid === player.playerUid,
@@ -79,7 +84,13 @@ export function PlayerDetailPanel({
   )
 
   return (
-    <aside className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)]">
+    <aside
+      ref={ref}
+      tabIndex={-1}
+      role="region"
+      aria-label="Player details"
+      className="w-[var(--detail-width)] shrink-0 overflow-y-auto border-l border-[var(--color-line)] outline-none"
+    >
       <div className="flex items-start justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-xl leading-tight">{player.name}</div>

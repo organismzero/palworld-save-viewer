@@ -19,6 +19,7 @@ import {
   type Column,
 } from '../lib/export.ts'
 import { useSaveStore } from '../store/saveStore.ts'
+import { useUiStore } from '../store/uiStore.ts'
 import { Button } from './controls.tsx'
 
 export function ExportMenu<T>({
@@ -39,6 +40,9 @@ export function ExportMenu<T>({
 
   const save = (ext: 'csv' | 'json') => {
     const name = exportName(fileName, kind, rows.length, ext)
+    // The browser's own download shelf is easy to miss, and is hidden entirely
+    // in some configurations.
+    useUiStore.getState().notify(`Saved ${name}`)
     if (ext === 'csv') {
       download(name, toCsv(rows, columns), CSV_MIME)
       return

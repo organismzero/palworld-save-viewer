@@ -23,6 +23,7 @@ import {
   RangeControl,
 } from '../../components/controls.tsx'
 import { cn } from '../../lib/utils.ts'
+import { useEscape } from '../../components/drawer.ts'
 import { count } from '../../lib/format.ts'
 import { downloadBlob, exportName } from '../../lib/export.ts'
 import { useFilePicker } from '../../app/filePicker.tsx'
@@ -196,6 +197,11 @@ export function MapView({ index }: { index: SaveIndex }) {
   const explored = overworldFog
     ? Math.round(overworldFog.exploredFraction * 100)
     : undefined
+
+  // Escape only, not focus: a selection is as often made from the search box
+  // as from the map, and pulling focus out of the box after each pick would
+  // end the search the user was in the middle of.
+  useEscape(selected !== undefined, () => setSelected(undefined))
 
   /**
    * The two keys this screen prints, and the only two it claims.
@@ -450,7 +456,11 @@ export function MapView({ index }: { index: SaveIndex }) {
 
       {/* Selection detail */}
       {selected && (
-        <div className="absolute right-3 bottom-9 w-72">
+        <div
+          role="region"
+          aria-label="Map selection"
+          className="absolute right-3 bottom-9 w-72"
+        >
           <Panel padded>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
