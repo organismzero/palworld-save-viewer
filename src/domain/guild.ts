@@ -286,3 +286,23 @@ export function levelProgress(
   if (!(span > 0)) return undefined
   return Math.max(0, Math.min(1, (exp - here.total) / span))
 }
+
+/**
+ * The player with the most pals — the one most likely to be asking.
+ *
+ * What a view shows when nobody has been picked. Shared so that the Breed and
+ * Builds views, and anything that has to name "the player Breed is planning
+ * for" from outside it, all mean the same one.
+ */
+export function busiestPlayer(index: SaveIndex): Player | undefined {
+  let best: Player | undefined
+  let most = -1
+  for (const p of index.players) {
+    const n = index.palsByOwner.get(p.playerUid)?.length ?? 0
+    if (n > most) {
+      most = n
+      best = p
+    }
+  }
+  return best
+}

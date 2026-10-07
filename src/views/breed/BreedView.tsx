@@ -32,11 +32,15 @@ import {
   type BreedingPlan,
   type Stock,
 } from '../../domain/breeding.ts'
+import { busiestPlayer } from '../../domain/guild.ts'
 import type { Guid, Pal, Player, SaveIndex } from '../../domain/types.ts'
 import { count } from '../../lib/format.ts'
+import type { Refdata } from '../../refdata/refdata.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
+import { saveCurrentPath, usePathsStore } from './pathsStore.ts'
+import { canonicalPath } from './savedPaths.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import {
@@ -341,6 +345,7 @@ export function BreedView({ index }: { index: SaveIndex }) {
         role="tabpanel"
         className="flex-1 overflow-y-auto p-6"
       >
+        <SavePath params={params} index={index} data={data} />
         {pairMode ? (
           noBreedingData ? (
             <Missing what="Breeding data could not be loaded, so what a pair hatches cannot be worked out. Everything else in the app still works." />
@@ -392,6 +397,61 @@ export function BreedView({ index }: { index: SaveIndex }) {
           />
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Keeps what the view is showing, so it can be come back to.
+ *
+ * Here as well as in the tray because this is where the wish to keep something
+ * arrives: on looking at a route that is going to take a week. Once kept, the
+ * same spot leads to the list, which is the only other thing worth doing with
+ * a path that is already saved.
+ */
+function SavePath({
+  params,
+  index,
+  data,
+}: {
+  params: BreedParams
+  index: SaveIndex
+  data: Refdata | undefined
+}) {
+  const paths = usePathsStore((s) => s.paths)
+  const setTray = useUiStore((s) => s.setTray)
+  const current = useMemo(() => canonicalPath(params, index), [params, index])
+  const saved = current && paths.find((p) => p.qs === current.qs)
+  // Arriving at a saved path by any road — Back, a pasted link, clicking the
+  // same things again — makes it the one being worked on, so that the next
+  // change is offered as an update to *it* and not to whichever was opened last.
+  const setActive = usePathsStore((s) => s.setActive)
+  const savedId = saved?.id
+  useEffect(() => {
+    if (savedId) setActive(savedId)
+  }, [savedId, setActive])
+  if (!current) return null
+
+  return (
+    <div className="mx-auto mb-3 flex max-w-3xl items-center justify-end gap-2">
+      {saved && (
+        <span className="label min-w-0 truncate">saved as {saved.name}</span>
+      )}
+      <Button
+        size="sm"
+        onClick={() =>
+          saved
+            ? setTray({ open: true, tab: 'paths' })
+            : saveCurrentPath(params, index, data)
+        }
+        title={
+          saved
+            ? 'Open the tray’s list of saved paths'
+            : 'Keep this target, its passives and whose pals to use, to come back to'
+        }
+      >
+        {saved ? 'Saved paths' : 'Save path'}
+      </Button>
     </div>
   )
 }
@@ -1237,20 +1297,6 @@ function Missing({ what }: { what: string }) {
  */
 function guildLabel(stock: Stock): string {
   return stock.guild?.name || 'this guild'
-}
-
-/** The player with the most pals — the one most likely to be asking. */
-function busiestPlayer(index: SaveIndex): Player | undefined {
-  let best: Player | undefined
-  let most = -1
-  for (const p of index.players) {
-    const n = index.palsByOwner.get(p.playerUid)?.length ?? 0
-    if (n > most) {
-      most = n
-      best = p
-    }
-  }
-  return best
 }
 
 /** Which of the tied routes is showing, so the buttons can mark it. */

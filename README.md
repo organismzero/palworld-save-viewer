@@ -101,6 +101,12 @@ remembered, and "Saved sessions" in the About dialog has the toggle and a
 **Forget this save** button; turning the toggle off deletes what is stored
 rather than merely stopping future writes.
 
+Breeding paths are the other thing that can be stored, and only when you press
+**Save path**: each is a name plus the link the Breed view would show for it,
+which includes shortened ids for the player and any pals it names. They are
+kept in this browser's `localStorage`, whatever you answered about keeping the
+save, and **Forget saved paths** in the About dialog deletes them all.
+
 The app does fetch Palworld's own names, icons and map art at runtime, because
 none of it is in this repository: from `cdn.jsdelivr.net`, falling back to
 `raw.githubusercontent.com`, cached in IndexedDB so a second visit needs no

@@ -39,9 +39,9 @@ export interface Notice {
 }
 
 /** The utility tray's sheets. */
-export type TrayTab = 'passives'
+export type TrayTab = 'passives' | 'paths'
 
-const TRAY_TABS: readonly TrayTab[] = ['passives']
+const TRAY_TABS: readonly TrayTab[] = ['passives', 'paths']
 const TRAY_KEY = 'psv.tray'
 
 interface TrayPref {
@@ -134,6 +134,15 @@ interface UiState {
   trayTab: TrayTab
   /** Docked beside the view rather than floating over its right edge. */
   trayPinned: boolean
+  /**
+   * The tray was opened by the user in this visit, rather than restored open.
+   *
+   * Decides whether it takes focus. A docked tray that comes back with the
+   * page must not: focus would land in its search box before anything had
+   * been pressed, and the number keys would type into it instead of switching
+   * view.
+   */
+  trayOpenedHere: boolean
 
   notices: Notice[]
   /** How many drawers Escape could close right now. */
@@ -182,6 +191,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   trayOpen: TRAY.open,
   trayTab: TRAY.tab,
   trayPinned: TRAY.pinned,
+  trayOpenedHere: false,
   paletteOpen: false,
   aboutOpen: false,
   shortcutsOpen: false,
@@ -233,7 +243,12 @@ export const useUiStore = create<UiState>((set, get) => ({
       tab: next.tab ?? s.trayTab,
       pinned: next.pinned ?? s.trayPinned,
     }
-    set({ trayOpen: pref.open, trayTab: pref.tab, trayPinned: pref.pinned })
+    set({
+      trayOpen: pref.open,
+      trayTab: pref.tab,
+      trayPinned: pref.pinned,
+      trayOpenedHere: pref.open && (s.trayOpenedHere || !s.trayOpen),
+    })
     writeTrayPref(pref)
   },
 

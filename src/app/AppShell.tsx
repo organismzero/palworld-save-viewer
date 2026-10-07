@@ -344,7 +344,12 @@ export function AppShell({ index }: { index: SaveIndex }) {
   return (
     <div className="flex h-dvh flex-col" {...drop.handlers}>
       <header className="flex h-[var(--header-height)] shrink-0 items-center gap-5 border-b border-[var(--color-line)] bg-[rgb(5_13_19/0.8)] px-4">
-        <span className="hidden font-display text-lg font-[200] tracking-[0.12em] whitespace-nowrap uppercase sm:inline">
+        {/*
+          The wordmark is the one thing here that does nothing, so it is what
+          gives way: the row holds seven tabs and eight controls, and below
+          1600px there is not room for those and a title.
+        */}
+        <span className="hidden font-display text-lg font-[200] tracking-[0.12em] whitespace-nowrap uppercase min-[1600px]:inline">
           Palworld Save Viewer
         </span>
 
@@ -376,6 +381,19 @@ export function AppShell({ index }: { index: SaveIndex }) {
             className="hidden sm:inline-flex"
           >
             Search
+          </Button>
+
+          {/*
+            The address bar already holds a link to exactly this — view, filters,
+            selection, breeding target — and nothing else in the app says so.
+          */}
+          <Button
+            size="sm"
+            onClick={copyLink}
+            title="Copy a link to this view as it is now. It opens the same way for anyone with the same save."
+            className="hidden xl:inline-flex"
+          >
+            Copy link
           </Button>
 
           <Button
@@ -488,6 +506,24 @@ export function AppShell({ index }: { index: SaveIndex }) {
       <AboutDialog />
       <ShortcutsDialog />
     </div>
+  )
+}
+
+/**
+ * Put a link to the current view on the clipboard.
+ *
+ * Built from the store rather than read from `location`: the hash is written on
+ * a trailing throttle, so for a moment after any change the address bar is one
+ * step behind what is on screen.
+ */
+function copyLink() {
+  const { view, viewParams, notify } = useUiStore.getState()
+  const qs = viewParams[view]
+  const { origin, pathname, search } = window.location
+  const link = `${origin}${pathname}${search}#/${view}${qs ? `?${qs}` : ''}`
+  void navigator.clipboard.writeText(link).then(
+    () => notify('Link copied'),
+    () => notify('Could not reach the clipboard.', { tone: 'warn' }),
   )
 }
 

@@ -19,6 +19,7 @@ import { cn, tabId } from '../../lib/utils.ts'
 import { Button, IconButton, SegmentBar } from '../../components/controls.tsx'
 import { useEscape } from '../../components/drawer.ts'
 import { PassiveSheet } from './PassiveSheet.tsx'
+import { SavedPaths } from './SavedPaths.tsx'
 
 /** Ties the sheet tabs to the panel they drive, for `aria-controls`. */
 const TRAY_TABS = 'tray'
@@ -26,10 +27,10 @@ const TRAY_PANEL = 'tray-panel'
 
 const TABS: { id: TrayTab; label: string }[] = [
   { id: 'passives', label: 'passives' },
+  { id: 'paths', label: 'paths' },
 ]
 
-// `index` is for the sheets that read the save; the passive list does not.
-export function Tray(_props: { index: SaveIndex }) {
+export function Tray({ index }: { index: SaveIndex }) {
   const tab = useUiStore((s) => s.trayTab)
   const pinned = useUiStore((s) => s.trayPinned)
   const setTray = useUiStore((s) => s.setTray)
@@ -42,8 +43,10 @@ export function Tray(_props: { index: SaveIndex }) {
 
   // Focus goes to the sheet's search box when it has one — opening the tray is
   // nearly always the start of looking something up — and back to wherever it
-  // came from on close. Mounted only while open, so mount is "opened".
+  // came from on close. Mounted only while open, so mount is "opened" — except
+  // for a docked tray restored with the page, which nobody just opened.
   useEffect(() => {
+    if (!useUiStore.getState().trayOpenedHere) return
     const before = document.activeElement
     const el = ref.current
     const target = el?.querySelector<HTMLElement>('input') ?? el
@@ -99,7 +102,8 @@ export function Tray(_props: { index: SaveIndex }) {
         aria-labelledby={tabId(TRAY_TABS, tab)}
         className="min-h-0 flex-1"
       >
-        <PassiveSheet />
+        {tab === 'passives' && <PassiveSheet />}
+        {tab === 'paths' && <SavedPaths index={index} />}
       </div>
     </aside>
   )

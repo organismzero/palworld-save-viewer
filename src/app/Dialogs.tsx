@@ -20,6 +20,7 @@ import {
   setRememberPref,
 } from '../store/session.ts'
 import { useUiStore } from '../store/uiStore.ts'
+import { usePathsStore } from '../views/breed/pathsStore.ts'
 import { Button, Checkbox, Modal } from '../components/controls.tsx'
 import { KeyHint } from '../components/primitives.tsx'
 
@@ -258,6 +259,45 @@ function SessionControls() {
           </span>
         </div>
       )}
+
+      <SavedPathsControl />
     </>
+  )
+}
+
+/**
+ * The other thing this browser may be holding: breeding paths saved from the
+ * tray. Listed here, beside the saved session, because it is the same question
+ * — what of mine is stored — and deserves the same one-press answer.
+ */
+function SavedPathsControl() {
+  const n = usePathsStore((s) => s.paths.length)
+  const writable = usePathsStore((s) => s.writable)
+  const clear = usePathsStore((s) => s.clear)
+  // An unreadable list still counts as something stored.
+  if (n === 0 && writable) return null
+
+  return (
+    <div className="mt-4">
+      <p className="text-[var(--color-muted)]">
+        Breeding paths you save are kept in this browser too, each as a name and
+        the link the Breed view would show for it. That link includes shortened
+        ids for the player and any pals it names.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button size="sm" tone="danger" onClick={clear}>
+          Forget saved paths
+        </Button>
+        <span className="label">
+          {writable ? (
+            <>
+              <span className="num">{n}</span> saved
+            </>
+          ) : (
+            'saved by a newer version'
+          )}
+        </span>
+      </div>
+    </div>
   )
 }

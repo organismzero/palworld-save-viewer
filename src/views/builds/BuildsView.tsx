@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo } from 'react'
 
+import { busiestPlayer } from '../../domain/guild.ts'
 import type { Player, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import {
@@ -805,17 +806,3 @@ function Missing({ what }: { what: string }) {
 /* -------------------------------------------------------------------------
    Helpers
    ------------------------------------------------------------------------- */
-
-/** The player with the most pals — the one most likely to be asking. */
-function busiestPlayer(index: SaveIndex): Player | undefined {
-  let best: Player | undefined
-  let most = -1
-  for (const p of index.players) {
-    const n = index.palsByOwner.get(p.playerUid)?.length ?? 0
-    if (n > most) {
-      most = n
-      best = p
-    }
-  }
-  return best
-}
