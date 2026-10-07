@@ -79,6 +79,10 @@ The Builds view's recommendations are computed from these same files — base st
 
 Passive inheritance odds are the one input not in any fetched file. They are `Combi_PassiveInheritNum` and `Combi_PassiveRandomAddNum`, two weight arrays in the game's `BP_PalGameSetting`, as described in `tylercamp/palcalc`'s `README-PALWORLD-MECHANICS.md`, and they are held as constants in `src/domain/passives.ts`. The route planner applies them pessimistically, assuming the two parents' other passives never overlap. Pick-a-pair mode (`src/domain/pairOutcomes.ts`) applies the same arrays to two actual pals, so the overlap is known and the odds are exact under that rule. Its ranking reuses the Builds view's passive scoring.
 
+IV inheritance is a thinner model than the passive one. The same asset holds `Combi_TalentInheritNum`, `[3, 2, 1]`, read as weights for inheriting one, two or three of the three IVs. The rest follows `tylercamp/palcalc`'s `PalCalc.Solver/README-PALWORLD-MECHANICS.md`, which rests on about 190 recorded hatches: the inherited stats are chosen uniformly and each takes either parent's value with an even chance. That the remaining IVs are rolled uniformly from 0 to 100 is this project's assumption. All of it is in `src/domain/ivForecast.ts`, and both places that show it say it is a model.
+
+The hatch estimate takes offspring sex as an even coin flip for every species, which is also an assumption: `src/domain/breeding.ts`, `applyGender`.
+
 **Two tables are typed in by hand**, because none of the fetched files carry them:
 
 - The element chart in `src/domain/typeChart.ts`. It records only which element beats which; the ×2 and ×0.5 multipliers applied to it are this project's assumption, and the view says so.

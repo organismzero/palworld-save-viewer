@@ -33,6 +33,7 @@ import {
   Pill,
 } from '../../components/primitives.tsx'
 import { stepKey } from './savedPaths.ts'
+import { stepIvs, type IvTriple } from '../../domain/ivForecast.ts'
 import type { SpeciesText } from './speciesText.ts'
 import type { PassiveText } from './passiveText.ts'
 import { borrowSummary, type OwnerText } from './ownerText.ts'
@@ -56,6 +57,7 @@ export function PlanSteps({
   ticks?: readonly string[]
   onTick?: (key: string, done: boolean) => void
 }) {
+  const ivs = stepIvs(plan.steps)
   return (
     <div className="space-y-6">
       <section>
@@ -77,6 +79,7 @@ export function PlanSteps({
               passives={passives}
               owner={owner}
               isTarget={step.n === plan.steps.length}
+              ivs={ivs.get(step.n)}
               ticked={ticks?.includes(stepKey(step))}
               onTick={
                 ticks && onTick
@@ -106,10 +109,13 @@ function StepRow({
   passives,
   owner,
   isTarget,
+  ivs,
   ticked,
   onTick,
 }: {
   step: BreedStep
+  /** What this egg's IVs average out at, when its parents' are known. */
+  ivs?: IvTriple
   text: SpeciesText
   passives: PassiveText
   owner: OwnerText
@@ -209,6 +215,16 @@ function StepRow({
             hatches to get {genderGoal(step.gender)}.
           </div>
         )
+      )}
+      {ivs && (
+        <div
+          className="mt-1.5 pl-6 text-[11px] text-[var(--color-muted)]"
+          title="The average over hatches taken as they come, from the parents named here. A model: see the note under the plan."
+        >
+          IVs to expect: HP ≈<span className="num">{Math.round(ivs.hp)}</span> ·
+          attack ≈<span className="num">{Math.round(ivs.attack)}</span> ·
+          defense ≈<span className="num">{Math.round(ivs.defense)}</span>
+        </div>
       )}
       <Progress
         step={step}

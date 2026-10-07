@@ -1322,6 +1322,14 @@ function Footnote({ stock, plan }: { stock: Stock; plan?: BreedingPlan }) {
         Between loads, a saved path lets you tick each step off as you hatch it;
         a tick is dropped once a newer save no longer has that step.
       </p>
+      <p className="mt-2">
+        “IVs to expect” is the average a step’s hatches come to, worked down
+        from the pals each step names. It is a model: a child is taken to
+        inherit one, two or three of its IVs with weights of three, two and one,
+        each from either parent with an even chance, and to roll the rest fresh
+        from 0 to 100. Hatch a step more than once and keep the best, and you
+        will beat it.
+      </p>
       {plan?.wanted && plan.wanted.length > 0 && (
         <p className="mt-2">
           A child’s passives are drawn from its parents’ combined list, and how

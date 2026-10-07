@@ -1321,7 +1321,8 @@ function assignGenders(
 /**
  * The best instance of the gender this side needs.
  *
- * High IVs pass down, so IVs decide — but only among pals the player actually
+ * High IVs pass down, so IVs decide, and `ivForecast.ts` says by how much —
+ * but only among pals the player actually
  * owns. A guildmate's better Chikipi is not better if the point of choosing this
  * pair was that nothing has to be borrowed, and a plan whose borrow count and
  * whose step list disagreed would be worse than either number alone. The instance
@@ -1341,6 +1342,11 @@ function ownedNode(
           (x, y) =>
             mine(x) - mine(y) ||
             ivTotal(y) - ivTotal(x) ||
+            // Equal on what passes down, so on what is easier to live with:
+            // the one that is not sick or hurt, then the one more souls have
+            // gone into, which is the one more likely to be out and levelled.
+            ailing(x) - ailing(y) ||
+            soulRanks(y) - soulRanks(x) ||
             x.instanceId.localeCompare(y.instanceId),
         )[0]
 
@@ -1357,6 +1363,14 @@ function ownedNode(
     either: entry.male.length > 0 && entry.female.length > 0,
     count: entry.male.length + entry.female.length + entry.unknown.length,
   }
+}
+
+function ailing(p: Pal): number {
+  return p.sickness || p.physicalHealth ? 1 : 0
+}
+
+function soulRanks(p: Pal): number {
+  return p.rankHp + p.rankAttack + p.rankDefence + p.rankCraftSpeed
 }
 
 /**

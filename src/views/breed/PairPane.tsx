@@ -21,6 +21,7 @@ import {
   type RankedOutcome,
 } from '../../domain/pairOutcomes.ts'
 import { palName } from '../../domain/palText.ts'
+import { ivForecast, type IvForecast } from '../../domain/ivForecast.ts'
 import type { GoalId } from '../../domain/recommend.ts'
 import type { Pal } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
@@ -72,6 +73,7 @@ export function PairPane({
     [a, b, data, purpose],
   )
   const blocked = problem === 'same-pal' || problem === 'same-gender'
+  const ivs = useMemo(() => ivForecast(a, b), [a, b])
 
   const best = ranked[0]
   const helps = ranked
@@ -195,8 +197,67 @@ export function PairPane({
         </>
       )}
 
+      {!blocked && ivs && <IvSection ivs={ivs} />}
+
       <Footnote />
     </div>
+  )
+}
+
+const STAT_LABEL = { hp: 'HP', attack: 'Attack', defense: 'Defense' } as const
+
+/**
+ * What the egg's IVs are likely to be.
+ *
+ * A separate section from the passive outcomes, and after them, because it is a
+ * weaker claim: the passive rule has two arrays and a disassembly behind it,
+ * this has one array and a couple of hundred recorded hatches. It says so.
+ */
+function IvSection({ ivs }: { ivs: IvForecast }) {
+  return (
+    <section>
+      <div className="label mb-1.5 grid grid-cols-[1fr_4rem_4rem_5rem_6.5rem] gap-3 px-1">
+        <span>
+          IVs <span className="ml-2 normal-case">a model, see below</span>
+        </span>
+        <span className="text-right">first</span>
+        <span className="text-right">second</span>
+        <span className="text-right" title="The average over many hatches">
+          expect
+        </span>
+        <span
+          className="text-right"
+          title="The chance a hatch is at least as good as the better parent in this stat"
+        >
+          the better one
+        </span>
+      </div>
+      {ivs.stats.map((s) => (
+        <div
+          key={s.stat}
+          className="grid grid-cols-[1fr_4rem_4rem_5rem_6.5rem] items-center gap-3 border-t border-[var(--color-line-faint)] px-1 py-2 text-sm"
+        >
+          <span>{STAT_LABEL[s.stat]}</span>
+          <span className="num text-right text-[var(--color-muted)]">
+            {s.a}
+          </span>
+          <span className="num text-right text-[var(--color-muted)]">
+            {s.b}
+          </span>
+          <span className="num text-right">≈{Math.round(s.expected)}</span>
+          <span className="num text-right">{chance(s.pBest)}</span>
+        </div>
+      ))}
+      <div className="grid grid-cols-[1fr_4rem_4rem_5rem_6.5rem] items-center gap-3 border-t border-[var(--color-line)] px-1 py-2 text-sm">
+        <span>All three</span>
+        <span />
+        <span />
+        <span className="num text-right">≈{Math.round(ivs.expectedTotal)}</span>
+        <span className="num text-right" title={eggs(ivs.pAllBest)}>
+          {chance(ivs.pAllBest)}
+        </span>
+      </div>
+    </section>
   )
 }
 
@@ -327,9 +388,18 @@ function Footnote() {
       </p>
       <p className="mt-2">
         The score adds up the percentages a purpose cares about, every point
-        counted the same — the same scoring as the Builds tab. The child’s IVs
-        are not predicted: nothing here models how they follow the parents’.
-        Gender is a coin flip. Breeding does not consume the parents.
+        counted the same — the same scoring as the Builds tab. Gender is a coin
+        flip. Breeding does not consume the parents.
+      </p>
+      <p className="mt-2">
+        The IV figures are a model, and a thinner one than the passive odds. It
+        takes a child to inherit one, two or three of its IVs with weights of
+        three, two and one, each from either parent with an even chance, and to
+        roll the rest fresh anywhere from 0 to 100. The weights are in the
+        game’s files; the rest is the palcalc project’s reading of about 190
+        recorded hatches, and the 0 to 100 is this app’s assumption. “The better
+        one” is the chance a hatch matches or beats the better parent, by
+        inheriting that value or by rolling it.
       </p>
     </section>
   )

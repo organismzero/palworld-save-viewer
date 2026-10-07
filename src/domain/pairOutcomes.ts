@@ -24,10 +24,11 @@
  * something this can say; it reports how many there are and scores them as
  * nothing.
  *
- * ## What is not predicted
+ * ## IVs are elsewhere
  *
- * IVs. Nothing in the app models how a child's talents follow its parents', so
- * nothing here pretends to.
+ * This module is passives only. How a child's IVs follow its parents' is a
+ * separate and weaker model, in `ivForecast.ts`, and the view keeps the two
+ * apart for that reason.
  */
 
 import type { PassiveInfo, Refdata } from '../refdata/refdata.ts'
