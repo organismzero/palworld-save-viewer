@@ -22,7 +22,8 @@ import type {
 import { MAX_SLOTS } from '../../domain/passives.ts'
 import { palName } from '../../domain/palText.ts'
 import { cn } from '../../lib/utils.ts'
-import { Checkbox } from '../../components/controls.tsx'
+import { Button, Checkbox } from '../../components/controls.tsx'
+import { useUiStore } from '../../store/uiStore.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Jump } from '../../components/Jump.tsx'
@@ -36,7 +37,13 @@ import { stepKey } from './savedPaths.ts'
 import { stepIvs, type IvTriple } from '../../domain/ivForecast.ts'
 import type { SpeciesText } from './speciesText.ts'
 import type { PassiveText } from './passiveText.ts'
-import { borrowSummary, type OwnerText } from './ownerText.ts'
+import {
+  borrowGroups,
+  borrowSummary,
+  borrowText,
+  borrowedPalText,
+  type OwnerText,
+} from './ownerText.ts'
 
 export function PlanSteps({
   plan,
@@ -90,6 +97,10 @@ export function PlanSteps({
           ))}
         </div>
       </section>
+
+      {plan.borrowed.length > 0 && (
+        <Borrowing plan={plan} text={text} owner={owner} />
+      )}
 
       {plan.tree && (
         <section>
@@ -626,4 +637,76 @@ function genderTitle(g: GenderDemand, text: SpeciesText): string {
     return `Step ${g.forStep} pairs this with your ${partner}, and the only ${partner} to hand is ${g.must === 'Male' ? 'female' : 'male'}. Half of hatches come out the sex needed, so two on average.`
   }
   return `Step ${g.forStep} pairs this with ${partner}, which is bred too. One of the two has to be re-hatched until they differ in sex, and this is the cheaper one: two on average.`
+}
+
+/**
+ * Who to ask for what.
+ *
+ * The plan already tags each borrowed parent where it is used, but that is the
+ * plan's order, not the order of the asking: one guildmate's two pals can be
+ * five steps apart. This is the same pals turned round, one line per person,
+ * and it copies as text because the next thing done with it is sending it.
+ */
+function Borrowing({
+  plan,
+  text,
+  owner,
+}: {
+  plan: BreedingPlan
+  text: SpeciesText
+  owner: OwnerText
+}) {
+  const notify = useUiStore((s) => s.notify)
+  const groups = borrowGroups(plan.borrowed)
+  const copy = () =>
+    void navigator.clipboard
+      .writeText(
+        borrowText(
+          plan.borrowed,
+          owner.name,
+          text.name,
+          text.name(plan.target),
+        ),
+      )
+      .then(
+        () => notify('Borrow list copied'),
+        () => notify('Could not reach the clipboard.', { tone: 'warn' }),
+      )
+
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="label">who to ask</div>
+        <Button size="sm" onClick={copy}>
+          Copy as text
+        </Button>
+      </div>
+      <Panel className="divide-y divide-[var(--color-line-faint)]">
+        {groups.map((g) => (
+          <div
+            key={g.ownerUid ?? 'base'}
+            className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2.5 text-sm"
+          >
+            <span className="w-40 shrink-0 truncate">
+              {g.ownerUid ? owner.name(g.ownerUid) : 'The base'}
+            </span>
+            <ul className="flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1">
+              {g.pals.map((b) => (
+                <li key={b.pal.instanceId}>
+                  <CardTrigger card={{ kind: 'pal', pal: b.pal }} focusable>
+                    {borrowedPalText(b, text.name)}
+                  </CardTrigger>
+                </li>
+              ))}
+            </ul>
+            {!g.ownerUid && (
+              <span className="text-[11px] text-[var(--color-muted)]">
+                nobody owns these, so there is nobody to ask
+              </span>
+            )}
+          </div>
+        ))}
+      </Panel>
+    </section>
+  )
 }
