@@ -25,9 +25,11 @@
  * bounds is not evidence of being in the right place. The test now compares
  * against real readings, which is the only thing that could have caught this.
  *
- * The 37 landmarks outside ±1000 under the correct constants are Feybreak, the
- * Sky Islands and the World Tree watchtowers — separate map screens with their
- * own coordinate spaces. See {@link savToMapAuto}.
+ * The 52 landmarks outside ±1000 under the correct constants are Feybreak, the
+ * Sky Islands and the World Tree. The first two are on the same map as the main
+ * island — the transform gives Feybreak Tower Entrance −1288, −1665 and the
+ * game reads −1294, −1669 — and only the World Tree is somewhere else. See
+ * {@link savToMapAuto}.
  *
  * ## The axis swap
  *
@@ -50,7 +52,7 @@ export interface MapPos {
   map: MapKind
 }
 
-/** Overworld (Palpagos + Sakurajima). PST's `__*_old` constants. */
+/** Overworld (Palpagos, Sakurajima, Feybreak, Sky Islands). PST's `__*_old` constants. */
 const S = 459
 const TX = 123888
 const TY = 158000
@@ -60,7 +62,7 @@ const TREE_S = 724
 const TREE_TX = 358540
 const TREE_TY = -382365
 
-/** Half-extent of each map's coordinate space. */
+/** Half-extent of the main island's coordinates, and of the tree's space. */
 export const OVERWORLD_RANGE = 1000
 export const TREE_RANGE = 2500
 
@@ -104,35 +106,44 @@ export function savToTree(x: number, y: number): { mx: number; my: number } {
 }
 
 /**
- * Picks the map an entity belongs to, porting PST's `sav_to_map_by_z`.
+ * Whether a world position is inside the square the overworld image shows.
  *
- * Despite the name, the decision is made by bounds-checking rather than by z —
- * PST defines a `MAP_Z_THRESHOLD` and then never uses it here. Kept faithful
- * to the original so results match.
+ * This, not ±{@link OVERWORLD_RANGE}, is what "on the overworld" means. The
+ * ±1000 box is only the main island; Feybreak and the Sky Islands lie south and
+ * west of it, in the same coordinate space and on the same picture.
+ */
+function onOverworldArt(x: number, y: number): boolean {
+  return (
+    Math.abs(x - ART_CENTRE_X) <= ART_HALF &&
+    Math.abs(y - ART_CENTRE_Y) <= ART_HALF
+  )
+}
+
+/**
+ * Picks the map an entity belongs to.
  *
- * ## Known limitation: this returns `tree` for things that are not the tree
+ * Began as a port of PST's `sav_to_map_by_z`, which bounds-checks against
+ * ±1000 and sends everything past it to the World Tree. That is wrong for
+ * Feybreak and the Sky Islands, and it mattered: a base built on Feybreak was
+ * listed everywhere except on the map, which drops tree entities.
  *
- * There are more than two coordinate spaces. Feybreak, the Sky Islands and the
- * Sakurajima watchtowers each have their own, and none of them is modelled
- * here — so anything out there falls past the overworld bounds, lands inside
- * the World Tree's very permissive ±2500, and comes back labelled `tree`.
- * Measured on `fast_travel_points.json`, that is 37 of 174 landmarks.
+ * Measured on `fast_travel_points.json`, the 52 landmarks outside ±1000 fall
+ * into two groups that the image's own extent separates cleanly:
  *
- * This was invisible while the overworld constants were too large, because
- * everything was compressed inside ±1000 and nothing ever reached the second
- * branch. It is wrong either way: those places were being drawn in the wrong
- * spot on the island, and are now labelled as somewhere they are not.
+ * - 35 on Feybreak and the Sky Islands, at mx −1659…−214, my −1874…−660 — all
+ *   inside the image, which runs to my −2127.
+ * - 17 in the World Tree, at mx −1995…−1457, my 1154…1640 — all north of the
+ *   image's edge at my 1032.
  *
- * z does not separate them — the World Tree interior sits at ~21–28k and
- * Frostbound Mountains Summit, firmly on the main island, is at 19k. Fixing it
- * properly means a `MapKind` per region with its own constants and its own map
- * image, which is a bigger change than the transform itself. On the reference
- * save nothing is affected: all bases, players and structures and all but 6
- * pals are on the overworld.
+ * So anything the picture covers is on the overworld, and only what lies
+ * outside it is tried against the tree's space. z does not help: the World
+ * Tree sits at ~17–43k and Sky Islands landmarks reach 60k.
  */
 export function savToMapAuto(x: number, y: number): MapPos {
   const p = savToMap(x, y)
-  if (Math.abs(p.mx) > OVERWORLD_RANGE || Math.abs(p.my) > OVERWORLD_RANGE) {
+  const inIsland =
+    Math.abs(p.mx) <= OVERWORLD_RANGE && Math.abs(p.my) <= OVERWORLD_RANGE
+  if (!inIsland && !onOverworldArt(x, y)) {
     const t = savToTree(x, y)
     if (Math.abs(t.mx) <= TREE_RANGE && Math.abs(t.my) <= TREE_RANGE) {
       return { ...t, map: 'tree' }

@@ -103,15 +103,24 @@ describe('savToMapAuto', () => {
     }
   })
 
-  it('mislabels Feybreak as the World Tree, which is a known limitation', () => {
-    // Deserted Ash Plateau is on Feybreak. Feybreak has its own coordinate
-    // space that this module does not model, so the point falls past the
-    // overworld bounds and is caught by the tree's very permissive ±2500.
-    //
-    // Asserted rather than ignored so the day someone adds a Feybreak MapKind,
-    // this test fails and points at the place to update. See the note on
-    // savToMapAuto.
-    expect(savToMapAuto(-591120.0, -484260.0).map).toBe('tree')
+  it('keeps Feybreak and the Sky Islands on the overworld', () => {
+    // Both lie past ±1000 but inside the map image, in the same coordinate
+    // space as the main island. They used to be labelled `tree`, and the map
+    // drops tree entities, so a base built out there vanished from it.
+    for (const { x, y } of [
+      { x: -591120.0, y: -484260.0 }, // Deserted Ash Plateau, Feybreak
+      { x: -888000, y: -433000 }, // Feybreak's south coast
+      { x: -820000, y: 60000 }, // Sky Islands
+    ]) {
+      const p = savToMapAuto(x, y)
+      expect(p.map).toBe('overworld')
+      expect(p).toMatchObject(savToMap(x, y))
+    }
+  })
+
+  it('sends the World Tree, north of the image, to the tree map', () => {
+    // Around Gilded City Ruins: mx ≈ −1808, my ≈ 1400.
+    expect(savToMapAuto(518700, -672000).map).toBe('tree')
   })
 
   it('routes far-out coordinates to the tree map when they fit there', () => {

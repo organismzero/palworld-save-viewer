@@ -219,15 +219,19 @@ describe.skipIf(!hasSave)('golden: real Level.sav', () => {
       expect(Number.isFinite(at.my)).toBe(true)
     }
 
-    // Structures should sit inside the overworld bounds, not scattered past
-    // them — that is what a wrong scale constant looks like.
+    // Structures should sit inside the map image, not scattered past it —
+    // that is what a wrong scale constant looks like. The image is wider than
+    // the main island's ±1000: it runs south and west to take in Feybreak and
+    // the Sky Islands, which is where the structures past −1000 are.
     const overworld = index.structures
       .map((s) => savToMapAuto(s.pos.x, s.pos.y))
       .filter((p) => p.map === 'overworld')
     expect(overworld.length).toBeGreaterThan(index.structures.length * 0.9)
     for (const p of overworld) {
-      expect(Math.abs(p.mx)).toBeLessThanOrEqual(1000)
-      expect(Math.abs(p.my)).toBeLessThanOrEqual(1000)
+      expect(p.mx).toBeGreaterThanOrEqual(-1925)
+      expect(p.mx).toBeLessThanOrEqual(1000)
+      expect(p.my).toBeGreaterThanOrEqual(-2128)
+      expect(p.my).toBeLessThanOrEqual(1000)
     }
   })
 

@@ -143,7 +143,8 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
       .map((s) => savToMapAuto(s.pos!.x, s.pos!.y))
       .filter((at) => at.map === 'overworld')
       .map((at) => mapToPixel(at.mx, at.my, N, N))
-    expect(points.length).toBe(7969)
+    // 826 of these are on Feybreak, past the main island's ±1000.
+    expect(points.length).toBe(8795)
 
     const score = (f: (x: number, y: number) => [number, number]) =>
       points.filter((p) => {
@@ -153,9 +154,11 @@ describe.skipIf(!hasBoth)('golden: LocalData.sav', () => {
       }).length / points.length
 
     const identity = score((x, y) => [x, y])
-    // 0.985 in the reference save, against 0.946 for the closest wrong
-    // orientation (`antitranspose`) and 0.75 or less for the rest.
-    expect(identity).toBeGreaterThan(0.95)
+    // 0.956 in the reference save, against 0.907 for the closest wrong
+    // orientation (`antitranspose`) and 0.70 or less for the rest. It was 0.985
+    // before Feybreak's scenery counted as overworld: most of that island is
+    // unexplored here, so its structures sit under fog whichever way up.
+    expect(identity).toBeGreaterThan(0.93)
     for (const [name, f] of orientations) {
       expect(`${name} ${score(f) < identity}`).toBe(`${name} true`)
     }
