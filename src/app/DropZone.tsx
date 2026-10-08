@@ -130,6 +130,15 @@ export function DropZone() {
             </code>
           </p>
           <p>
+            A dedicated server’s settings are the one optional file that is not
+            in that folder:{' '}
+            <code className="num text-xs">
+              Pal/Saved/Config/&lt;platform&gt;/PalWorldSettings.ini
+            </code>
+            . Add it for the XP, capture and drop rates. Its passwords and
+            addresses are never read.
+          </p>
+          <p>
             Drop <span className="num">Level.sav</span> straight in — it is
             decompressed and read here, in your browser, with no conversion
             step. A large, well-built world is around {bytes(3_300_000)}{' '}

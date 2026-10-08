@@ -41,6 +41,7 @@ export async function loadSample(): Promise<void> {
       isSample: true,
       localData: undefined,
       levelMeta: undefined,
+      worldSettings: undefined,
       playerFiles: {},
       fileName: SAMPLE_NAME,
       fileBytes: undefined,

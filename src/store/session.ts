@@ -34,6 +34,7 @@ import type {
   LevelMetaPayload,
   LocalDataPayload,
   SlimPayload,
+  WorldSettings,
 } from '../domain/types.ts'
 import { useSaveStore, type PlayerFileState } from './saveStore.ts'
 import { useUiStore } from './uiStore.ts'
@@ -67,6 +68,8 @@ export interface SessionSnapshot {
   payload: SlimPayload
   localData?: LocalDataPayload
   levelMeta?: LevelMetaPayload
+  /** The server settings, already stripped of secrets by the parser. */
+  worldSettings?: WorldSettings
   playerFiles: Record<string, PlayerFileState>
 }
 
@@ -248,6 +251,7 @@ export async function restoreSession(
     index: buildSaveIndex(snap.payload),
     localData: snap.localData,
     levelMeta: snap.levelMeta,
+    worldSettings: snap.worldSettings,
     playerFiles: snap.playerFiles,
     fileName: snap.fileName,
     fileBytes: snap.fileBytes,
@@ -279,6 +283,7 @@ function snapshotFromStore(): SessionSnapshot | undefined {
     payload: toSlim(s.index),
     localData: s.localData,
     levelMeta: s.levelMeta,
+    worldSettings: s.worldSettings,
     playerFiles: s.playerFiles,
   }
 }
@@ -389,7 +394,8 @@ export function autoRestore(): void {
  * fighting the wrong signal. `index` gets a fresh identity from
  * `buildSaveIndex` on the initial parse and on every player merge; `localData`
  * on each client-save merge; `levelMeta` when world metadata is added, which is
- * now usually a gesture of its own. That is the complete trigger list.
+ * now usually a gesture of its own; `worldSettings` when the server's settings
+ * are. That is the complete trigger list.
  *
  * `playerFiles` is deliberately excluded even though it is snapshotted: the
  * ledger flips to `'parsing'` *before* the payload changes, so keying on it
@@ -399,6 +405,7 @@ export function installSessionPersistence(): () => void {
   let lastIndex = useSaveStore.getState().index
   let lastLocal = useSaveStore.getState().localData
   let lastMeta = useSaveStore.getState().levelMeta
+  let lastSettings = useSaveStore.getState().worldSettings
 
   const unsubscribe = useSaveStore.subscribe((s) => {
     if (s.status !== 'ready') {
@@ -407,18 +414,21 @@ export function installSessionPersistence(): () => void {
       lastIndex = s.index
       lastLocal = s.localData
       lastMeta = s.levelMeta
+      lastSettings = s.worldSettings
       return
     }
     if (
       s.index === lastIndex &&
       s.localData === lastLocal &&
-      s.levelMeta === lastMeta
+      s.levelMeta === lastMeta &&
+      s.worldSettings === lastSettings
     ) {
       return
     }
     lastIndex = s.index
     lastLocal = s.localData
     lastMeta = s.levelMeta
+    lastSettings = s.worldSettings
     // A restored world is already exactly what is in storage.
     if (s.restoredFrom !== undefined) return
     scheduleWrite()

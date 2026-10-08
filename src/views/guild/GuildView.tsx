@@ -23,6 +23,8 @@ import { WORK_TYPES } from '../../lib/color.ts'
 import { count, relativeTime } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import { useRefdataStore } from '../../store/refdataStore.ts'
+import { useSaveStore } from '../../store/saveStore.ts'
+import { changedRates, rateText } from '../../domain/worldSettings.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 import { useViewParams } from '../../app/viewParams.ts'
 import { GUILD_DEFAULTS, guildCodec, type GuildParams } from './params.ts'
@@ -259,6 +261,7 @@ function GuildHero({
         </dl>
       </Panel>
 
+      <ServerRates />
       <MemberStrip guild={guild} />
       <Markers guild={guild} />
     </header>
@@ -288,6 +291,35 @@ function Metric({
       </dd>
       <dt className="label mt-1.5">{label}</dt>
     </div>
+  )
+}
+
+/**
+ * The server's changed rates, when its settings file has been added and has
+ * any.
+ *
+ * Here because every number on this page reads differently on a server with
+ * the rates turned up: 938 pals at ×3 capture is not 938 pals. Worded as the
+ * server's configuration, which is what it is; the file is not part of the
+ * save and does not say how long the rates have been what they are.
+ */
+function ServerRates() {
+  const settings = useSaveStore((s) => s.worldSettings)
+  if (!settings) return null
+  const changed = changedRates(settings)
+  if (changed.length === 0) return null
+  return (
+    <p
+      className="mt-4 text-xs text-[var(--color-muted)]"
+      title="From PalWorldSettings.ini: how the server is configured now. The save does not record what the rates were when any of this happened."
+    >
+      <span className="label mr-2">server config</span>
+      {changed
+        .slice(0, 6)
+        .map((c) => `${c.label} ${rateText(c.value)}`)
+        .join(' · ')}
+      {changed.length > 6 && ` · and ${changed.length - 6} more in Summary`}
+    </p>
   )
 }
 

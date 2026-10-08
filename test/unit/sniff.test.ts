@@ -217,3 +217,36 @@ describe('partition', () => {
     expect(result.rejected).toEqual([])
   })
 })
+
+describe('the server settings file', () => {
+  it('is recognised by name, in any case, and never read', () => {
+    const { file } = fakeFile('palworldsettings.INI', 3_500)
+    expect(sniff(file).kind).toBe('settings')
+    expect(file.arrayBuffer).not.toHaveBeenCalled()
+  })
+
+  it('is kept apart from the saves, one per drop', () => {
+    const result = partition([
+      fakeFile('Level.sav', 861_566).file,
+      fakeFile('PalWorldSettings.ini').file,
+      fakeFile('PalWorldSettings.ini').file,
+    ])
+    expect(result.savs.map((s) => s.file.name)).toEqual(['Level.sav'])
+    expect(result.settings?.file.name).toBe('PalWorldSettings.ini')
+    // The second of two is surplus, and says so by being turned away.
+    expect(result.rejected).toHaveLength(1)
+  })
+
+  it('turns away the template of defaults, and says which file is wanted', () => {
+    const got = sniff(fakeFile('DefaultPalWorldSettings.ini').file)
+    expect(got.kind).toBe('unknown')
+    expect(got.reason).toMatch(/template/)
+    expect(got.reason).toMatch(/PalWorldSettings\.ini/)
+  })
+
+  it('turns away any other .ini by name', () => {
+    const got = sniff(fakeFile('GameUserSettings.ini').file)
+    expect(got.kind).toBe('unknown')
+    expect(got.reason).toMatch(/only \.ini/i)
+  })
+})

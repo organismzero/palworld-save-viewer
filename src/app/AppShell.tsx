@@ -477,7 +477,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
           <Button
             size="sm"
             onClick={add.open}
-            title="Add LevelMeta.sav, player saves or LocalData.sav to this world"
+            title="Add LevelMeta.sav, player saves, LocalData.sav or the server’s PalWorldSettings.ini to this world"
           >
             Add files
           </Button>

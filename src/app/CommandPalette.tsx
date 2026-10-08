@@ -150,7 +150,12 @@ export function CommandPalette({
     })
     const actions: Result[] = [
       act('settings', 'Settings', () => setSettings(true)),
-      act('add', 'Add files', onAddFiles, 'player saves, LevelMeta, LocalData'),
+      act(
+        'add',
+        'Add files',
+        onAddFiles,
+        'player saves, LevelMeta, LocalData, server settings',
+      ),
       act('load', 'Load another save', onLoadAnother),
       act('copy', 'Copy link to this view', onCopyLink),
       act('tray', 'Toggle the utility tray', () =>

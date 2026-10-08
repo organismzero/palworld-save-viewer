@@ -294,6 +294,13 @@ uptime-at-save-time, which nothing records, so the honest position stays as it i
 
 #### `PalWorldSettings.ini` — how the server is configured
 
+**Shipped.** Read by `src/parse/settings.ts` on the main thread, kept beside the index as `SaveState.worldSettings`, shown in the Summary tab and, for changed rates, in the Guild header. Three things differ from the spec below, and one was missing from it:
+
+- **Passwords, addresses and ports are dropped at parse time.** The spec did not mention them. The same `OptionSettings` line holds `AdminPassword`, `ServerPassword`, `PublicIP`, `PublicPort`, the RCON and REST API settings and `BanListURL`, and this app keeps what it parses, in memory and in browser storage if the save is remembered. They are matched by the shape of their names, so a new secret is caught without anyone noticing it was added, and only the names are kept, to say they were there.
+- **Recognised by file name, not by a text marker.** `sniff.ts` no longer reads any file, so it matches `PalWorldSettings.ini` and the parser checks for the section header. The template `DefaultPalWorldSettings.ini` is turned away by name: it parses identically and would report a vanilla server whatever the server is set to.
+- **"Non-default" is only ever said about rates.** The game's defaults are not in the file and its template changes between versions, so the app has no table of them. A multiplier of 1 is the game unmodified by definition; limits and rules are shown as set and not judged.
+- **An empty file is explained, not refused as broken.** A server on the game's defaults keeps this file empty.
+
 Server difficulty, XP / capture / spawn / hatch rates, day length, death penalty
 and PvP flags — the context that makes every other number in the app legible. A
 3× capture-rate world is not comparable to a vanilla one, and today the app

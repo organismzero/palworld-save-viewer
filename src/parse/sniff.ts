@@ -25,7 +25,8 @@ import { normGuid, type Guid } from './guid.ts'
  * file and the app can read its container header, so it gets its own kind and
  * a purpose-built explanation rather than being lumped in with `unknown`.
  */
-export type SaveKind = 'dps' | 'sav' | 'local' | 'levelmeta' | 'unknown'
+export type SaveKind =
+  'dps' | 'sav' | 'local' | 'levelmeta' | 'settings' | 'unknown'
 
 export interface Sniffed {
   file: File
@@ -68,6 +69,26 @@ const LOCALDATA_FILENAME = /^LocalData\.sav$/i
  * `SaveData` is a `PalWorldBaseInfoSaveData` and rejects it by name if not.
  */
 const LEVELMETA_FILENAME = /^LevelMeta\.sav$/i
+
+/**
+ * A dedicated server's settings, the one file this app reads that is neither a
+ * `.sav` nor in the save folder: it lives under `Pal/Saved/Config/<Platform>/`.
+ *
+ * By name, like the rest, and for the same reason: nothing here reads a file.
+ * The parser checks for the section header and refuses anything without it.
+ */
+const SETTINGS_FILENAME = /^PalWorldSettings\.ini$/i
+
+/**
+ * The template the game ships beside it, which lists every default. It parses
+ * exactly like the real thing, which is the problem: read as "your server's
+ * settings" it would report a vanilla server whatever the server is set to.
+ */
+const SETTINGS_TEMPLATE = /^DefaultPalWorldSettings\.ini$/i
+
+export function looksLikeSettingsName(name: string): boolean {
+  return SETTINGS_FILENAME.test(name)
+}
 
 export function looksLikeLevelMetaName(name: string): boolean {
   return LEVELMETA_FILENAME.test(name)
@@ -131,11 +152,29 @@ export function sniff(file: File): Sniffed {
     return { file, kind: 'unknown', filenameUid, reason: JSON_REFUSED }
   }
 
+  if (looksLikeSettingsName(name)) return { file, kind: 'settings' }
+  if (SETTINGS_TEMPLATE.test(name)) {
+    return {
+      file,
+      kind: 'unknown',
+      reason:
+        'That is the game’s template of default values, not your server’s settings. The one to add is PalWorldSettings.ini, under Pal/Saved/Config.',
+    }
+  }
+  if (lower.endsWith('.ini')) {
+    return {
+      file,
+      kind: 'unknown',
+      reason: 'The only .ini this app reads is PalWorldSettings.ini.',
+    }
+  }
+
   return {
     file,
     kind: 'unknown',
     filenameUid,
-    reason: 'Not a Palworld save file. The app reads .sav files.',
+    reason:
+      'Not a Palworld save file. The app reads .sav files, and PalWorldSettings.ini.',
   }
 }
 
@@ -166,6 +205,11 @@ export interface Partitioned {
    * describes a single world.
    */
   levelMeta?: Sniffed
+  /**
+   * The server's `PalWorldSettings.ini`. One is kept, since it describes one
+   * server, and it is read on the main thread: it is text.
+   */
+  settings?: Sniffed
 }
 
 /** Sniffs a batch and splits it. */
@@ -173,14 +217,19 @@ export function partition(files: File[]): Partitioned {
   const sniffed = files.map((f) => sniff(f))
   const locals = sniffed.filter((s) => s.kind === 'local')
   const metas = sniffed.filter((s) => s.kind === 'levelmeta')
+  const settings = sniffed.filter((s) => s.kind === 'settings')
 
   return {
     savs: sniffed.filter((s) => s.kind === 'sav'),
     local: locals[0],
     levelMeta: metas[0],
+    settings: settings[0],
     rejected: sniffed.filter(
       (s) =>
-        s.kind === 'unknown' || locals.indexOf(s) > 0 || metas.indexOf(s) > 0,
+        s.kind === 'unknown' ||
+        locals.indexOf(s) > 0 ||
+        metas.indexOf(s) > 0 ||
+        settings.indexOf(s) > 0,
     ),
     ignored: sniffed.filter((s) => s.kind === 'dps'),
   }

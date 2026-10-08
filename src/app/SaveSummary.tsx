@@ -1,9 +1,16 @@
+import {
+  HEADLINE_SETTINGS,
+  changedRates,
+  rateText,
+  settingLabel,
+  settingText,
+} from '../domain/worldSettings.ts'
 import { useEffect, type ReactNode } from 'react'
 
 import { useRefdataStore } from '../store/refdataStore.ts'
 
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
-import type { PlayerDetail, SaveIndex } from '../domain/types.ts'
+import type { PlayerDetail, SaveIndex, WorldSettings } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
 import { CardTrigger } from '../components/cards/CardTrigger.tsx'
 import {
@@ -58,6 +65,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
     timings,
     localData,
     levelMeta,
+    worldSettings,
     restoredFrom,
     reset,
   } = useSaveStore()
@@ -158,6 +166,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             )}
           </div>
         </section>
+
+        {worldSettings && <ServerSettings settings={worldSettings} />}
 
         {localData && (
           <section className="mb-10">
@@ -532,8 +542,15 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
  * "I dropped that, why did nothing happen?"
  */
 function FilesPanel({ index }: { index: SaveIndex }) {
-  const { fileName, fileBytes, playerFiles, localData, levelMeta } =
-    useSaveStore()
+  const {
+    fileName,
+    fileBytes,
+    playerFiles,
+    localData,
+    levelMeta,
+    worldSettings,
+  } = useSaveStore()
+  const changed = worldSettings ? changedRates(worldSettings) : []
   const s = index.stats
   const writtenAt = saveClock(levelMeta?.savedAtTicks)
   const ownerName = localData?.ownerUid
@@ -583,6 +600,20 @@ function FilesPanel({ index }: { index: SaveIndex }) {
                     .filter(Boolean)
                     .join(' · ')
                 : 'no clock reading, no in-game day'
+            }
+            action={<AddButton>Add</AddButton>}
+          />
+
+          <FileSlot
+            label="server settings"
+            hint="PalWorldSettings.ini — XP, capture and drop rates, limits and rules. Not in the save folder: on a dedicated server it is under Pal/Saved/Config/. Its passwords and addresses are never read."
+            loaded={worldSettings !== undefined}
+            detail={
+              worldSettings
+                ? changed.length > 0
+                  ? `${changed.length} ${changed.length === 1 ? 'rate' : 'rates'} changed from ×1`
+                  : 'every rate at ×1'
+                : 'rates and limits unknown'
             }
             action={<AddButton>Add</AddButton>}
           />
@@ -795,3 +826,87 @@ function LastSeenCell({
 
 /** Kept for the element pip's import to stay meaningful in future views. */
 export { ElementBadge }
+
+/**
+ * What the server is set to.
+ *
+ * Worded as configuration throughout, because that is all it is. The file is
+ * not part of the save and nothing dates it: it says what the rates are now,
+ * and a world that has been running for a year may have been played at others
+ * for most of it.
+ */
+function ServerSettings({ settings }: { settings: WorldSettings }) {
+  const changed = changedRates(settings)
+  const headline = HEADLINE_SETTINGS.filter((k) => k in settings.values)
+  const name = settings.values.ServerName
+  const all = Object.entries(settings.values).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
+
+  return (
+    <section className="mb-10">
+      <SectionHeading
+        title={
+          typeof name === 'string' && name
+            ? `Server settings — ${name}`
+            : 'Server settings'
+        }
+        hint={`from ${settings.fileName} — how the server is configured now, not a record of how this world was played`}
+      />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {headline.map((key) => {
+          const value = settings.values[key]!
+          return (
+            <StatTile
+              key={key}
+              label={settingLabel(key)}
+              value={settingText(key, value)}
+              accent={changed.some((c) => c.key === key)}
+            />
+          )
+        })}
+      </div>
+
+      <p className="mt-3 text-xs text-[var(--color-muted)]">
+        {changed.length === 0
+          ? 'Every rate in the file is ×1, the game unmodified.'
+          : `Changed from ×1: ${changed.map((c) => `${c.label} ${rateText(c.value)}`).join(' · ')}.`}{' '}
+        Only rates are compared, since ×1 is the game unmodified by definition;
+        limits and rules are shown as set, with no claim about what the game
+        ships with.
+      </p>
+
+      <details className="mt-3 text-xs">
+        <summary className="cursor-pointer text-[var(--color-muted)]">
+          All {count(all.length)} settings
+        </summary>
+        <dl className="num mt-2 grid gap-x-8 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+          {all.map(([key, value]) => (
+            <div
+              key={key}
+              className="flex items-baseline justify-between gap-3 border-b border-[var(--color-line-faint)] py-1"
+            >
+              <dt
+                className="min-w-0 truncate text-[var(--color-muted)]"
+                title={key}
+              >
+                {key}
+              </dt>
+              <dd className="shrink-0">{settingText(key, value)}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+
+      {settings.withheld.length > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed text-[var(--color-muted)]">
+          {count(settings.withheld.length)} settings in the file were not read:{' '}
+          <span className="num">{settings.withheld.join(', ')}</span>. They are
+          passwords, addresses and ports, which nothing here needs, so their
+          values were dropped as the file was opened and are not held anywhere
+          in this app.
+        </p>
+      )}
+    </section>
+  )
+}

@@ -45,10 +45,9 @@ inferred to exact, positions become real rather than last-jump estimates, and
 paldex progress, technology points and true last-online times appear. Without
 it the app says so rather than guessing silently.
 
-Raw `.sav` files are all it reads. JSON converted by
-[PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools)
-used to work too; it is no longer accepted, because the raw save is read
-directly and the conversion step only cost time.
+A dedicated server's settings can be added too, and they are the one optional file that is not in the save folder: `Pal/Saved/Config/<Platform>/PalWorldSettings.ini`. With it the Summary tab shows the XP, capture, spawn and drop rates, the limits and the rules, and the Guild tab says which rates are not ×1. It is shown as the server's configuration and nothing more: the file is not part of the save and does not say what the rates were when the world was played. Its passwords, addresses and ports are dropped as the file is opened and are never held, stored or shown.
+
+Raw `.sav` files and that one `.ini` are all it reads. JSON converted by [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools) used to work too; it is no longer accepted, because the raw save is read directly and the conversion step only cost time.
 
 | Key                       | What it does                       |
 | ------------------------- | ---------------------------------- |
@@ -235,6 +234,7 @@ data/Level.sav     # the raw save — read directly
 data/LevelMeta.sav # the world's name and in-game day
 data/Players/      # per-player saves, <uid>.sav
 data/LocalData.sav # your client's own file: fog of war, map pins, progress
+data/PalWorldSettings.ini # the server's settings, from its config directory
 ```
 
 `LocalData.sav` is the odd one out: the game keeps it beside the _client_, not

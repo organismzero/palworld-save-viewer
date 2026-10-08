@@ -276,7 +276,7 @@ Worth knowing about the sample: it is the fixture as committed, so it shows that
 4. ~~**0a and 0e, then Phase 2**~~, done. ~~**Phase 3**~~, done.
 5. ~~**0b and 0f, then Phase 5** (5a–5e)~~, done. ~~**Phase 4**~~, done. ~~**Phase 6**~~, done. ~~**Phase 7**~~ and ~~**Phase 8**~~, done. Each phase is independently shippable.
 6. ~~**Phase 9**~~, done.
-7. Then the two items left on `docs/improvements.md`: `PalWorldSettings.ini` and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
+7. Then the two items left on `docs/improvements.md`: ~~`PalWorldSettings.ini`~~, done, and save comparison. The notice channel (0c) and settings dialog (9b) give the latter a place to live.
 
 ## Verification
 

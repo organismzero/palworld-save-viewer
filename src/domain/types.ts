@@ -529,6 +529,26 @@ export interface LevelMetaPayload {
   inGameDay?: number
 }
 
+export type WorldSettingValue = string | number | boolean
+
+/**
+ * A dedicated server's `PalWorldSettings.ini`, as read by `parse/settings.ts`.
+ *
+ * Current server configuration, not part of the save: see that module for why
+ * the difference decides how any of this may be worded on screen. Kept beside
+ * the index, like `LevelMetaPayload`, and for the same reason.
+ */
+export interface WorldSettings {
+  fileName: string
+  /** Every setting that was kept, by the file's own key. */
+  values: Record<string, WorldSettingValue>
+  /**
+   * Keys that were in the file and whose values were dropped unread:
+   * passwords, addresses and ports. Names only.
+   */
+  withheld: string[]
+}
+
 /** The main-thread view: flat arrays plus the derived lookup indexes. */
 export interface SaveIndex extends SlimPayload {
   palById: Map<Guid, Pal>

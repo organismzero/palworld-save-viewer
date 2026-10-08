@@ -18,8 +18,11 @@ import { useRef, type ReactNode } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
 
-/** Everything this app can read: raw Palworld saves, nothing else. */
-export const SAVE_ACCEPT = '.sav'
+/**
+ * Everything this app can read: raw Palworld saves, and the one text file,
+ * a server's `PalWorldSettings.ini`.
+ */
+export const SAVE_ACCEPT = '.sav,.ini'
 
 export interface FilePicker {
   /** Opens the file dialog. */

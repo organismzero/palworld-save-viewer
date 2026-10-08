@@ -6,6 +6,7 @@ import type {
   LevelMetaPayload,
   LocalDataPayload,
   SaveIndex,
+  WorldSettings,
 } from '../domain/types.ts'
 import {
   levelMetaPredatesWorld,
@@ -13,6 +14,7 @@ import {
   resolvePresetOwner,
 } from '../domain/verify.ts'
 import { explainParseError } from '../parse/explain.ts'
+import { parseWorldSettings } from '../parse/settings.ts'
 import { useUiStore } from './uiStore.ts'
 import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
 import type {
@@ -43,7 +45,7 @@ export interface PlayerFileState {
    * cheaper than inferring it from the name. Absent on rows written before a
    * sniff could say — a `.sav` batch whose level is picked by size.
    */
-  kind?: 'player' | 'local' | 'levelmeta'
+  kind?: 'player' | 'local' | 'levelmeta' | 'settings'
 }
 
 export interface SaveState {
@@ -94,6 +96,15 @@ export interface SaveState {
    */
   levelMeta?: LevelMetaPayload
 
+  /**
+   * The server's `PalWorldSettings.ini`, if it was added. Beside the index for
+   * the same reason as the two above, and more so: it is not in the save
+   * folder at all and describes the server as configured now, not this save.
+   * Passwords and addresses in the file never reach this; see
+   * `parse/settings.ts`.
+   */
+  worldSettings?: WorldSettings
+
   /** Ingestion ledger, keyed by file name. Drives the player-saves panel. */
   playerFiles: Record<string, PlayerFileState>
   /**
@@ -114,6 +125,8 @@ export interface SaveState {
    * gets checked against the world like every other addition.
    */
   pendingLevelMetaFile?: File
+  /** Same again, for the server settings: kept only alongside a world. */
+  pendingSettingsFile?: File
 
   acceptFiles: (files: File[]) => Promise<void>
   reset: () => void
@@ -248,6 +261,7 @@ function mergeReports(
 function slotOf(kind: Sniffed['kind']): PlayerFileState['kind'] {
   if (kind === 'local') return 'local'
   if (kind === 'levelmeta') return 'levelmeta'
+  if (kind === 'settings') return 'settings'
   if (kind === 'sav') return 'player'
   return undefined
 }
@@ -315,6 +329,8 @@ async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
     // fog would be drawn over terrain it never described.
     levelMeta: undefined,
     localData: undefined,
+    // Another world may be another server.
+    worldSettings: undefined,
     restoredFrom: undefined,
     isSample: false,
     playerFiles: ledgerFrom(players, 'queued'),
@@ -551,6 +567,49 @@ async function applyLevelMeta(
   }))
 }
 
+/**
+ * Reads `PalWorldSettings.ini` if one was added, or holds it for a world.
+ *
+ * No worker: it is a few kilobytes of text. Held until there is a world for
+ * the reason `LevelMeta` is: loading a level clears what described the last
+ * one, so "settings first, then the level" has to end with settings.
+ */
+async function applySettings(
+  dropped: Sniffed | undefined,
+  set: Setter,
+  get: () => SaveState,
+) {
+  const file = dropped?.file ?? get().pendingSettingsFile
+  if (!file) return
+
+  if (!get().index) {
+    if (dropped) {
+      set((s) => ({
+        pendingSettingsFile: dropped.file,
+        playerFiles: { ...s.playerFiles, ...ledgerFrom([dropped], 'queued') },
+      }))
+    }
+    return
+  }
+
+  set({ pendingSettingsFile: undefined })
+  const result = parseWorldSettings(await file.text(), file.name)
+  set((s) => ({
+    // A refused file leaves settings already read alone, as the others do.
+    worldSettings: result.ok ? result.settings : s.worldSettings,
+    playerFiles: {
+      ...s.playerFiles,
+      [file.name]: {
+        fileName: file.name,
+        bytes: file.size,
+        kind: 'settings' as const,
+        status: result.ok ? ('loaded' as const) : ('rejected' as const),
+        reason: result.ok ? undefined : result.reason,
+      },
+    },
+  }))
+}
+
 async function applyLocal(
   local: Sniffed | undefined,
   set: Setter,
@@ -605,12 +664,14 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       timings: undefined,
       levelMeta: undefined,
       localData: undefined,
+      worldSettings: undefined,
       restoredFrom: undefined,
       isSample: false,
       playerFiles: {},
       pendingPlayerFiles: [],
       pendingLocalFile: undefined,
       pendingLevelMetaFile: undefined,
+      pendingSettingsFile: undefined,
     })
   },
 
@@ -641,6 +702,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
     // After `ingestWorld`, not before: that replaces the ingestion ledger
     // wholesale, so an entry written earlier would be dropped on the floor.
     await applyLevelMeta(parts.levelMeta, set, get)
+    await applySettings(parts.settings, set, get)
     await applyLocal(parts.local, set, get)
   },
 }))
@@ -652,7 +714,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
  * path this takes and whichever of its many exits it leaves by.
  */
 async function ingestWorld(
-  { rejected, ignored, savs, local, levelMeta }: Partitioned,
+  { rejected, ignored, savs, local, levelMeta, settings }: Partitioned,
   set: Setter,
   get: () => SaveState,
 ) {
@@ -691,7 +753,7 @@ async function ingestWorld(
   // Without `levelMeta` here, adding world metadata to an open world planted
   // "Nothing here looks like a Palworld save" in the store while succeeding,
   // and dropping it *first* showed that message on the landing screen.
-  if (local || levelMeta) return
+  if (local || levelMeta || settings) return
 
   /**
    * A mis-drop onto an open world must never cost the user that world.
