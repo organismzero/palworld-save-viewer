@@ -68,6 +68,12 @@ export interface SaveState {
   restoredFrom?: number
 
   /**
+   * The world is the sample shipped with the app, not anyone's save. It is
+   * never offered for remembering and never written to browser storage.
+   */
+  isSample?: boolean
+
+  /**
    * The client's own save, if one has been dropped. Kept beside the index
    * rather than inside it: one file describes one player's client, so it is
    * neither derived from the world nor invalidated by merging player saves.
@@ -244,7 +250,8 @@ let adoptedFor: SaveIndex | undefined
 
 async function adoptIfRestored(): Promise<void> {
   const s = useSaveStore.getState()
-  if (s.restoredFrom === undefined || !s.index) return
+  // The sample is the other world the worker never saw.
+  if ((s.restoredFrom === undefined && !s.isSample) || !s.index) return
   if (adoptedFor === s.index) return
   const payload = toSlim(s.index)
   await request({ t: 'adopt', payload }, [])
@@ -289,6 +296,7 @@ async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
     levelMeta: undefined,
     localData: undefined,
     restoredFrom: undefined,
+    isSample: false,
     playerFiles: ledgerFrom(players, 'queued'),
     pendingPlayerFiles: [],
     phase: 'decode',
@@ -570,6 +578,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       levelMeta: undefined,
       localData: undefined,
       restoredFrom: undefined,
+      isSample: false,
       playerFiles: {},
       pendingPlayerFiles: [],
       pendingLocalFile: undefined,

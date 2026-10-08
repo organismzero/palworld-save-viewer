@@ -55,7 +55,7 @@ import { runEscape, useUiStore, type ViewId } from '../store/uiStore.ts'
 import { parseHash } from './viewParams.ts'
 import { cn, tabId } from '../lib/utils.ts'
 import { Button, TabBar } from '../components/controls.tsx'
-import { KeyHint, PromptBar } from '../components/primitives.tsx'
+import { KeyHint, Pill, PromptBar } from '../components/primitives.tsx'
 import { RefdataNote } from '../components/RefdataNote.tsx'
 import { TRUNCATED_NOTICE, carriesFiles, filesFromDrop } from './dropEntries.ts'
 import { useFilePicker } from './filePicker.tsx'
@@ -350,7 +350,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const view = useHashSync()
   useShortcuts()
 
-  const { fileName, reset } = useSaveStore()
+  const { fileName, isSample, reset } = useSaveStore()
   const setPalette = useUiStore((s) => s.setPalette)
   const setAbout = useUiStore((s) => s.setAbout)
   const trayOpen = useUiStore((s) => s.trayOpen)
@@ -423,9 +423,23 @@ export function AppShell({ index }: { index: SaveIndex }) {
             Tray
           </Button>
 
-          <span className="label hidden max-w-40 truncate lg:inline">
-            {fileName}
-          </span>
+          {/* The sample has no file name worth showing, so the pill stands in
+              for it: there is not room in the header for both. */}
+          {isSample ? (
+            // Wrapped so the header's flex row cannot squeeze it to "SA…".
+            <span className="shrink-0">
+              <Pill
+                tone="warn"
+                title="A small made-up world shipped with the app, not a save of yours. Load another to open your own."
+              >
+                sample
+              </Pill>
+            </span>
+          ) : (
+            <span className="label hidden max-w-40 truncate lg:inline">
+              {fileName}
+            </span>
+          )}
 
           <Diagnostics index={index} />
 
@@ -635,10 +649,17 @@ function Prompt({ keys, children }: { keys: string; children: ReactNode }) {
 function RememberOffer() {
   const status = useSaveStore((s) => s.status)
   const restoredFrom = useSaveStore((s) => s.restoredFrom)
+  const isSample = useSaveStore((s) => s.isSample)
   const [pref, setPref] = useState<RememberPref>(() => rememberPref())
 
   // A restored world came *from* storage, so the question is already answered.
-  if (pref !== 'unset' || status !== 'ready' || restoredFrom !== undefined) {
+  if (
+    pref !== 'unset' ||
+    status !== 'ready' ||
+    restoredFrom !== undefined ||
+    // Nothing of the user's is on screen to keep.
+    isSample
+  ) {
     return null
   }
 

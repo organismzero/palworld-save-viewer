@@ -1,3 +1,4 @@
+import { loadSample } from '../store/sample.ts'
 import { useRef, useState } from 'react'
 
 import { useSaveStore } from '../store/saveStore.ts'
@@ -98,6 +99,17 @@ export function DropZone() {
         <Button onClick={folder.open}>Choose a folder</Button>
         <ReopenButton />
       </div>
+
+      {/* A link, not a fourth button: it is for someone who has no save to
+          hand, and should not compete with the three for someone who has. */}
+      <button
+        type="button"
+        onClick={() => void loadSample()}
+        className="text-sm text-[var(--color-muted)] underline underline-offset-4 hover:text-[var(--color-signal)]"
+        title="A small made-up world shipped with this page: twelve pals, two players, one base. Nothing is uploaded and nothing is kept."
+      >
+        No save to hand? Try a sample world
+      </button>
 
       {files.input}
       {folder.input}

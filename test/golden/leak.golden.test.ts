@@ -49,6 +49,11 @@ function committedTestFiles(): string[] {
     }
   }
   walk(resolve(ROOT, 'test'))
+  // The sample world is served to everyone who opens the page, which makes it
+  // the most public file in the repository. It is generated from a fixture
+  // this already checks, and it is checked again as shipped.
+  if (existsSync(resolve(ROOT, 'public/demo')))
+    walk(resolve(ROOT, 'public/demo'))
   return out
 }
 

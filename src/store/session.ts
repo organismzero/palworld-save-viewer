@@ -252,6 +252,7 @@ export async function restoreSession(
     fileName: snap.fileName,
     fileBytes: snap.fileBytes,
     restoredFrom: snap.savedAt,
+    isSample: false,
     timings: undefined,
     error: undefined,
     phase: 'done',
@@ -267,6 +268,9 @@ export async function restoreSession(
 function snapshotFromStore(): SessionSnapshot | undefined {
   const s = useSaveStore.getState()
   if (s.status !== 'ready' || !s.index) return undefined
+  // The sample is not the user's, and keeping it would put "Reopen Sample
+  // world" on the landing screen in place of their own save.
+  if (s.isSample) return undefined
   return {
     version: SNAPSHOT_VERSION,
     savedAt: Date.now(),

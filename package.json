@@ -39,6 +39,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc -b --noEmit",
     "fixture": "tsx scripts/make-fixture.ts",
+    "sample": "tsx scripts/make-sample.ts",
     "gen:sav-tables": "tsx scripts/gen-sav-tables.ts",
     "verify:breeding": "tsx scripts/verify-breeding.ts",
     "bench:passives": "tsx scripts/bench-passives.ts"
