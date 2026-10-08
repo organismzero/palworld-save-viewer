@@ -60,7 +60,8 @@ export function PassiveSheet({ index }: { index: SaveIndex }) {
     void ensure()
   }, [ensure])
 
-  const [query, setQuery] = useState('')
+  const query = useUiStore((s) => s.passiveQuery)
+  const setQuery = useUiStore((s) => s.setPassiveQuery)
   const [filter, setFilter] = useState<Filter>('all')
   const [heldOnly, setHeldOnly] = useState(false)
 

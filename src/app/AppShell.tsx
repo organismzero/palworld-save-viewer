@@ -355,10 +355,23 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const { fileName, isSample, reset } = useSaveStore()
   const setPalette = useUiStore((s) => s.setPalette)
   const setSettings = useUiStore((s) => s.setSettings)
+  const jumpSeq = useUiStore((s) => s.jumpSeq)
   const trayOpen = useUiStore((s) => s.trayOpen)
   const setTray = useUiStore((s) => s.setTray)
   const add = useFilePicker()
   const drop = useShellDrop()
+  const loadAnother = () => {
+    reset()
+    // The params described the world being closed. Left in place, the next
+    // save would open on this one's filters, selections and breeding target,
+    // most of which name things it does not contain.
+    useUiStore.getState().clearViewParams()
+    history.replaceState(
+      null,
+      '',
+      window.location.pathname + window.location.search,
+    )
+  }
 
   return (
     <div className="flex h-dvh flex-col" {...drop.handlers}>
@@ -469,21 +482,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
             Add files
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => {
-              reset()
-              // The params described the world being closed. Left in place, the
-              // next save would open on this one's filters, selections and
-              // breeding target, most of which name things it does not contain.
-              useUiStore.getState().clearViewParams()
-              history.replaceState(
-                null,
-                '',
-                window.location.pathname + window.location.search,
-              )
-            }}
-          >
+          <Button size="sm" onClick={loadAnother}>
             Load another
           </Button>
           {add.input}
@@ -506,8 +505,11 @@ export function AppShell({ index }: { index: SaveIndex }) {
           aria-labelledby={tabId(VIEW_TABS, view)}
           className="min-h-0 min-w-0 flex-1"
         >
-          {/* Keyed on the view so switching tabs clears a view's crash. */}
-          <ErrorBoundary key={view} what={`the ${view} view`}>
+          {/* Keyed on the view so switching tabs clears a view's crash, and
+              on the jump count so a jump to something in the view already
+              open mounts it afresh: a view reads its focus only as it
+              mounts. */}
+          <ErrorBoundary key={`${view}:${jumpSeq}`} what={`the ${view} view`}>
             <Suspense
               fallback={
                 <div className="label flex h-64 items-center justify-center">
@@ -538,7 +540,12 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
       {drop.over && <DropOverlay />}
 
-      <CommandPalette index={index} />
+      <CommandPalette
+        index={index}
+        onAddFiles={add.open}
+        onLoadAnother={loadAnother}
+        onCopyLink={copyLink}
+      />
       <HoverCardLayer index={index} />
       <AboutDialog />
       <SettingsDialog />

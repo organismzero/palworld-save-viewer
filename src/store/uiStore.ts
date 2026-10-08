@@ -122,6 +122,17 @@ interface UiState {
   aboutOpen: boolean
   shortcutsOpen: boolean
   settingsOpen: boolean
+  /**
+   * Counts jumps. A view reads its focus once, as it mounts, so a jump to
+   * something in the view already on screen found nobody listening and did
+   * nothing. The shell keys the view on this, which mounts it afresh.
+   */
+  jumpSeq: number
+  /**
+   * What the tray's passive sheet is searching for. Here and not in the sheet,
+   * so the palette can open the sheet on a passive it just found.
+   */
+  passiveQuery: string
 
   /**
    * Each view's state as a serialised query string, for `useHashSync` to fold
@@ -179,6 +190,7 @@ interface UiState {
   setPalette: (open: boolean) => void
   setAbout: (open: boolean) => void
   setSettings: (open: boolean) => void
+  setPassiveQuery: (query: string) => void
   setShortcuts: (open: boolean) => void
   /**
    * Forget every view's params, for when the world they described is gone.
@@ -209,6 +221,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   aboutOpen: false,
   shortcutsOpen: false,
   settingsOpen: false,
+  jumpSeq: 0,
+  passiveQuery: '',
   viewParams: {},
   paramsEpoch: 0,
   notices: [],
@@ -236,6 +250,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set((s) => ({
       view,
       focus,
+      jumpSeq: s.jumpSeq + 1,
       paletteOpen: false,
       viewParams: { ...s.viewParams, [view]: undefined },
     })),
@@ -247,6 +262,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setPalette: (paletteOpen) => set({ paletteOpen }),
   setAbout: (aboutOpen) => set({ aboutOpen }),
   setSettings: (settingsOpen) => set({ settingsOpen }),
+  setPassiveQuery: (passiveQuery) => set({ passiveQuery }),
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
 
   clearViewParams: () => set({ viewParams: {}, focus: undefined }),

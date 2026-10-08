@@ -184,6 +184,20 @@ export function withItem(qs: string, staticId: string): string {
   )
 }
 
+/**
+ * The Map's link with one layer switched, for something outside the map to
+ * turn a layer on or off. Everything else in the link is left as it was.
+ */
+export function withLayerToggled(qs: string, id: LayerId): string {
+  const was = mapCodec.decode(new URLSearchParams(qs), MAP_DEFAULTS)
+  const next = new Set(was.layers)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  return serialiseParams(
+    mapCodec.encode({ ...was, layers: next }, MAP_DEFAULTS),
+  )
+}
+
 function layers(raw: URLSearchParams, d: MapParams): Set<LayerId> {
   const v = raw.get('l')
   if (v === null || v === '') return new Set(d.layers)

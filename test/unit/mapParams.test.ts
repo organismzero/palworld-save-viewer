@@ -15,6 +15,7 @@ import {
   roundViewport,
   sameViewport,
   withItem,
+  withLayerToggled,
   type MapParams,
 } from '@/views/map/params.ts'
 
@@ -134,5 +135,21 @@ describe('an item marked on the map', () => {
 
   it('replaces the item a previous search marked', () => {
     expect(withItem('item=Old_Item', 'New_Item')).toBe('item=New_Item')
+  })
+})
+
+describe('a layer switched from outside the map', () => {
+  it('turns one layer on or off and leaves the rest of the link alone', () => {
+    const was = qs({ fog: false, viewport: { mx: 10, my: 20, zoom: 2 } })
+    const on = decode(withLayerToggled(was, 'pals'))
+    expect([...on.layers].sort()).toEqual([...DEFAULT_LAYERS, 'pals'].sort())
+    expect(on).toMatchObject({ fog: false, viewport: { mx: 10, my: 20, zoom: 2 } }) // prettier-ignore
+    // And back again is the link it started as.
+    expect(withLayerToggled(withLayerToggled(was, 'pals'), 'pals')).toBe(was)
+  })
+
+  it('can switch off the last layer', () => {
+    const one = qs({ layers: new Set(['pals']) })
+    expect(withLayerToggled(one, 'pals')).toBe('l=none')
   })
 })
