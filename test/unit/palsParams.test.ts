@@ -109,7 +109,7 @@ describe('palsCodec', () => {
       work: 'Mining',
       workMin: 3,
       attention: true,
-      flags: { boss: true, rare: false, named: true },
+      flags: { boss: true, rare: false, named: true, stored: true },
       sort: 'owner',
       reversed: true,
       selectedId: pals[0]!.instanceId,

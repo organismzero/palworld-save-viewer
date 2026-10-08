@@ -558,6 +558,14 @@ function FilesPanel({ index }: { index: SaveIndex }) {
     : undefined
   const overworld = localData?.fog.find((f) => f.map === 'overworld')
 
+  const stored = s.storedPals ?? 0
+  const storers = new Set(
+    index.pals.filter((p) => p.storage).map((p) => p.ownerPlayerUid),
+  ).size
+  const storageFiles = Object.values(playerFiles).filter(
+    (f) => f.kind === 'storage' && f.status === 'loaded',
+  ).length
+
   // Rejections first: they are the only rows that need somebody to do something.
   const ledger = Object.values(playerFiles).sort(
     (a, b) => LEDGER_ORDER[a.status] - LEDGER_ORDER[b.status],
@@ -630,6 +638,27 @@ function FilesPanel({ index }: { index: SaveIndex }) {
              * and belongs to it.
              */
             note={missingPlayerNote(s)}
+            action={
+              <>
+                <AddButton>Add files</AddButton>
+                <AddButton directory title="Pick the whole Players folder">
+                  Add folder
+                </AddButton>
+              </>
+            }
+          />
+
+          <FileSlot
+            label="dimensional storage"
+            hint="Players/<uid>_dps.sav — the pals a player has put in their Dimensional Pal Storage. They are not in the level file, so without this they are missing from Pals and from breeding plans. Only players who have built one have the file."
+            loaded={storageFiles > 0 || stored > 0}
+            detail={
+              stored > 0
+                ? `${count(stored)} ${stored === 1 ? 'pal' : 'pals'} from ${storers} ${storers === 1 ? 'player' : 'players'}`
+                : storageFiles > 0
+                  ? 'nothing stored'
+                  : 'stored pals are not listed'
+            }
             action={
               <>
                 <AddButton>Add files</AddButton>

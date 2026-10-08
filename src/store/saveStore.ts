@@ -45,7 +45,9 @@ export interface PlayerFileState {
    * cheaper than inferring it from the name. Absent on rows written before a
    * sniff could say — a `.sav` batch whose level is picked by size.
    */
-  kind?: 'player' | 'local' | 'levelmeta' | 'settings'
+  kind?: 'player' | 'local' | 'levelmeta' | 'settings' | 'storage'
+  /** How many pals a dimensional storage file added. */
+  pals?: number
 }
 
 export interface SaveState {
@@ -251,7 +253,8 @@ function mergeReports(
         uid: r.uid,
         status: r.ok ? ('loaded' as const) : ('rejected' as const),
         reason: r.reason,
-        kind: 'player' as const,
+        kind: r.storage ? ('storage' as const) : ('player' as const),
+        pals: r.pals,
       } satisfies PlayerFileState,
     ]),
   )
@@ -263,6 +266,7 @@ function slotOf(kind: Sniffed['kind']): PlayerFileState['kind'] {
   if (kind === 'levelmeta') return 'levelmeta'
   if (kind === 'settings') return 'settings'
   if (kind === 'sav') return 'player'
+  if (kind === 'dps') return 'storage'
   return undefined
 }
 
@@ -299,7 +303,13 @@ async function adoptIfRestored(): Promise<void> {
  * renaming it should still work. The level is simply the largest — a world is
  * orders of magnitude bigger than any player file.
  */
-async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
+async function acceptSavs(
+  savs: Sniffed[],
+  /** Dimensional storage files in the same drop, read with the player saves. */
+  storage: Sniffed[],
+  set: Setter,
+  get: () => SaveState,
+) {
   // Player files are named after their UID; a level save is not. Size cannot
   // do this job — a compressed level save is under a megabyte, smaller than
   // any cap that would still admit a real player file.
@@ -309,7 +319,11 @@ async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
   const sorted = unnamed.length > 0 ? unnamed : [...savs]
   sorted.sort((a, b) => b.file.size - a.file.size)
   const level = sorted[0]!
-  const dropped = [...sorted.slice(1), ...(unnamed.length > 0 ? named : [])]
+  const dropped = [
+    ...sorted.slice(1),
+    ...(unnamed.length > 0 ? named : []),
+    ...storage,
+  ]
   // Held from an earlier gesture, for this level — see `pendingPlayerFiles`.
   // Read before the reset below, which empties the list.
   const droppedNames = new Set(dropped.map((p) => p.file.name))
@@ -714,26 +728,29 @@ export const useSaveStore = create<SaveState>((set, get) => ({
  * path this takes and whichever of its many exits it leaves by.
  */
 async function ingestWorld(
-  { rejected, ignored, savs, local, levelMeta, settings }: Partitioned,
+  { rejected, storage, savs, local, levelMeta, settings }: Partitioned,
   set: Setter,
   get: () => SaveState,
 ) {
-  if (savs.length > 0) {
+  // Dimensional storage files travel with the player saves from here on: read
+  // onto an open world, held for one that has not arrived.
+  if (savs.length > 0 || storage.length > 0) {
     const named = savs.filter((s) => s.filenameUid !== undefined)
     if (named.length !== savs.length) {
-      await acceptSavs(savs, set, get)
+      await acceptSavs(savs, storage, set, get)
     } else if (get().index) {
       // Player saves dropped onto a world already open are an addition, not a
       // replacement. Without this they fell through to "treat the largest as
       // the level", which threw away the loaded save and reported the player
       // file as a malformed level.
-      await parsePlayerSavs(named, set)
+      await parsePlayerSavs([...named, ...storage], set)
     } else {
       // With no world yet they are held, not rejected — the user very
       // reasonably may drop the folder first — and read when a level arrives.
+      const held = [...named, ...storage]
       set((s) => ({
-        pendingPlayerFiles: [...s.pendingPlayerFiles, ...named],
-        playerFiles: { ...s.playerFiles, ...ledgerFrom(named, 'queued') },
+        pendingPlayerFiles: [...s.pendingPlayerFiles, ...held],
+        playerFiles: { ...s.playerFiles, ...ledgerFrom(held, 'queued') },
       }))
     }
     // Anything refused alongside — typically old converter `.json` left in the
@@ -775,21 +792,15 @@ async function ingestWorld(
       playerFiles: {
         ...s.playerFiles,
         ...ledgerFrom(rejected, 'rejected'),
-        // A `*_dps.sav` is normally kept silent — see `Partitioned.ignored` —
-        // but if it is all that arrived, silence is indistinguishable from the
-        // app having missed the drop.
-        ...(rejected.length === 0 ? ledgerFrom(ignored, 'rejected') : {}),
       },
     }))
     // The ledger is behind the diagnostics button, so on its own this was a
     // drop that visibly did nothing.
-    noteTurnedAway(rejected.length > 0 ? rejected.length : ignored.length)
+    noteTurnedAway(rejected.length)
     return
   }
 
-  // Nothing usable and nothing loaded, so an ignored file is worth explaining
-  // after all: a drop that produces no visible change at all reads as a bug.
-  const unusable = rejected[0] ?? ignored[0]
+  const unusable = rejected[0]
   set({
     status: unusable ? 'error' : get().status,
     error:

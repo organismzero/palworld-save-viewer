@@ -13,6 +13,7 @@
  * one is a shopping list, the other is a conversation.
  */
 
+import { StoredPill } from '../../components/StoredPill.tsx'
 import type {
   BreedNode,
   BreedStep,
@@ -525,6 +526,7 @@ function ParentChip({
             <Pill tone="warn">{who.name}</Pill>
           </Jump>
         ))}
+      {pick && <StoredPill pal={pick} />}
       {pick && (
         <>
           <span className="num shrink-0 text-[11px] text-[var(--color-muted)]">

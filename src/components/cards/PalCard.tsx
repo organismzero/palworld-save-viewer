@@ -1,7 +1,7 @@
 import type { Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ivTotal } from '../../domain/index.ts'
-import { conditions } from '../../domain/palState.ts'
+import { conditions, storedText } from '../../domain/palState.ts'
 import { condenserStars, palName } from '../../domain/palText.ts'
 import { GameIcon } from '../GameIcon.tsx'
 import { PassiveChip, Pill } from '../primitives.tsx'
@@ -32,6 +32,7 @@ export function PalCard({
   const owner = pal.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)?.name
     : undefined
+  const stored = storedText(pal)
 
   return (
     <CardFrame
@@ -68,6 +69,10 @@ export function PalCard({
           {condenserStars(pal) > 0 && <Pill>★{condenserStars(pal)}</Pill>}
         </span>
       </div>
+
+      {/* A pal put away is the one kind whose whereabouts change what you do
+          next, so it is said here rather than left to the Pals drawer. */}
+      {stored && <p className="text-xs text-[var(--color-muted)]">{stored}</p>}
 
       <CardSection label="Individual values" hint={`${ivTotal(pal)} / 300`}>
         <div className="flex flex-col gap-1">

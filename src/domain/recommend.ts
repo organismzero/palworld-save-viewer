@@ -971,7 +971,8 @@ export function ownedPartners(
     party: 0,
     base: 1,
     palbox: 2,
-    unknown: 3,
+    dimensional: 3,
+    unknown: 4,
   }
   return rows
     .sort(

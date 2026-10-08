@@ -68,7 +68,8 @@ export interface PalsParams {
   workMin: number
   /** Only pals that are sick, injured, starving or low on sanity. */
   attention: boolean
-  flags: { boss: boolean; rare: boolean; named: boolean }
+  /** `stored` is pals in dimensional storage, which are not in the level save. */
+  flags: { boss: boolean; rare: boolean; named: boolean; stored: boolean }
   sort: SortKey
   /** Each sort has a natural direction; this turns it over. */
   reversed: boolean
@@ -86,7 +87,7 @@ export const PALS_DEFAULTS: PalsParams = {
   work: '',
   workMin: 1,
   attention: false,
-  flags: { boss: false, rare: false, named: false },
+  flags: { boss: false, rare: false, named: false, stored: false },
   sort: 'iv',
   reversed: false,
   selectedId: undefined,
@@ -124,7 +125,7 @@ export function palsCodec(index: SaveIndex): ParamCodec<PalsParams> {
 
       // One param, not three booleans: three defaults to omit is three chances
       // for the encoder and decoder to disagree about what "off" looks like.
-      const flags = (['boss', 'rare', 'named'] as const).filter(
+      const flags = (['boss', 'rare', 'named', 'stored'] as const).filter(
         (k) => v.flags[k],
       )
       if (flags.length) out.f = flags.join(',')
@@ -162,6 +163,7 @@ export function palsCodec(index: SaveIndex): ParamCodec<PalsParams> {
           boss: flags.has('boss'),
           rare: flags.has('rare'),
           named: flags.has('named'),
+          stored: flags.has('stored'),
         },
         sort: SORTS.includes(raw.get('sort') as SortKey)
           ? (raw.get('sort') as SortKey)

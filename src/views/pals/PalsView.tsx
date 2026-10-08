@@ -1,3 +1,4 @@
+import { StoredPill } from '../../components/StoredPill.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
@@ -303,6 +304,12 @@ export function PalsView({ index }: { index: SaveIndex }) {
               ['boss', 'Alphas only'],
               ['rare', 'Rare only'],
               ['named', 'Nicknamed only'],
+              // Offered only when a storage file has been read, or it would
+              // be a filter that can match nothing. Kept when it is on, so a
+              // link that set it can still be undone.
+              ...(index.stats.storedPals || flags.stored
+                ? ([['stored', 'In dimensional storage']] as const)
+                : []),
             ] as const
           ).map(([key, label]) => (
             <Checkbox
@@ -564,6 +571,7 @@ function PalCard({
         {condenserStars(pal) > 0 && (
           <Pill title={CONDENSER_RANK_HELP}>★{condenserStars(pal)}</Pill>
         )}
+        <StoredPill pal={pal} />
       </div>
     </button>
   )

@@ -20,10 +20,20 @@
  */
 
 import { buildIndexes, mergePlayerDetails, type Phase } from './buildIndexes.ts'
+import {
+  readDimensionStorage,
+  storageOwner,
+} from './readers/dimensionStorage.ts'
 import { readPlayerSave } from './readers/playerSave.ts'
 import { playerBelongs } from '../../domain/verify.ts'
+import { filenameUidOf, looksLikeDpsName } from '../sniff.ts'
 import { Warnings } from '../warnings.ts'
-import type { Guid, PlayerDetail, SlimPayload } from '../../domain/types.ts'
+import type {
+  Guid,
+  Pal,
+  PlayerDetail,
+  SlimPayload,
+} from '../../domain/types.ts'
 import type { FromWorker, PlayerFileReport, ToWorker } from './protocol.ts'
 
 let raw: unknown = null
@@ -33,6 +43,17 @@ let payload: SlimPayload | null = null
 let carriedWarnings: SlimPayload['stats']['warnings'] = []
 /** Accumulated across batches, so a second drop adds rather than replaces. */
 const details = new Map<Guid, PlayerDetail>()
+/**
+ * Pals out of dimensional storage files, by the player whose storage it is.
+ *
+ * Kept apart from `payload.pals` and laid over it on every merge, so reading
+ * the same file twice replaces that player's stored pals rather than doubling
+ * them, and a restored session can be told which of its pals came from here.
+ */
+const stored = new Map<Guid, Pal[]>()
+
+const NOT_IN_WORLD =
+  'Not a player in this world — from a different save, or from a player who has left.'
 
 function post(msg: FromWorker, transfer: Transferable[] = []) {
   self.postMessage(msg, { transfer })
@@ -83,14 +104,17 @@ async function readPlayerBatch(
   progress('players', `Reading ${files.length} player saves`)
   for (const { fileName, buf } of files) {
     try {
+      if (looksLikeDpsName(fileName)) {
+        reports.push(readStorage(await savTree(buf), fileName, world, warn))
+        continue
+      }
       const detail = readPlayerSave(await savTree(buf), fileName, warn)
       if (!playerBelongs(world.players, detail.playerUid)) {
         reports.push({
           fileName,
           uid: detail.playerUid,
           ok: false,
-          reason:
-            'Not a player in this world — from a different save, or from a player who has left.',
+          reason: NOT_IN_WORLD,
         })
         continue
       }
@@ -100,12 +124,71 @@ async function readPlayerBatch(
       reports.push({
         fileName,
         ok: false,
+        storage: looksLikeDpsName(fileName) || undefined,
         reason: err instanceof Error ? err.message : String(err),
       })
     }
   }
 
   return { reports, warn }
+}
+
+/**
+ * One player's dimensional storage, held for {@link layStored} to add.
+ *
+ * Whose it is comes from the file's name, which is the game's own convention,
+ * and failing that from the pals inside when they all name one owner. Refused
+ * on the same test as a player save and for the same reason: another world's
+ * pals would turn up in this one's breeding plans.
+ */
+function readStorage(
+  tree: unknown,
+  fileName: string,
+  world: SlimPayload,
+  warn: Warnings,
+): PlayerFileReport {
+  const { pals } = readDimensionStorage(tree, fileName, warn)
+  const uid = filenameUidOf(fileName) ?? storageOwner(pals)
+  if (!uid) {
+    return {
+      fileName,
+      ok: false,
+      storage: true,
+      reason:
+        'Nothing says whose storage this is. The game names the file after its player, as <player id>_dps.sav.',
+    }
+  }
+  if (!playerBelongs(world.players, uid)) {
+    return { fileName, uid, ok: false, storage: true, reason: NOT_IN_WORLD }
+  }
+
+  const groupId = world.players.find((p) => p.playerUid === uid)?.groupId
+  stored.set(
+    uid,
+    pals.map((p) => ({ ...p, ownerPlayerUid: uid, groupId })),
+  )
+  return { fileName, uid, ok: true, storage: true, pals: pals.length }
+}
+
+/**
+ * Rebuilds `payload.pals` as the level's pals plus everything in `stored`.
+ *
+ * From scratch each time, like the ownership pass that follows it. A stored pal
+ * whose id the level already has is dropped: none is in the reference save, but
+ * a pal counted twice would be offered to a breeding plan as two parents.
+ */
+function layStored(world: SlimPayload): void {
+  const level = world.pals.filter((p) => !p.storage)
+  const seen = new Set(level.map((p) => p.instanceId))
+  const extra: Pal[] = []
+  for (const pals of stored.values()) {
+    for (const pal of pals) {
+      if (seen.has(pal.instanceId)) continue
+      seen.add(pal.instanceId)
+      extra.push(pal)
+    }
+  }
+  world.pals = [...level, ...extra]
 }
 
 /**
@@ -141,6 +224,7 @@ async function handleParseSav(id: number, buf: ArrayBuffer) {
 
     t = performance.now()
     details.clear()
+    stored.clear()
     payload = buildIndexes(raw, {
       onPhase: (p, label) => {
         phase = p
@@ -155,6 +239,7 @@ async function handleParseSav(id: number, buf: ArrayBuffer) {
     raw = null
     payload = null
     details.clear()
+    stored.clear()
     post({
       t: 'error',
       id,
@@ -182,6 +267,7 @@ async function handleParsePlayerSav(
   const { reports, warn } = await readPlayerBatch(files, payload)
 
   progress('merge', 'Re-deriving ownership')
+  layStored(payload)
   mergePlayerDetails(
     payload,
     [...details.values()],
@@ -302,6 +388,15 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       carriedWarnings = msg.payload.stats.warnings
       details.clear()
       for (const d of msg.payload.playerDetails) details.set(d.playerUid, d)
+      // And the pals already read out of dimensional storage, which the
+      // payload marks, or the next merge would be told there were none.
+      stored.clear()
+      for (const pal of msg.payload.pals) {
+        if (!pal.storage || !pal.ownerPlayerUid) continue
+        const list = stored.get(pal.ownerPlayerUid)
+        if (list) list.push(pal)
+        else stored.set(pal.ownerPlayerUid, [pal])
+      }
       post({ t: 'adopted', id: msg.id })
       break
 

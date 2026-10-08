@@ -67,7 +67,14 @@ function readWorkBonus(node: Node): Record<string, number> {
   return out
 }
 
-function readPal(entry: Node, sp: Node, instanceId: string): Pal {
+/**
+ * One pal from its `SaveParameter`.
+ *
+ * `entry` is the map entry it came from, for the guild link beside the
+ * parameter. A record with no such sibling — one out of a player's dimensional
+ * storage file — passes `undefined` and gets no guild here.
+ */
+export function readPal(entry: Node, sp: Node, instanceId: string): Pal {
   const rawId = str(sp.CharacterID) ?? ''
   // Alphas and field bosses carry a BOSS_ prefix on an otherwise ordinary
   // species id. Strip it for lookups; keep the fact as a flag.
@@ -111,11 +118,24 @@ function readPal(entry: Node, sp: Node, instanceId: string): Pal {
     slotIndex: int(sp.SlotId?.value?.SlotIndex),
     pos: jumpedTo(sp.LastJumpedLocation),
     ownedTime: int(sp.OwnedTime),
-    sickness: enumTail(sp.WorkerSick),
-    physicalHealth: enumTail(sp.PhysicalHealth),
-    currentWork: enumTail(sp.CurrentWorkSuitability),
+    sickness: unlessDefault(enumTail(sp.WorkerSick), 'None'),
+    physicalHealth: unlessDefault(enumTail(sp.PhysicalHealth), 'Healthful'),
+    currentWork: unlessDefault(enumTail(sp.CurrentWorkSuitability), 'None'),
     skinCharacterId: str(sp.SkinAppliedCharacterId),
   }
+}
+
+/**
+ * An enum's value, or nothing when it is the one that means "nothing to say".
+ *
+ * The level save leaves a property out when it holds its default, so a healthy
+ * pal has no `WorkerSick` at all. A dimensional storage file writes every
+ * property of every record, so the same pal there says `WorkerSick: None` and
+ * `PhysicalHealth: Healthful` — which, read as given, flagged every stored pal
+ * as sick with "None" and injured with "Healthful".
+ */
+function unlessDefault(value: string | undefined, dflt: string) {
+  return value === dflt ? undefined : value
 }
 
 /**

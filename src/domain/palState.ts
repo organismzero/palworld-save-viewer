@@ -17,7 +17,7 @@ import type { Guid, Pal, SaveIndex } from './types.ts'
    Where it is kept
    ------------------------------------------------------------------------- */
 
-export type Where = 'party' | 'palbox' | 'base' | 'unknown'
+export type Where = 'party' | 'palbox' | 'base' | 'dimensional' | 'unknown'
 
 export interface PalPlace {
   where: Where
@@ -29,6 +29,16 @@ export interface PalPlace {
 
 /** A palbox page, in the game's own layout: six across, five down. */
 export const PALBOX_PAGE = 30
+
+/**
+ * A page of Dimensional Pal Storage.
+ *
+ * Taken to be the palbox's: the storage file holds 9,600 slots, which is 320
+ * pages of 30 exactly. The slot order is the file's own, and in the reference
+ * save one player's stored pals sit in the first seventeen slots in descending
+ * level — what the game's sort button leaves behind.
+ */
+export const STORAGE_PAGE = PALBOX_PAGE
 
 /**
  * Where each pal is right now, as far as the save says.
@@ -52,9 +62,12 @@ export function placer(index: SaveIndex): (pal: Pal) => PalPlace {
   }
 
   return (pal) => {
+    const slot = pal.slotIndex
+    // Before the container: a stored pal is in none, and is not in the level
+    // save for any of the tests below to find.
+    if (pal.storage === 'dimensional') return { where: 'dimensional', slot }
     const id = pal.containerId
     if (!id) return { where: 'unknown' }
-    const slot = pal.slotIndex
     if (workers.has(id)) {
       return { where: 'base', baseId: workers.get(id), slot }
     }
@@ -78,7 +91,7 @@ export function locator(index: SaveIndex): (pal: Pal) => Where {
 
 /**
  * A place in words: "Party · slot 2", "Palbox · page 3, slot 14", "Base 2 ·
- * near Desolate Church". Nothing for a pal whose container the save does not
+ * near Desolate Church", "Dimensional storage · page 1, slot 9". Nothing for a pal whose container the save does not
  * explain; "unknown" in a row of facts reads as a fact.
  */
 export function placeText(
@@ -95,9 +108,25 @@ export function placeText(
         : `Palbox · page ${Math.floor(slot / PALBOX_PAGE) + 1}, slot ${(slot % PALBOX_PAGE) + 1}`
     case 'base':
       return (place.baseId && baseName(place.baseId)) || 'A base'
+    case 'dimensional':
+      return slot === undefined
+        ? 'Dimensional storage'
+        : `Dimensional storage · page ${Math.floor(slot / STORAGE_PAGE) + 1}, slot ${(slot % STORAGE_PAGE) + 1}`
     case 'unknown':
       return undefined
   }
+}
+
+/**
+ * Where in dimensional storage a pal is, or nothing for a pal that is not.
+ *
+ * For the places that have a pal and no index to hand: unlike every other
+ * location this one is written on the pal itself.
+ */
+export function storedText(pal: Pal): string | undefined {
+  return pal.storage === 'dimensional'
+    ? placeText({ where: 'dimensional', slot: pal.slotIndex }, () => undefined)
+    : undefined
 }
 
 /* -------------------------------------------------------------------------

@@ -81,6 +81,15 @@ export interface Pal {
   /** Work type the pal is currently assigned to, when it is working. */
   currentWork?: string
   skinCharacterId?: string
+  /**
+   * Set on a pal that is not in the world save at all: it sits in its owner's
+   * Dimensional Pal Storage, which the game keeps in `Players/<uid>_dps.sav`.
+   *
+   * Such a pal has no `containerId` and no `pos` — the ones in its record are
+   * left over from wherever it was before it was put away — and its
+   * `slotIndex` is its place in the storage, counted from zero.
+   */
+  storage?: 'dimensional'
 }
 
 export interface Player {
@@ -353,7 +362,13 @@ export interface SaveWarning {
 
 export interface SaveStats {
   characters: number
+  /** Every pal, including those in {@link SaveStats.storedPals}. */
   pals: number
+  /**
+   * Pals read from dimensional storage files rather than the level save.
+   * Absent on a payload written before those were read.
+   */
+  storedPals?: number
   players: number
   species: number
   guilds: number

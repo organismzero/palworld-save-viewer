@@ -47,6 +47,7 @@ export function filterPals(
     if (flags.boss && !p.isBoss) return false
     if (flags.rare && !p.isRare) return false
     if (flags.named && !p.nickname) return false
+    if (flags.stored && !p.storage) return false
     if (params.gender && p.gender !== params.gender) return false
     if (params.attention && conditions(p).length === 0) return false
 
@@ -118,7 +119,8 @@ export function isFiltered(params: PalsParams): boolean {
     params.attention ||
     params.flags.boss ||
     params.flags.rare ||
-    params.flags.named,
+    params.flags.named ||
+    params.flags.stored,
   )
 }
 

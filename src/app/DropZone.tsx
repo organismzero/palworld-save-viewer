@@ -90,7 +90,8 @@ export function DropZone() {
         </div>
         <div className="mt-1 text-sm text-[var(--color-muted)]">
           Add your <span className="num">Players</span> folder too for exact
-          inventories, real positions and paldex progress
+          inventories, real positions, paldex progress and the pals in
+          dimensional storage
         </div>
       </button>
 

@@ -8,6 +8,7 @@
  * something good enough hatches.
  */
 
+import { StoredPill } from '../../components/StoredPill.tsx'
 import { useMemo, useState } from 'react'
 
 import type { BreedingTable } from '../../domain/breeding.ts'
@@ -289,6 +290,7 @@ function Parent({
         {pal.gender === 'Male' ? '♂' : pal.gender === 'Female' ? '♀' : '?'}
       </span>
       {who && <Pill tone="warn">{who.name}</Pill>}
+      <StoredPill pal={pal} />
     </CardTrigger>
   )
 }

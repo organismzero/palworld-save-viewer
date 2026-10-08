@@ -134,6 +134,7 @@ export const WHERE_LABEL: Record<Where, string> = {
   party: 'party',
   palbox: 'palbox',
   base: 'at a base',
+  dimensional: 'dim. storage',
   unknown: 'somewhere',
 }
 

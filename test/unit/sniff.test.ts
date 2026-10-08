@@ -134,16 +134,17 @@ describe('partition', () => {
       'Level.sav',
       `${uid}.sav`,
     ])
-    expect(result.ignored.map((r) => r.file.name)).toEqual([`${uid}_dps.sav`])
+    expect(result.storage.map((r) => r.file.name)).toEqual([`${uid}_dps.sav`])
     expect(result.rejected).toEqual([])
   })
 
-  it('still explains a DPS file dropped on its own', () => {
-    // Ignoring it silently is right in a folder drop and wrong here: a drop
-    // that changes nothing on screen reads as the app having failed.
+  it('takes a storage file dropped on its own, without calling it a level', () => {
+    // Named after a player and possibly larger than the world, so it must never
+    // reach the "largest .sav is the level" heuristic.
     const result = partition([fakeFile('B_dps.sav', 244_000_000).file])
     expect(result.savs).toEqual([])
-    expect(result.ignored[0]?.reason).toBe('DPS storage file.')
+    expect(result.rejected).toEqual([])
+    expect(result.storage).toHaveLength(1)
   })
 
   it('keeps LevelMeta out of the raw-sav bucket entirely', () => {

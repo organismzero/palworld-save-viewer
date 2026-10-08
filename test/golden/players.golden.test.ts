@@ -11,17 +11,20 @@
  */
 
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
   buildIndexes,
   mergePlayerDetails,
 } from '@/parse/worker/buildIndexes.ts'
+import { readDimensionStorage } from '@/parse/worker/readers/dimensionStorage.ts'
 import { readPlayerSave } from '@/parse/worker/readers/playerSave.ts'
+import { readSavFile } from '../../scripts/readSav.ts'
 import { buildSaveIndex } from '@/domain/index.ts'
 import { lastSeenBasis, lastSeenFor } from '@/domain/lastSeen.ts'
 import { Warnings } from '@/parse/warnings.ts'
-import { looksLikeDpsName, partition } from '@/parse/sniff.ts'
+import { filenameUidOf, looksLikeDpsName, partition } from '@/parse/sniff.ts'
 import type { PlayerDetail, SaveIndex, SlimPayload } from '@/domain/types.ts'
 import {
   PLAYERS_DIR,
@@ -38,6 +41,9 @@ const EXPECTED = {
   playerFiles: 11,
   /** Two players carry a DPS storage file beside their save. */
   dpsIgnored: 2,
+  /** Pals in those two files, fewest first. */
+  storedPals: [14, 17],
+  storageSlots: 9600,
   itemContainerLinks: 66,
   charContainerLinks: 22,
   linkMisses: 0,
@@ -78,9 +84,42 @@ describe.skipIf(!hasData)('golden: player saves', () => {
       (name) => ({ name, size: 0 }) as File,
     )
     const parts = partition(files)
-    expect(parts.ignored.map((s) => s.file.name).sort()).toEqual(dps.sort())
+    expect(parts.storage.map((s) => s.file.name).sort()).toEqual(dps.sort())
     expect(parts.savs).toHaveLength(EXPECTED.playerFiles)
   })
+
+  it('reads the pals out of each dimensional storage file', async () => {
+    const warn = new Warnings()
+    const inLevel = new Set(payload.pals.map((p) => p.instanceId))
+    const counts: number[] = []
+
+    for (const name of dpsSaveNames()) {
+      const { pals, slots } = readDimensionStorage(
+        await readSavFile(join(PLAYERS_DIR, name)),
+        name,
+        warn,
+      )
+      counts.push(pals.length)
+      expect(slots).toBe(EXPECTED.storageSlots)
+
+      // Whose storage it is: the file's name and every pal in it agree.
+      const uid = filenameUidOf(name)
+      expect(uid).toBeDefined()
+      expect(index.playerByUid.has(uid!)).toBe(true)
+      expect(pals.filter((p) => p.ownerPlayerUid !== uid)).toEqual([])
+
+      // Putting a pal away takes it out of the world, so none is in both.
+      expect(pals.filter((p) => inLevel.has(p.instanceId))).toEqual([])
+
+      // One pal to a slot, which the record's own stale SlotId does not give.
+      expect(new Set(pals.map((p) => p.slotIndex)).size).toBe(pals.length)
+      expect(pals.every((p) => !p.containerId && !p.pos)).toBe(true)
+      expect(pals.every((p) => p.characterId !== '')).toBe(true)
+    }
+
+    expect(counts.sort((a, b) => a - b)).toEqual([...EXPECTED.storedPals])
+    expect(warn.list()).toEqual([])
+  }, 60_000)
 
   it('knows every RecordData field the real saves carry', () => {
     // The canary for a game update adding progression fields. Never asserted

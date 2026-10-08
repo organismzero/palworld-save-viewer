@@ -168,6 +168,7 @@ export function mergePlayerDetails(
   payload.stats = {
     characters: pals.length + players.length,
     pals: pals.length,
+    storedPals: pals.filter((p) => p.storage).length,
     players: players.length,
     species: new Set(pals.map((p) => p.characterId)).size,
     guilds: guilds.filter((g) => g.type === 'Guild').length,
@@ -199,6 +200,7 @@ function emptyStats(): SlimPayload['stats'] {
   return {
     characters: 0,
     pals: 0,
+    storedPals: 0,
     players: 0,
     species: 0,
     guilds: 0,

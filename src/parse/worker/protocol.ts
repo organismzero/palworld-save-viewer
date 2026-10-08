@@ -22,6 +22,9 @@ export type ToWorker =
   /**
    * A whole folder's worth of player saves in one message. Batched so a
    * ten-file drop costs one payload round-trip rather than ten.
+   *
+   * The batch may hold `<uid>_dps.sav` dimensional storage files as well; the
+   * worker tells the two apart by name, as the sniffer did.
    */
   | {
       t: 'parsePlayerSav'
@@ -58,6 +61,10 @@ export interface PlayerFileReport {
   uid?: Guid
   ok: boolean
   reason?: string
+  /** A dimensional storage file rather than a player save. */
+  storage?: boolean
+  /** How many pals a storage file added. */
+  pals?: number
 }
 
 export type FromWorker =

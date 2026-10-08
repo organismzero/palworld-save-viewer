@@ -45,6 +45,8 @@ inferred to exact, positions become real rather than last-jump estimates, and
 paldex progress, technology points and true last-online times appear. Without
 it the app says so rather than guessing silently.
 
+The same folder holds each player's Dimensional Pal Storage, as `Players/<uid>_dps.sav`, for players who have built one. Pals put away there are not in `Level.sav` at all, so they are read from these files: they appear on the Pals tab, which can filter to them, and in breeding plans, marked as being in storage with the page and slot to take them from. The page is worked out as thirty slots, like a palbox page; the slot order is the file's own.
+
 A dedicated server's settings can be added too, and they are the one optional file that is not in the save folder: `Pal/Saved/Config/<Platform>/PalWorldSettings.ini`. With it the Summary tab shows the XP, capture, spawn and drop rates, the limits and the rules, and the Guild tab says which rates are not ×1. It is shown as the server's configuration and nothing more: the file is not part of the save and does not say what the rates were when the world was played. Its passwords, addresses and ports are dropped as the file is opened and are never held, stored or shown.
 
 Raw `.sav` files and that one `.ini` are all it reads. JSON converted by [PalworldSaveTools](https://github.com/deafdudecomputers/PalworldSaveTools) used to work too; it is no longer accepted, because the raw save is read directly and the conversion step only cost time.
@@ -232,7 +234,7 @@ real data, put a save there:
 ```
 data/Level.sav     # the raw save — read directly
 data/LevelMeta.sav # the world's name and in-game day
-data/Players/      # per-player saves, <uid>.sav
+data/Players/      # per-player saves, <uid>.sav, and <uid>_dps.sav storage
 data/LocalData.sav # your client's own file: fog of war, map pins, progress
 data/PalWorldSettings.ini # the server's settings, from its config directory
 ```

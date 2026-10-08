@@ -7,9 +7,10 @@
  * each reader checks the struct type inside the file and rejects it by name if
  * it is not what the name claimed.
  *
- * The one classification that has to be right is `dps`. A `*_dps.sav`
- * DPS-storage file sits in every `Players/` folder, can run to hundreds of
- * megabytes, and would otherwise be handed to the player reader.
+ * The one classification that has to be right is `dps`. A `*_dps.sav` holds a
+ * player's Dimensional Pal Storage, sits in a `Players/` folder beside the
+ * player save it is named after, and would otherwise be handed to the player
+ * reader, which rejects it.
  *
  * Converted `.json` saves were supported once and are not any more: the `.sav`
  * reader produces the same tree, so the conversion step only cost the user
@@ -137,7 +138,7 @@ export function sniff(file: File): Sniffed {
   // save" filter, and reached the player reader, which rejected it. Every folder
   // drop then listed a rejection nobody could act on.
   if (looksLikeDpsName(name)) {
-    return { file, kind: 'dps', filenameUid, reason: 'DPS storage file.' }
+    return { file, kind: 'dps', filenameUid }
   }
 
   // Classified, not rejected: the container header says which compression it
@@ -181,16 +182,14 @@ export function sniff(file: File): Sniffed {
 export interface Partitioned {
   rejected: Sniffed[]
   /**
-   * Files that are expected, understood and of no use to this app — today only
-   * `*_dps.sav`, the DPS-storage file that sits in every `Players/` folder.
+   * `*_dps.sav` files: each one player's Dimensional Pal Storage.
    *
-   * Separate from `rejected` because a rejection is news and this is not: it
-   * arrives with every folder drop, it will never be readable, and listing it
-   * beside the player saves it is not one of only invites the question again.
-   * Still reported when a drop contains nothing else, or dropping one on its own
-   * would look like the app had ignored the file.
+   * Their own bucket, apart from `savs`, because the level-picking heuristic
+   * must never see one — a storage file is named after a player and can be
+   * larger than the world. They are read with the player saves, and like them
+   * need a world open to be read onto.
    */
-  ignored: Sniffed[]
+  storage: Sniffed[]
   /** Raw saves, kept apart so the caller can read their headers and explain. */
   savs: Sniffed[]
   /**
@@ -231,6 +230,6 @@ export function partition(files: File[]): Partitioned {
         metas.indexOf(s) > 0 ||
         settings.indexOf(s) > 0,
     ),
-    ignored: sniffed.filter((s) => s.kind === 'dps'),
+    storage: sniffed.filter((s) => s.kind === 'dps'),
   }
 }

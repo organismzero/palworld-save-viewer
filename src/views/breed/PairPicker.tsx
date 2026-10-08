@@ -7,6 +7,7 @@
  * would read as "you do not have one", which is a different and wrong answer.
  */
 
+import { StoredPill } from '../../components/StoredPill.tsx'
 import { useMemo, useState } from 'react'
 
 import type { Stock } from '../../domain/breeding.ts'
@@ -172,6 +173,7 @@ export function PairPicker({
               />
               <span className="min-w-0 flex-1 truncate text-xs">{name}</span>
               {who && <Pill tone="warn">{who.name}</Pill>}
+              <StoredPill pal={pal} short />
               <span
                 className={cn(
                   'num w-5 shrink-0 text-center text-[11px]',

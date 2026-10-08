@@ -34,9 +34,9 @@ export interface FilePicker {
 /**
  * Wires a hidden input to `acceptFiles`.
  *
- * The store decides what each file is by *content*, not by which control it
- * arrived through — a name check cannot tell a player save from a 244 MB DPS
- * storage file — so nothing here filters or routes. `directory` only widens what
+ * The store decides what each file is, not the control it arrived through — a
+ * `Players` folder holds player saves and dimensional storage files side by
+ * side — so nothing here filters or routes. `directory` only widens what
  * the dialog will let you select.
  */
 export function useFilePicker(
