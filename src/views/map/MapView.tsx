@@ -30,6 +30,7 @@ import {
   type MapViewport,
 } from './params.ts'
 import { useViewParams } from '../../app/viewParams.ts'
+import { readPrefs } from '../../store/prefs.ts'
 import { itemPlaces } from '../../domain/bases.ts'
 import { itemName } from '../../domain/names.ts'
 import { placer } from '../../domain/palState.ts'
@@ -80,7 +81,20 @@ export function MapView({ index }: { index: SaveIndex }) {
   const controllerRef = useRef<MapController>(null)
   const { data, tiles, status, bakeLabel, ensure } = useRefdataStore()
 
-  const [params, setParams] = useViewParams('map', MAP_DEFAULTS, mapCodec)
+  const [params, setParams] = useViewParams(
+    'map',
+    MAP_DEFAULTS,
+    mapCodec,
+    () => {
+      // The layers set in Settings, but only for a map nothing has spoken for
+      // yet. `undefined` is "never opened in this session"; an empty string is a
+      // map somebody has been on and left at the usual layers, which is their
+      // choice now and not the preference's to overrule.
+      if (useUiStore.getState().viewParams.map !== undefined) return undefined
+      const layers = readPrefs().mapLayers
+      return layers ? { layers: new Set(layers as LayerId[]) } : undefined
+    },
+  )
   const {
     layers,
     fog: fogOn,

@@ -67,21 +67,13 @@ Your save is never uploaded. There is no server, no account, no analytics and
 no telemetry — saves are decompressed and parsed entirely in a Web Worker on
 your own machine.
 
-By default, closing the tab discards everything. The one exception is opt-in
-and off until you say otherwise: after a save loads, the app offers to keep it
-in this browser so it comes back after a reload — and in any new tab, which is
-what makes a copied link or a duplicated tab open on the same view. Accept and
-the parsed world is stored in IndexedDB on your machine — still never uploaded — and only the most
-recent save is kept. Decline and nothing is ever written. Either answer is
-remembered, and "Saved sessions" in the About dialog has the toggle and a
-**Forget this save** button; turning the toggle off deletes what is stored
-rather than merely stopping future writes.
+By default, closing the tab discards everything. The one exception is opt-in and off until you say otherwise: after a save loads, the app offers to keep it in this browser so it comes back after a reload — and in any new tab, which is what makes a copied link or a duplicated tab open on the same view. Accept and the parsed world is stored in IndexedDB on your machine — still never uploaded — and only the most recent save is kept. Decline and nothing is ever written. Either answer is remembered, and **Settings** has the toggle and a **Forget this save** button; turning the toggle off deletes what is stored rather than merely stopping future writes.
 
-Breeding paths are the other thing that can be stored, and only when you press
-**Save path**: each is a name plus the link the Breed view would show for it,
-which includes shortened ids for the player and any pals it names. They are
-kept in this browser's `localStorage`, whatever you answered about keeping the
-save, and **Forget saved paths** in the About dialog deletes them all.
+Breeding paths are the other thing that can be stored, and only when you press **Save path**: each is a name plus the link the Breed view would show for it, which includes shortened ids for the player and any pals it names. They are kept in this browser's `localStorage`, whatever you answered about keeping the save, and **Forget saved paths** in Settings deletes them all.
+
+Settings also holds a few preferences, in `localStorage` and describing nothing about your save: which tab the app opens on, whether the utility tray is docked, and which layers the map starts with. And it shows which game data is cached and how old it is, with buttons to fetch it again or clear it.
+
+No save to hand? **Try a sample world** on the landing screen opens a small made-up one shipped with the page. It is never offered for keeping and never stored.
 
 The app does fetch Palworld's own names, icons and map art at runtime, because
 none of it is in this repository: from `cdn.jsdelivr.net`, falling back to

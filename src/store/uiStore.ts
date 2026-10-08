@@ -1,3 +1,4 @@
+import { readPrefs } from './prefs.ts'
 import { create } from 'zustand'
 
 import type { Guid } from '../domain/types.ts'
@@ -120,6 +121,7 @@ interface UiState {
   paletteOpen: boolean
   aboutOpen: boolean
   shortcutsOpen: boolean
+  settingsOpen: boolean
 
   /**
    * Each view's state as a serialised query string, for `useHashSync` to fold
@@ -176,6 +178,7 @@ interface UiState {
   clearFocus: () => void
   setPalette: (open: boolean) => void
   setAbout: (open: boolean) => void
+  setSettings: (open: boolean) => void
   setShortcuts: (open: boolean) => void
   /**
    * Forget every view's params, for when the world they described is gone.
@@ -195,7 +198,9 @@ interface UiState {
 const TRAY = readTrayPref()
 
 export const useUiStore = create<UiState>((set, get) => ({
-  view: 'map',
+  // Where the app opens when the address names no view. An address that
+  // names one is adopted by the shell a moment later and wins.
+  view: readPrefs().defaultView ?? 'map',
   trayOpen: TRAY.open,
   trayTab: TRAY.tab,
   trayPinned: TRAY.pinned,
@@ -203,6 +208,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   paletteOpen: false,
   aboutOpen: false,
   shortcutsOpen: false,
+  settingsOpen: false,
   viewParams: {},
   paramsEpoch: 0,
   notices: [],
@@ -240,6 +246,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   setPalette: (paletteOpen) => set({ paletteOpen }),
   setAbout: (aboutOpen) => set({ aboutOpen }),
+  setSettings: (settingsOpen) => set({ settingsOpen }),
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
 
   clearViewParams: () => set({ viewParams: {}, focus: undefined }),

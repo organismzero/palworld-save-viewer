@@ -765,6 +765,54 @@ function slimLandmarks(raw: any): Landmark[] {
    ------------------------------------------------------------------------- */
 
 const KEY = `refdata@${PST_REF}@${SLIM_VERSION}`
+/** When the copy under {@link KEY} was fetched. Beside it, not inside it. */
+const META_KEY = `meta@${PST_REF}@${SLIM_VERSION}`
+
+async function store(d: IDBPDatabase, data: Refdata) {
+  await d.put(REFDATA_STORE, data, KEY)
+  await d.put(REFDATA_STORE, { cachedAt: Date.now() }, META_KEY)
+}
+
+export interface RefdataInfo {
+  /** The upstream ref the data is fetched at. */
+  ref: string
+  /** This app's projection version; a bump refetches everything. */
+  version: number
+  /** When the cached copy was fetched. Absent when nothing is cached. */
+  cachedAt?: number
+}
+
+/** What game data this build uses and how old the cached copy is. */
+export async function refdataInfo(): Promise<RefdataInfo> {
+  const info: RefdataInfo = { ref: PST_REF, version: SLIM_VERSION }
+  try {
+    const d = await database()
+    const meta = (await d.get(REFDATA_STORE, META_KEY)) as
+      { cachedAt?: number } | undefined
+    info.cachedAt = meta?.cachedAt
+  } catch {
+    // No storage, so nothing is cached, which is what an absent date says.
+  }
+  return info
+}
+
+/**
+ * Fetch the game data again now and replace the cached copy.
+ *
+ * `loadRefdata` already revalidates behind a cached copy, but in the
+ * background and without saying whether it worked. This is the same fetch,
+ * awaited, for a Refresh button that has to report an outcome.
+ */
+export async function refreshRefdata(): Promise<Refdata> {
+  const data = await fetchAndSlim()
+  const d = await database()
+  if (Object.keys(data.breeding.pals).length === 0) {
+    const cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
+    if (cached?.breeding) data.breeding = cached.breeding
+  }
+  await store(d, data)
+  return data
+}
 
 export async function loadRefdata(): Promise<{
   data: Refdata
@@ -780,7 +828,7 @@ export async function loadRefdata(): Promise<{
   }
 
   const data = await fetchAndSlim()
-  await d.put(REFDATA_STORE, data, KEY)
+  await store(d, data)
   void navigator.storage?.persist?.()
   return { data, fromCache: false }
 }
@@ -829,7 +877,7 @@ async function revalidate(d: IDBPDatabase) {
       const cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
       if (cached?.breeding) data.breeding = cached.breeding
     }
-    await d.put(REFDATA_STORE, data, KEY)
+    await store(d, data)
   } catch {
     // Offline is fine — the cached copy stands.
   }

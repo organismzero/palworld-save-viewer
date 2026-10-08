@@ -1,6 +1,6 @@
 /**
  * The two informational surfaces: where the data comes from, and what the
- * keyboard does.
+ * keyboard does. Anything that can be changed is in `Settings.tsx`.
  *
  * Both sit in the shared `Modal`, which is still `<dialog>` underneath — a modal
  * needs Escape, a backdrop click and contained focus to be correct, and the
@@ -8,20 +8,10 @@
  * portal and a z-index argument.
  */
 
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
-import { clearCache } from '../refdata/refdata.ts'
-import { bytes, relativeTime } from '../lib/format.ts'
-import {
-  flushSessionWrite,
-  forgetSession,
-  rememberPref,
-  sessionDescriptor,
-  setRememberPref,
-} from '../store/session.ts'
 import { useUiStore } from '../store/uiStore.ts'
-import { usePathsStore } from '../views/breed/pathsStore.ts'
-import { Button, Checkbox, Modal } from '../components/controls.tsx'
+import { Modal } from '../components/controls.tsx'
 import { KeyHint } from '../components/primitives.tsx'
 
 /* -------------------------------------------------------------------------
@@ -31,7 +21,7 @@ import { KeyHint } from '../components/primitives.tsx'
 export function AboutDialog() {
   const open = useUiStore((s) => s.aboutOpen)
   const setAbout = useUiStore((s) => s.setAbout)
-  const [cleared, setCleared] = useState<number>()
+  const setSettings = useUiStore((s) => s.setSettings)
 
   return (
     <Modal
@@ -51,8 +41,23 @@ export function AboutDialog() {
         </section>
 
         <section>
-          <h3 className="label mb-2">saved sessions</h3>
-          <SessionControls />
+          <h3 className="label mb-2">what this browser keeps</h3>
+          <p className="text-[var(--color-muted)]">
+            Nothing, unless you ask: a copy of the save you have open, if you
+            choose to keep it, and any breeding paths you save. Both stay on
+            this machine, and both are listed and deleted in{' '}
+            <button
+              type="button"
+              className="text-[var(--color-signal)] underline"
+              onClick={() => {
+                setAbout(false)
+                setSettings(true)
+              }}
+            >
+              Settings
+            </button>
+            , along with the cached game data.
+          </p>
         </section>
 
         <section>
@@ -69,7 +74,6 @@ export function AboutDialog() {
             degraded mode: raw asset ids and a coordinate grid, with every
             position still exact.
           </p>
-          <CacheButton onCleared={setCleared} cleared={cleared} />
         </section>
 
         <section>
@@ -98,37 +102,6 @@ export function AboutDialog() {
         </section>
       </div>
     </Modal>
-  )
-}
-
-function CacheButton({
-  cleared,
-  onCleared,
-}: {
-  cleared?: number
-  onCleared: (n: number) => void
-}) {
-  const [busy, setBusy] = useState(false)
-  return (
-    <div className="mt-3 flex items-center gap-3">
-      <Button
-        size="sm"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true)
-          void clearCache()
-            .then(onCleared)
-            .finally(() => setBusy(false))
-        }}
-      >
-        {busy ? 'Clearing…' : 'Clear cached game data'}
-      </Button>
-      {cleared !== undefined && (
-        <span className="label">
-          freed {bytes(cleared)} · reload to refetch
-        </span>
-      )}
-    </div>
   )
 }
 
@@ -193,111 +166,5 @@ export function ShortcutsDialog() {
         field has focus.
       </p>
     </Modal>
-  )
-}
-
-/**
- * The saved-session controls.
- *
- * Sits above the game-data section, and is worded so the two buttons cannot be
- * confused: one deletes a copy of *your world*, the other deletes downloaded
- * *Pocketpair art*. Both used to be one vague idea of "cached data".
- *
- * Turning the toggle off deletes the snapshot there and then rather than
- * merely stopping future writes — "stop remembering my saves" that leaves
- * three megabytes of parsed world on disk is the failure this whole feature is
- * negotiating around.
- */
-function SessionControls() {
-  const [pref, setPref] = useState(() => rememberPref())
-  const [descriptor, setDescriptor] = useState(() => sessionDescriptor())
-
-  const toggle = (on: boolean) => {
-    setPref(on ? 'on' : 'off')
-    void setRememberPref(on)
-      // Turning it on with a save already open should have a visible effect
-      // now, rather than at some later merge that may never happen.
-      .then(() => (on ? flushSessionWrite() : undefined))
-      .then(() => setDescriptor(sessionDescriptor()))
-  }
-
-  return (
-    <>
-      <Checkbox
-        checked={pref === 'on'}
-        onChange={toggle}
-        className="items-start text-[var(--color-muted)]"
-        label={
-          <span>
-            Keep the save I have open in this browser, so it comes back after a
-            reload. It is stored on this machine only and still never uploaded.
-            Only the most recent save is kept.{' '}
-            <span className="text-[var(--color-text)]">
-              Turning this off deletes what is stored.
-            </span>
-          </span>
-        }
-      />
-
-      {descriptor && pref === 'on' && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button
-            size="sm"
-            tone="danger"
-            onClick={() => {
-              void forgetSession().then(() =>
-                setDescriptor(sessionDescriptor()),
-              )
-            }}
-          >
-            Forget this save
-          </Button>
-          <span className="label">
-            <span className="num">{descriptor.fileName}</span> ·{' '}
-            {bytes(descriptor.fileBytes)} ·{' '}
-            {relativeTime(new Date(descriptor.savedAt))}
-          </span>
-        </div>
-      )}
-
-      <SavedPathsControl />
-    </>
-  )
-}
-
-/**
- * The other thing this browser may be holding: breeding paths saved from the
- * tray. Listed here, beside the saved session, because it is the same question
- * — what of mine is stored — and deserves the same one-press answer.
- */
-function SavedPathsControl() {
-  const n = usePathsStore((s) => s.paths.length)
-  const writable = usePathsStore((s) => s.writable)
-  const clear = usePathsStore((s) => s.clear)
-  // An unreadable list still counts as something stored.
-  if (n === 0 && writable) return null
-
-  return (
-    <div className="mt-4">
-      <p className="text-[var(--color-muted)]">
-        Breeding paths you save are kept in this browser too, each as a name and
-        the link the Breed view would show for it. That link includes shortened
-        ids for the player and any pals it names.
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Button size="sm" tone="danger" onClick={clear}>
-          Forget saved paths
-        </Button>
-        <span className="label">
-          {writable ? (
-            <>
-              <span className="num">{n}</span> saved
-            </>
-          ) : (
-            'saved by a newer version'
-          )}
-        </span>
-      </div>
-    </div>
   )
 }

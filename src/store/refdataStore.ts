@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import {
   getTileSet,
   loadRefdata,
+  refreshRefdata,
   type Refdata,
   type TileSet,
 } from '../refdata/refdata.ts'
@@ -21,12 +22,30 @@ interface RefdataState {
   tiles?: TileSet
   bakeLabel?: string
   ensure: (force?: boolean) => Promise<void>
+  /**
+   * Fetch the game data again and swap it in. Resolves to whether it worked;
+   * a failure leaves whatever was loaded exactly as it was.
+   */
+  refresh: () => Promise<boolean>
 }
 
 let inFlight: Promise<void> | undefined
 
 export const useRefdataStore = create<RefdataState>((set, get) => ({
   status: 'cold',
+
+  async refresh() {
+    try {
+      const data = await refreshRefdata()
+      // The tiles are the map art, cut once and keyed on the same version, so
+      // they are kept; a degraded session that now has data still needs them.
+      set({ data })
+      if (get().status !== 'ready') await get().ensure(true)
+      return true
+    } catch {
+      return false
+    }
+  },
 
   async ensure(force = false) {
     if (!force && (get().status === 'ready' || inFlight)) return inFlight

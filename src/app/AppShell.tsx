@@ -62,6 +62,7 @@ import { useFilePicker } from './filePicker.tsx'
 import { CommandPalette } from './CommandPalette.tsx'
 import { Diagnostics } from './Diagnostics.tsx'
 import { AboutDialog, ShortcutsDialog } from './Dialogs.tsx'
+import { SettingsDialog } from './Settings.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { HoverCardLayer } from '../components/cards/HoverCardLayer.tsx'
 
@@ -216,11 +217,12 @@ function useShortcuts() {
 
       // Read at the keypress rather than subscribed to: a handler rebuilt on
       // every open and close would be re-registered for no gain.
-      const { paletteOpen, aboutOpen, shortcutsOpen } = useUiStore.getState()
+      const { paletteOpen, aboutOpen, shortcutsOpen, settingsOpen } =
+        useUiStore.getState()
       // The two native dialogs sit in the top layer and contain focus, so
       // anything opened from a key while one is up opens *behind* it — and a
       // digit used to switch the view underneath, out of sight.
-      const modal = aboutOpen || shortcutsOpen
+      const modal = aboutOpen || shortcutsOpen || settingsOpen
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -352,7 +354,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
   const { fileName, isSample, reset } = useSaveStore()
   const setPalette = useUiStore((s) => s.setPalette)
-  const setAbout = useUiStore((s) => s.setAbout)
+  const setSettings = useUiStore((s) => s.setSettings)
   const trayOpen = useUiStore((s) => s.trayOpen)
   const setTray = useUiStore((s) => s.setTray)
   const add = useFilePicker()
@@ -443,12 +445,14 @@ export function AppShell({ index }: { index: SaveIndex }) {
 
           <Diagnostics index={index} />
 
+          {/* One button for both: the header has no room for a ninth, and
+              About is a link away inside it. */}
           <Button
             size="sm"
-            onClick={() => setAbout(true)}
-            title="Data sources and licence"
+            onClick={() => setSettings(true)}
+            title="Where the app opens, what this browser keeps, and the game data"
           >
-            About
+            Settings
           </Button>
 
           {/*
@@ -537,6 +541,7 @@ export function AppShell({ index }: { index: SaveIndex }) {
       <CommandPalette index={index} />
       <HoverCardLayer index={index} />
       <AboutDialog />
+      <SettingsDialog />
       <ShortcutsDialog />
     </div>
   )
@@ -570,7 +575,12 @@ function copyLink() {
  */
 function Prompts() {
   const anyOpen = useUiStore(
-    (s) => s.paletteOpen || s.aboutOpen || s.shortcutsOpen || s.escapeDepth > 0,
+    (s) =>
+      s.paletteOpen ||
+      s.aboutOpen ||
+      s.shortcutsOpen ||
+      s.settingsOpen ||
+      s.escapeDepth > 0,
   )
 
   return (
@@ -638,7 +648,7 @@ function Prompt({ keys, children }: { keys: string; children: ReactNode }) {
  *
  * A bar under the header rather than a modal, and rather than something in the
  * header itself — that row already carries the title, five nav buttons, search,
- * the filename, diagnostics, About and "Load another", and is tight before this
+ * the filename, diagnostics, Settings and "Load another", and is tight before this
  * is added. A modal at the moment somebody finally gets to see their world is
  * an interruption; a bar is not.
  *
