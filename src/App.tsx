@@ -19,8 +19,17 @@ const AppShell = lazy(() =>
 )
 
 export function App() {
-  const { status, index, progressLabel, error, fileName, fileBytes, reset } =
-    useSaveStore()
+  const {
+    status,
+    index,
+    progressLabel,
+    progress,
+    error,
+    fileName,
+    fileBytes,
+    reset,
+    cancelLoad,
+  } = useSaveStore()
 
   if (status === 'loading') {
     return (
@@ -32,9 +41,36 @@ export function App() {
           {progressLabel ?? 'Working'}
           {fileBytes ? ` · ${bytes(fileBytes)}` : ''}
         </div>
-        <div className="h-0.5 w-64 overflow-hidden bg-[var(--color-line)] shadow-[var(--edge-sunken)]">
-          <div className="h-full w-1/3 animate-pulse-dot bg-[var(--color-signal)]" />
-        </div>
+        {progress !== undefined ? (
+          <div
+            role="progressbar"
+            aria-label="Reading the save"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            className="h-0.5 w-64 overflow-hidden bg-[var(--color-line)] shadow-[var(--edge-sunken)]"
+          >
+            <div
+              className="h-full bg-[var(--color-signal)]"
+              style={{ width: `${progress * 100}%` }}
+            />
+          </div>
+        ) : (
+          // No measure, so a pulse says only "still going". With motion
+          // reduced a pulse that does not move is a bar stuck at a third, so
+          // the phase text above is left to say it alone.
+          <div
+            aria-hidden
+            className="h-0.5 w-64 overflow-hidden bg-[var(--color-line)] shadow-[var(--edge-sunken)] motion-reduce:invisible"
+          >
+            <div className="h-full w-1/3 animate-pulse-dot bg-[var(--color-signal)]" />
+          </div>
+        )}
+        {/* A big world on a slow machine is a long wait, and the wrong file is
+            a wait for nothing. */}
+        <Button size="sm" tone="ghost" onClick={cancelLoad}>
+          Cancel
+        </Button>
       </main>
     )
   }

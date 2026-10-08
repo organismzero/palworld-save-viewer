@@ -61,7 +61,20 @@ export interface PlayerFileReport {
 }
 
 export type FromWorker =
-  | { t: 'progress'; phase: Phase; label: string }
+  /**
+   * `done` of `total` bytes, for the one phase that can measure itself: the
+   * GVAS read. Decompression is a single call into the Oodle decoder with
+   * nothing to report until it returns, and the index phases are counted in
+   * records of very different sizes, so both leave these off and the bar
+   * stays indeterminate.
+   */
+  | {
+      t: 'progress'
+      phase: Phase
+      label: string
+      done?: number
+      total?: number
+    }
   | {
       t: 'result'
       id: number

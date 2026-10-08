@@ -53,6 +53,11 @@ export interface SaveState {
   phase?: Phase
   progressLabel?: string
   /**
+   * How far through the current phase, 0 to 1, when the phase can say. Absent
+   * means "working, with no way of telling how long".
+   */
+  progress?: number
+  /**
    * Absent on a restored session — nothing was parsed, so there is nothing to
    * time. Both readers (`Diagnostics`, `SaveSummary`) must say so rather than
    * quietly dropping the row, hence {@link SaveState.restoredFrom}.
@@ -112,6 +117,8 @@ export interface SaveState {
 
   acceptFiles: (files: File[]) => Promise<void>
   reset: () => void
+  /** Stop reading the save that is loading and go back to the drop zone. */
+  cancelLoad: () => void
 }
 
 type Setter = (
@@ -124,6 +131,11 @@ type Setter = (
  */
 let worker: Worker | undefined
 let nextRequestId = 1
+/**
+ * Counts level loads, so one that was cancelled or overtaken can tell when it
+ * finally hears back, and say nothing.
+ */
+let loadGen = 0
 
 /** Resolvers for in-flight requests, keyed by request id. */
 const pending = new Map<
@@ -145,7 +157,14 @@ function getWorker(): Worker {
   worker.addEventListener('message', (ev: MessageEvent<FromWorker>) => {
     const msg = ev.data
     if (msg.t === 'progress') {
-      useSaveStore.setState({ phase: msg.phase, progressLabel: msg.label })
+      useSaveStore.setState({
+        phase: msg.phase,
+        progressLabel: msg.label,
+        progress:
+          msg.done !== undefined && msg.total
+            ? Math.min(1, msg.done / msg.total)
+            : undefined,
+      })
       return
     }
     const entry = pending.get(msg.id)
@@ -285,6 +304,7 @@ async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
     ...dropped,
   ]
 
+  const gen = ++loadGen
   set({
     status: 'loading',
     fileName: level.file.name,
@@ -301,20 +321,28 @@ async function acceptSavs(savs: Sniffed[], set: Setter, get: () => SaveState) {
     pendingPlayerFiles: [],
     phase: 'decode',
     progressLabel: 'Reading file',
+    progress: undefined,
   })
 
   try {
     const buf = await level.file.arrayBuffer()
+    // Cancelled while the file was being read off disk: do not start a worker
+    // for a load nobody is waiting on.
+    if (gen !== loadGen) return
     const msg = await request({ t: 'parseSav', buf }, [buf])
-    if (msg.t !== 'result') return
+    if (msg.t !== 'result' || gen !== loadGen) return
     set({
       status: 'ready',
       index: buildSaveIndex(msg.payload),
       timings: msg.timings,
       phase: 'done',
       progressLabel: undefined,
+      progress: undefined,
     })
   } catch (err) {
+    // Cancelled, or overtaken by another load: the failure is the worker
+    // being stopped on purpose, and is not something to show anyone.
+    if (gen !== loadGen) return
     const { message } = explainParseError(err, level.file.name)
     set({ status: 'error', error: message, progressLabel: undefined })
     return
@@ -584,6 +612,21 @@ export const useSaveStore = create<SaveState>((set, get) => ({
       pendingLocalFile: undefined,
       pendingLevelMetaFile: undefined,
     })
+  },
+
+  cancelLoad: () => {
+    loadGen++
+    // Terminated, not asked to stop: the read is one synchronous pass that
+    // would not see a message until it was over. The next load starts a fresh
+    // worker, which is cheap beside the parse it was about to do.
+    worker?.terminate()
+    worker = undefined
+    adoptedFor = undefined
+    const err = new Error('cancelled')
+    for (const [, entry] of pending) entry.reject(err)
+    pending.clear()
+    get().reset()
+    set({ phase: undefined, progressLabel: undefined, progress: undefined })
   },
 
   /**

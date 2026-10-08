@@ -273,6 +273,15 @@ export class FArchiveReader {
     return this.typeHints[path] ?? fallback
   }
 
+  /**
+   * Told how far through the bytes the read has got, about fifty times over
+   * the whole file. For a progress bar: a world is tens of megabytes read in
+   * one synchronous pass, and without this the only thing known from outside
+   * is that it has not finished.
+   */
+  onProgress?: (offset: number, size: number) => void
+  private nextProgress = 0
+
   propertiesUntilEnd(path = ''): Record<string, Json> {
     const out: Record<string, Json> = {}
     for (;;) {
@@ -281,6 +290,12 @@ export class FArchiveReader {
       const typeName = this.fstring()
       const size = this.u64()
       out[name] = this.property(typeName, size, `${path}.${name}`)
+      // One comparison per property when nobody is listening or it is not
+      // time yet, which is every call but fifty.
+      if (this.onProgress && this.offset >= this.nextProgress) {
+        this.onProgress(this.offset, this.size)
+        this.nextProgress = this.offset + this.size / 50
+      }
     }
     return out
   }

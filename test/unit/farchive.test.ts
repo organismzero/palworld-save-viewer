@@ -180,6 +180,42 @@ describe('propertiesUntilEnd', () => {
     expect(r.u32()).toBe(0xabcdef)
   })
 
+  it('reports how far it has read, rarely, and never past the end', () => {
+    const prop = (name: string, type: string, body: number[]) =>
+      bytes(ascii(name), ascii(type), u32(body.length), u32(0), body)
+    // 200 properties: enough bytes that "about fifty times" is not every one.
+    const data = bytes(
+      ...Array.from({ length: 200 }, (_, i) =>
+        prop(`P${i}`, 'IntProperty', bytes([0], u32(i))),
+      ),
+      ascii('None'),
+    )
+
+    const r = reader(data)
+    const seen: number[] = []
+    r.onProgress = (offset, size) => {
+      expect(size).toBe(data.length)
+      seen.push(offset)
+    }
+    r.propertiesUntilEnd()
+
+    expect(seen.length).toBeGreaterThan(10)
+    expect(seen.length).toBeLessThanOrEqual(51)
+    expect(seen).toEqual([...seen].sort((x, y) => x - y))
+    expect(seen.at(-1)!).toBeLessThanOrEqual(data.length)
+    // Most of the way through by the last report, or the bar would stall.
+    expect(seen.at(-1)! / data.length).toBeGreaterThan(0.95)
+  })
+
+  it('reads the same with or without anyone listening', () => {
+    const prop = (name: string, type: string, body: number[]) =>
+      bytes(ascii(name), ascii(type), u32(body.length), u32(0), body)
+    const data = bytes(prop('Level', 'IntProperty', bytes([0], u32(42))), ascii('None')) // prettier-ignore
+    const listened = reader(data)
+    listened.onProgress = () => {}
+    expect(listened.propertiesUntilEnd()).toEqual(reader(data).propertiesUntilEnd()) // prettier-ignore
+  })
+
   it('throws on a property type it does not know', () => {
     const data = bytes(
       ascii('Mystery'),

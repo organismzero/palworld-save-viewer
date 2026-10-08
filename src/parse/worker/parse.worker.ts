@@ -38,8 +38,8 @@ function post(msg: FromWorker, transfer: Transferable[] = []) {
   self.postMessage(msg, { transfer })
 }
 
-function progress(phase: Phase, label: string) {
-  post({ t: 'progress', phase, label })
+function progress(phase: Phase, label: string, done?: number, total?: number) {
+  post({ t: 'progress', phase, label, done, total })
 }
 
 /** Walks a dotted path into the retained tree, tolerating array indices. */
@@ -130,11 +130,13 @@ async function handleParseSav(id: number, buf: ArrayBuffer) {
 
     phase = 'gvas'
     t = performance.now()
-    progress(
-      'gvas',
-      `Reading ${(result.gvas.length / 1e6).toFixed(0)} MB of GVAS`,
+    const reading = `Reading ${(result.gvas.length / 1e6).toFixed(0)} MB of GVAS`
+    progress('gvas', reading, 0, result.gvas.length)
+    // The read is one synchronous pass, but a worker's messages are delivered
+    // while it runs, so the bar moves.
+    raw = readGvas(result.gvas, (done, total) =>
+      progress('gvas', reading, done, total),
     )
-    raw = readGvas(result.gvas)
     timings.gvas = performance.now() - t
 
     t = performance.now()

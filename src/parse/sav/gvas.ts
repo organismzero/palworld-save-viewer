@@ -19,8 +19,13 @@ export interface GvasFile {
   trailer: Uint8Array
 }
 
-export function readGvas(bytes: Uint8Array): GvasFile {
+export function readGvas(
+  bytes: Uint8Array,
+  /** Bytes read so far and bytes in all, a few dozen times over the read. */
+  onProgress?: (offset: number, size: number) => void,
+): GvasFile {
   const reader = new FArchiveReader(bytes, TYPE_HINTS, CUSTOM_PROPERTIES)
+  reader.onProgress = onProgress
   const header = readHeader(reader)
   const properties = reader.propertiesUntilEnd()
   return { header, properties, trailer: reader.readToEnd() }
