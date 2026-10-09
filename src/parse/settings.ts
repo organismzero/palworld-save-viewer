@@ -65,8 +65,10 @@ export function parseWorldSettings(
     }
   }
 
-  const start = body.indexOf('OptionSettings=(')
-  if (start === -1) {
+  // At the start of a line: a `;OptionSettings=(…)` left commented out above
+  // the real one is somebody's note, not the setting.
+  const line = /^[ \t]*OptionSettings=\(/m.exec(body)
+  if (!line) {
     return {
       ok: false,
       reason:
@@ -76,18 +78,36 @@ export function parseWorldSettings(
 
   const values: Record<string, WorldSettingValue> = {}
   const withheld: string[] = []
-  for (const pair of splitTopLevel(body, start + 'OptionSettings=('.length)) {
+  for (const pair of splitTopLevel(body, line.index + line[0].length)) {
     const eq = pair.indexOf('=')
     if (eq <= 0) continue
     const key = pair.slice(0, eq).trim()
-    if (SECRET.test(key) || SECRET_SUFFIX.test(key)) {
+    const value = pair.slice(eq + 1).trim()
+    if (isSecret(key) || carriesSecret(value)) {
       withheld.push(key)
       continue
     }
-    values[key] = coerce(pair.slice(eq + 1).trim())
+    values[key] = coerce(value)
   }
 
   return { ok: true, settings: { fileName, values, withheld } }
+}
+
+const isSecret = (key: string) => SECRET.test(key) || SECRET_SUFFIX.test(key)
+
+/**
+ * Whether a value has a secret's `Key=` inside it.
+ *
+ * The splitter below is the only thing standing between `ServerName` and the
+ * `AdminPassword` that follows it on the line, and a quote it miscounts makes
+ * the second part of the first. So a value that turns out to hold a withheld
+ * key is withheld whole — losing a server name is the cheap way to be wrong.
+ */
+function carriesSecret(value: string): boolean {
+  for (const m of value.matchAll(/([A-Za-z_]\w*)\s*=/g)) {
+    if (isSecret(m[1]!)) return true
+  }
+  return false
 }
 
 /**
@@ -104,6 +124,13 @@ function splitTopLevel(text: string, from: number): string[] {
   let cur = ''
   for (let i = from; i < text.length; i++) {
     const ch = text[i]!
+    // An escaped character inside quotes is part of the value, whatever it is:
+    // `"5\" pals"` is one name, and its middle quote closes nothing.
+    if (quoted && ch === '\\' && i + 1 < text.length) {
+      cur += ch + text[i + 1]!
+      i++
+      continue
+    }
     if (ch === '"') quoted = !quoted
     if (!quoted) {
       if (ch === '(') depth++
@@ -130,7 +157,7 @@ function coerce(raw: string): WorldSettingValue {
   // left as the text it was written as.
   if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw)
   if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
-    return raw.slice(1, -1)
+    return raw.slice(1, -1).replace(/\\(["\\])/g, '$1')
   }
   return raw
 }

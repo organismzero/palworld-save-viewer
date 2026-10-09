@@ -30,9 +30,21 @@ function needsQuoting(s: string): boolean {
   )
 }
 
+/**
+ * How a spreadsheet recognises a formula: by the first character of the cell.
+ * Tab and carriage return are on the list because some importers strip them
+ * and then look again.
+ */
+const FORMULA_START = /^[=+\-@\t\r]/
+
 function cell(raw: string | number | boolean | undefined | null): string {
   if (raw === undefined || raw === null) return ''
-  const s = String(raw)
+  // Names in a save are written by whoever played on it, and a pal nicknamed
+  // `=HYPERLINK(…)` is a live formula in the roster somebody exports and opens.
+  // A leading apostrophe is the convention for "this is text". Only text gets
+  // it: a number that happens to be negative is still a number.
+  const s =
+    typeof raw === 'string' && FORMULA_START.test(raw) ? `'${raw}` : String(raw)
   // Embedded quotes are doubled, and only then is the whole field wrapped.
   return needsQuoting(s) ? `"${s.replaceAll('"', '""')}"` : s
 }
