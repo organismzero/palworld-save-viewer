@@ -468,6 +468,9 @@ export function buildStock(
           if (mine) entry.ownFemale++
         }
       }
+      // Moved, not copied. Everything that wants "all of this species" joins
+      // the three lists, and a pal left in two of them is counted twice.
+      entry.unknown = []
     }
   }
 

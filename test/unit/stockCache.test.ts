@@ -6,6 +6,7 @@
  * does, however identical its settings.
  */
 
+import { searchKey } from '@/views/breed/usePassiveSearch.ts'
 import { describe, expect, it } from 'vitest'
 
 import type { SaveIndex } from '@/domain/types.ts'
@@ -130,5 +131,12 @@ describe('stockFor', () => {
     stockFor(index, undefined, settings({ ownerUid: B }))
     stockFor(index, undefined, settings({ includeGuild: true }))
     expect(stockFor(index, undefined, settings())).toBe(first)
+  })
+})
+
+describe('searchKey', () => {
+  it('is the same for one set of passives however it was picked', () => {
+    expect(searchKey(['Legend', 'artisan', 'legend'])).toEqual(['artisan', 'legend']) // prettier-ignore
+    expect(searchKey(['artisan', 'legend'])).toEqual(searchKey(['legend', 'artisan'])) // prettier-ignore
   })
 })

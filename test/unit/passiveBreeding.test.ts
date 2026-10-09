@@ -748,11 +748,7 @@ describe('planWithPassives — the guild', () => {
       ivAttack: 100,
       ivDefense: 100,
     })
-    const stock = stockOf(
-      table,
-      [own, theirs, pal('bb', 'Female')],
-      POOL,
-    )
+    const stock = stockOf(table, [own, theirs, pal('bb', 'Female')], POOL)
     const p = plan(table, stock, 'mid', ['swift'])
     const aa = p.steps[0]!.a.species === 'aa' ? p.steps[0]!.a : p.steps[0]!.b
     expect(aa.kind === 'owned' && aa.use?.instanceId).toBe(own.instanceId)
@@ -855,5 +851,82 @@ describe('reachWithPassives', () => {
     const one = plan(table, stock, 'mid', ['swift'])
     const both = plan(table, stock, 'mid', ['swift', 'legend'])
     expect(both.expectedEggs!).toBeGreaterThanOrEqual(one.expectedEggs!)
+  })
+})
+
+/* -------------------------------------------------------------------------
+   What pruning must not throw away
+   ------------------------------------------------------------------------- */
+
+describe('reachWithPassives — pruning', () => {
+  /** Eggs for the cheapest plan, with or without "and nothing else". */
+  function eggs(
+    table: BreedingTable,
+    pals: Pal[],
+    target: string,
+    wanted: string[],
+    noSpares = false,
+  ) {
+    const stock = stockOf(table, pals)
+    const reach = reachFrom(stock, table)
+    const passive = reachWithPassives(stock, table, reach, wanted)
+    const p = planWithPassives(table, reach, passive, stock, target, undefined, noSpares) // prettier-ignore
+    expect(p.status).toBe('plan')
+    return p.expectedEggs!
+  }
+
+  it('does not let a male carrier hide the female one', () => {
+    // A held state costs nothing, so the male `aa{swift}` dominates the female
+    // `aa{swift, junk}` — and takes the only pairing with a male `bb` with it.
+    const carrier = () => pal('aa', 'Female', ['swift', 'junk1'])
+    const without = eggs(LADDER(), [carrier(), pal('bb', 'Male')], 'mid', ['swift']) // prettier-ignore
+    const withMale = eggs(
+      LADDER(),
+      [pal('aa', 'Male', ['swift']), carrier(), pal('bb', 'Male')],
+      'mid',
+      ['swift'],
+    )
+    expect(without).toBeCloseTo(1.25, 10)
+    // Owning one more pal can never make the cheapest route dearer.
+    expect(withMale).toBeLessThanOrEqual(without + 1e-9)
+  })
+
+  it('breeds a female carrier when the only one held is male', () => {
+    // The everyday move: `aa♂{swift}` × `aa♀` for a daughter that carries it,
+    // then her with `bb♂{legend}`. Two steps; today it finds five, at 23 eggs.
+    const stock = stockOf(LADDER(), [
+      pal('aa', 'Male', ['swift']),
+      pal('aa', 'Female'),
+      pal('bb', 'Male', ['legend']),
+    ])
+    const p = plan(LADDER(), stock, 'mid', ['swift', 'legend'])
+    expect(p.status).toBe('plan')
+    expect(p.steps).toHaveLength(2)
+    expect(p.expectedEggs!).toBeLessThan(10)
+  })
+
+  it('gives the same answer whatever order the pals are in', () => {
+    // `x{A}` and `x{A,B}` both cost nothing, and which one survives pruning is
+    // decided by which the save lists first. The route through `x{A}` is the
+    // cheaper one: `v` supplies B either way, and the spare B only dilutes.
+    const table = () =>
+      buildBreedingTable(
+        data({ x: [100], y: [300], w: [200], v: [5000], z: [9000, true] }, [
+          { a: 'w', b: 'v', child: 'z' },
+        ] as BreedingData['uniqueCombos']),
+      )
+    const both = (s: string, ps: string[]) => [
+      pal(s, 'Male', ps),
+      pal(s, 'Female', ps),
+    ]
+    const rest = () => [...both('y', []), ...both('v', ['B'])]
+    const lean = () => both('x', ['A'])
+    const rich = () => both('x', ['A', 'B'])
+
+    for (const noSpares of [false, true]) {
+      const leanFirst = eggs(table(), [...lean(), ...rich(), ...rest()], 'z', ['A', 'B'], noSpares) // prettier-ignore
+      const richFirst = eggs(table(), [...rich(), ...lean(), ...rest()], 'z', ['A', 'B'], noSpares) // prettier-ignore
+      expect(richFirst).toBeCloseTo(leanFirst, 10)
+    }
   })
 })

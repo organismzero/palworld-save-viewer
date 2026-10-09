@@ -115,8 +115,9 @@ export function BreedView({ index }: { index: SaveIndex }) {
   const patch = (p: Partial<BreedParams>) =>
     setParams((prev) => ({ ...prev, ...p }))
 
-  const text = speciesText(data)
-  const passives = passiveText(data)
+  // Held per projection: the pair picker's sorted list is a memo over both.
+  const text = useMemo(() => speciesText(data), [data])
+  const passives = useMemo(() => passiveText(data), [data])
 
   // A default that keeps the view from opening blank, but stays out of the URL
   // — only a choice the user made is worth sending anyone.
@@ -335,7 +336,12 @@ export function BreedView({ index }: { index: SaveIndex }) {
                 degraded={status === 'degraded'}
                 // A different passive set can make the pinned pair no longer one of
                 // the shortest, exactly as changing the stock can.
-                onChange={(next) => patch({ passives: next, route: undefined })}
+                //
+                // Sorted, which is the order the URL holds them in: picked in
+                // another order they would reshuffle on the next reload.
+                onChange={(next) =>
+                  patch({ passives: [...next].sort(), route: undefined })
+                }
                 // And so can a different requirement: it selects a different goal
                 // state, which has its own cheapest route.
                 onNoSpares={(next) =>
@@ -740,10 +746,15 @@ function PassiveHeader({
         </p>
       )}
       {failed && (
-        <p>
-          The passive search could not run, so this is the species route only.
-          Everything else on the page is unaffected.
-        </p>
+        <div className="flex items-start gap-3">
+          <p className="min-w-0 flex-1">
+            The passive search could not run, so this is the species route only.
+            Everything else on the page is unaffected.
+          </p>
+          <Button size="sm" onClick={search.retry}>
+            Try again
+          </Button>
+        </div>
       )}
       {missing.length > 0 && (
         <>

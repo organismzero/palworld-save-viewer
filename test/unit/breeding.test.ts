@@ -1122,3 +1122,32 @@ describe('reachFrom', () => {
     expect(r.depth.size).toBeGreaterThan(2)
   })
 })
+
+describe('assuming an unknown gender — one pal is still one pal', () => {
+  const ASSUME = { assumeUnknownGender: true }
+  const table = () =>
+    buildBreedingTable(data({ aa: [100], bb: [200], mid: [150] }))
+
+  it('lists a held target once', () => {
+    // Folded into `male`/`female` and left in `unknown` as well, the same pal
+    // comes back twice when the three lists are joined.
+    const stock = stockOf(
+      table(),
+      [pal('mid'), pal('aa', { gender: 'Male' }), pal('bb', { gender: 'Female' })], // prettier-ignore
+      ASSUME,
+    )
+    const p = plan(table(), stock, 'mid')
+    expect(p.ownedTarget).toHaveLength(1)
+  })
+
+  it('counts a lone parent as one', () => {
+    const stock = stockOf(
+      table(),
+      [pal('aa'), pal('bb', { gender: 'Female' })],
+      ASSUME,
+    )
+    const step = plan(table(), stock, 'mid').steps[0]!
+    const aa = step.a.species === 'aa' ? step.a : step.b
+    expect(aa.kind === 'owned' && aa.count).toBe(1)
+  })
+})

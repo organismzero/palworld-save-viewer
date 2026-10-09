@@ -72,7 +72,13 @@ export function usePassiveSearch(
   // and a summary key would leave the previous stock's answer on screen looking
   // current. `stockFor` hands back one object per index and settings, so
   // identity is stable across renders and changes exactly when the pals do.
-  const key = wanted.join(',')
+  //
+  // The passives are part of it as a *set*. The answer does not depend on the
+  // order they were picked in, and a key that did would miss on coming back:
+  // the URL lists them sorted, so the same four re-read from it would be a
+  // different question and the same seconds again.
+  const asked = searchKey(wanted)
+  const key = asked.join(',')
   const [answer, setAnswer] = useState<Answer>()
   // Read on every render rather than held in state: it is a lookup, and it is
   // what makes a remembered answer show on the first frame instead of after a
@@ -121,7 +127,7 @@ export function usePassiveSearch(
       if (live) setAnswer({ key, stock, failed: true })
     }
 
-    const request: SearchRequest = { stock, breeding, wanted }
+    const request: SearchRequest = { stock, breeding, wanted: asked }
     worker.postMessage(request)
 
     return () => {
@@ -135,7 +141,12 @@ export function usePassiveSearch(
   }, [key, stock, breeding, answered, stopped])
 
   const cancel = () => setStop({ key, stock })
-  const retry = () => setStop(undefined)
+  // A failure is an answer, so that the effect does not run the search again
+  // on every render — which means trying again has to take it back.
+  const retry = () => {
+    setStop(undefined)
+    setAnswer((a) => (a?.failed ? undefined : a))
+  }
 
   // Nothing asked, or nothing to ask it of. Neither is "working on it": with no
   // breeding data the view already says so, and a spinner beside that message
@@ -155,6 +166,14 @@ export function usePassiveSearch(
     cancel,
     retry,
   }
+}
+
+/**
+ * The passives a search is asked for, in the one order that question has:
+ * lowercased, deduplicated, sorted.
+ */
+export function searchKey(wanted: string[]): string[] {
+  return [...new Set(wanted.map((id) => id.toLowerCase()))].sort()
 }
 
 interface Answer {

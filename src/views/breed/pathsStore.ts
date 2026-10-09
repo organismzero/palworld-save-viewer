@@ -67,6 +67,17 @@ interface PathsState {
 
 const START = read()
 
+// Another tab saved, renamed or deleted a path. Every write here is the whole
+// list, so a tab still holding the list it loaded with would put that back
+// over the other's change the next time it wrote anything at all — and it
+// writes when it merely opens one of its own paths.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    // A null key is `localStorage.clear()`.
+    if (e.key === KEY || e.key === null) usePathsStore.setState(read())
+  })
+}
+
 export const usePathsStore = create<PathsState>((set, get) => {
   const commit = (paths: SavedPath[]) => {
     if (!get().writable) return

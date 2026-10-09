@@ -107,6 +107,7 @@ import {
   borrowedIn,
   childOf,
   height,
+  pairKey,
   planFor,
   type StepProgress,
   type BreedNode,
@@ -189,6 +190,13 @@ export interface State {
   /** The specific pals, when this is a pal the player already holds. */
   root?: RootPick
   /**
+   * Set on the bred copy of a held state: the same species and profile, but
+   * hatched, and so free to be either sex. It is what a route pairs with when
+   * the held pal is the wrong sex for the pen. The held state reports the same
+   * route as its `alt`.
+   */
+  bredCopy?: true
+  /**
    * How to breed another, when you already have one.
    *
    * A pal in the box costs nothing, so it beats every route to breeding one and
@@ -209,8 +217,13 @@ export interface State {
  * flag of its own — having got here by neither route is the definition.
  */
 
-/** `species|mask|junk`, for the plan's benefit rather than the search's. */
+/**
+ * `species|mask|junk`, for the plan's benefit rather than the search's — with
+ * {@link BRED_SUFFIX} on the end for the bred copy of a state a pal holds.
+ */
 export type StateKey = string
+
+const BRED_SUFFIX = '|bred'
 
 export interface PassiveReach {
   /** What the search actually planned for: the ask, minus `missing`. */
@@ -263,21 +276,30 @@ export function reachWithPassives(
   const indexOf = new Map(names.map((id, i) => [id, i]))
   const n = names.length
 
-  const eggs = new Float64Array(n * STRIDE).fill(Infinity)
-  const viaA = new Int32Array(n * STRIDE).fill(-1)
-  const viaB = new Int32Array(n * STRIDE).fill(-1)
-  const settled = new Uint8Array(n * STRIDE)
+  // Two layers of `n * STRIDE`. The first is the states themselves. The second
+  // is the *bred copy* of a state a pal already satisfies — the same species
+  // and profile, hatched rather than held.
+  //
+  // It has to be a state of its own, not a note on the side. A held pal costs
+  // nothing, so nothing bred can ever relax into its slot; but a held pal also
+  // has a sex, and a bred one can be re-hatched until it has the other. With
+  // only a male carrier in the box and a male on the other side of the pen, the
+  // route is "breed a daughter that carries it first" — and that daughter is
+  // exactly this copy. Kept only as a footnote, she could never be paired.
+  //
+  // `BRED` is a multiple of `STRIDE`, so a copy's low seven bits are still its
+  // mask and junk.
+  const BRED = n * STRIDE
+  const eggs = new Float64Array(2 * BRED).fill(Infinity)
+  const viaA = new Int32Array(2 * BRED).fill(-1)
+  const viaB = new Int32Array(2 * BRED).fill(-1)
+  const settled = new Uint8Array(2 * BRED)
   const roots = new Map<number, RootPick>()
   // The same information as `roots`, in the form the inner loop can read
-  // without a hash lookup on every one of its billions of iterations.
-  const rootMale = new Uint8Array(n * STRIDE)
-  const rootFemale = new Uint8Array(n * STRIDE)
-  // The "breed another" shadow of a root state: see `State.alt`. Only ever
-  // written for states a pal already satisfies, so it costs one array read per
-  // pair in the hot loop and nothing else.
-  const altEggs = new Float64Array(n * STRIDE).fill(Infinity)
-  const altA = new Int32Array(n * STRIDE).fill(-1)
-  const altB = new Int32Array(n * STRIDE).fill(-1)
+  // without a hash lookup on every one of its billions of iterations. Always
+  // zero in the second layer: a bred copy is nobody's pal yet.
+  const rootMale = new Uint8Array(2 * BRED)
+  const rootFemale = new Uint8Array(2 * BRED)
 
   // `childOf` walks two maps and an array; the pair loop asks it the same
   // question over and over, so the answers are cached the first time each pair
@@ -363,10 +385,12 @@ export function reachWithPassives(
     settledList.push(u)
     statesExplored++
 
-    const us = (u / STRIDE) | 0
-    const uPacked = u - us * STRIDE
+    const us = ((u >= BRED ? u - BRED : u) / STRIDE) | 0
+    const uPacked = u & (STRIDE - 1)
     const uMask = uPacked >> 3
-    if (isDominated(u, us, uMask, u & 0b111, bySpecies, eggs)) continue
+    if (isDominated(u, us, uMask, bySpecies, eggs, rootMale, rootFemale)) {
+      continue
+    }
     if (!bySpecies.has(us)) liveSpecies.push(us)
     push(bySpecies, us, u)
 
@@ -382,7 +406,7 @@ export function reachWithPassives(
       if (ci < 0) continue
       const base = ci * STRIDE
       for (const v of bySpecies.get(vs)!) {
-        const vPacked = v - vs * STRIDE
+        const vPacked = v & (STRIDE - 1)
         // Two pals with nothing between them is the search `reachFrom` already
         // ran, and its answer is already seeded above. Skipping it here is what
         // keeps the state space to the routes passives actually change — and it
@@ -410,11 +434,20 @@ export function reachWithPassives(
         // this pair costs before it even starts, the whole pair is wasted work.
         // This one line is most of why the search finishes.
         //
+        // It is a shortcut, not a theorem. "Dominates" is about the child as a
+        // finished pal; as a *parent*, one of the pair's lesser goals — fewer
+        // wanted passives, a smaller pool to roll from later — could in
+        // principle still be the better buy. Measured rather than argued:
+        // without this skip the reference stocks give the same plans to the egg
+        // and the four-passive search takes 26 s instead of 10.
+        //
         // Unless what the child "already holds" is a pal in the box, which
         // costs nothing and would therefore skip every pair that could breed
         // another one. Those are rare — a species held in exactly that profile
         // — so letting them through costs nothing measurable and is the whole
         // of `State.alt`.
+        //
+        // Its bred copy is a state like any other, and is asked the same.
         const best = base + goals[0]!
         if (
           settled[best] &&
@@ -423,6 +456,7 @@ export function reachWithPassives(
         ) {
           continue
         }
+        if (settled[best + BRED] && eggs[best + BRED]! <= total) continue
 
         for (let i = 0; i < goals.length; i += 2) {
           const child = base + goals[i]!
@@ -432,12 +466,10 @@ export function reachWithPassives(
             viaB[child] = v
           } else if (
             rootMale[child]! | rootFemale[child]! &&
-            cost < altEggs[child]! &&
-            cost <= MAX_EXPECTED_EGGS
+            relax(child + BRED, cost)
           ) {
-            altEggs[child] = cost
-            altA[child] = u
-            altB[child] = v
+            viaA[child + BRED] = u
+            viaB[child + BRED] = v
           }
         }
       }
@@ -447,11 +479,7 @@ export function reachWithPassives(
   return {
     wanted,
     asked,
-    states: collect(names, settledList, eggs, viaA, viaB, roots, {
-      eggs: altEggs,
-      a: altA,
-      b: altB,
-    }),
+    states: collect(names, settledList, eggs, viaA, viaB, roots),
     missing,
     carriers,
     truncated,
@@ -467,31 +495,37 @@ function collect(
   viaA: Int32Array,
   viaB: Int32Array,
   roots: Map<number, RootPick>,
-  alt: { eggs: Float64Array; a: Int32Array; b: Int32Array },
 ): Map<StateKey, State> {
+  const BRED = names.length * STRIDE
   const nameOf = (state: number) => {
-    const si = (state / STRIDE) | 0
-    return `${names[si]}|${(state - si * STRIDE) >> 3}|${state & 0b111}`
+    const bred = state >= BRED
+    const at = bred ? state - BRED : state
+    const si = (at / STRIDE) | 0
+    const key = `${names[si]}|${(at - si * STRIDE) >> 3}|${at & 0b111}`
+    return bred ? key + BRED_SUFFIX : key
   }
+  const viaOf = (state: number) =>
+    viaA[state]! >= 0
+      ? { a: nameOf(viaA[state]!), b: nameOf(viaB[state]!) }
+      : undefined
+
   const out = new Map<StateKey, State>()
   for (const state of settledList) {
-    const si = (state / STRIDE) | 0
+    const bred = state >= BRED
+    const at = bred ? state - BRED : state
+    const si = (at / STRIDE) | 0
+    // A held state's bred copy, read back as "how to breed another". Every
+    // state that was ever relaxed is settled by the time the heap is empty, so
+    // a finite cost here is a final one.
+    const copy = bred ? undefined : viaOf(state + BRED)
     out.set(nameOf(state), {
       species: names[si]!,
-      profile: { mask: (state - si * STRIDE) >> 3, junk: state & 0b111 },
+      profile: { mask: (at - si * STRIDE) >> 3, junk: at & 0b111 },
       eggs: eggs[state]!,
-      via:
-        viaA[state]! >= 0
-          ? { a: nameOf(viaA[state]!), b: nameOf(viaB[state]!) }
-          : undefined,
+      via: viaOf(state),
       root: roots.get(state),
-      alt:
-        alt.a[state]! >= 0
-          ? {
-              eggs: alt.eggs[state]!,
-              via: { a: nameOf(alt.a[state]!), b: nameOf(alt.b[state]!) },
-            }
-          : undefined,
+      bredCopy: bred || undefined,
+      alt: copy ? { eggs: eggs[state + BRED]!, via: copy } : undefined,
     })
   }
   return out
@@ -550,32 +584,62 @@ function swap(heap: number[], cost: number[], i: number, j: number): void {
 /**
  * Whether an already-settled state makes this one pointless.
  *
- * A stronger guarantee at no greater price: more of what you wanted, no more
- * junk, no more eggs. All three clauses are needed — a superset mask on its own
- * is *not* better, because carrying an extra wanted passive enlarges the pool
- * and dilutes every roll underneath it. That asymmetry is the reason junk is a
- * state dimension in the first place.
+ * The same wanted passives, no more junk, no more eggs, and able to stand in
+ * the same pens ({@link coversSexes}).
+ *
+ * The *same* passives, not "at least these". A parent is priced as exactly its
+ * profile, and one that carries a wanted passive its partner already supplies
+ * only enlarges the pool every roll is drawn from — so holding more is not
+ * holding better, and treating it as such let a loaded pal knock out the lean
+ * one that made the cheaper route. Which of the two went was then decided by
+ * which the save happened to list first.
  */
 function isDominated(
   state: number,
   si: number,
   mask: number,
-  junk: number,
   bySpecies: Map<number, number[]>,
   eggs: Float64Array,
+  rootMale: Uint8Array,
+  rootFemale: Uint8Array,
 ): boolean {
+  const junk = state & 0b111
+  const male = rootMale[state]!
+  const female = rootFemale[state]!
   for (const other of bySpecies.get(si) ?? []) {
     if (other === state) continue
-    const oMask = (other - si * STRIDE) >> 3
+    const oMask = (other & (STRIDE - 1)) >> 3
     if (
-      (oMask & mask) === mask &&
+      oMask === mask &&
       (other & 0b111) <= junk &&
-      eggs[other]! <= eggs[state]!
+      eggs[other]! <= eggs[state]! &&
+      coversSexes(rootMale[other]!, rootFemale[other]!, male, female)
     ) {
       return true
     }
   }
   return false
+}
+
+/**
+ * Whether one state can stand in every pen the other could.
+ *
+ * A bred state can: it is hatched until it is the sex that is needed. A held
+ * one is the pals it is, so it covers another only if it has both sexes, or the
+ * other is held too and has no sex this one lacks. Without this a lone male
+ * carrier — free, and so cheaper than anything — hides the female carrier
+ * beside it, and with her the only pairing a male on the far side allows.
+ */
+function coversSexes(
+  male: number,
+  female: number,
+  otherMale: number,
+  otherFemale: number,
+): boolean {
+  if (!(male | female)) return true
+  if (male && female) return true
+  if (!(otherMale | otherFemale)) return false
+  return (!otherMale || !!male) && (!otherFemale || !!female)
 }
 
 /**
@@ -759,6 +823,8 @@ export function planWithPassives(
   // being half of what this view is for, and what `planFor` does too.
   const goals: { key: StateKey; eggs: number; via: NonNullable<State['via']> }[] = [] // prettier-ignore
   for (const [key, state] of passive.states) {
+    // The held state beside it offers the same route as its `alt`.
+    if (state.bredCopy) continue
     if (state.species !== id) continue
     if (state.profile.mask !== passive.wanted.all) continue
     if (noSpares && state.profile.junk !== 0) continue
@@ -815,9 +881,11 @@ export function planWithPassives(
   const chosen =
     (prefer &&
       routes.find(
+        // Either way round, as `planFor` matches it: a link written `bb,aa`
+        // names the same pen as one written `aa,bb`.
         (r) =>
-          r.pair.a === prefer.a.toLowerCase() &&
-          r.pair.b === prefer.b.toLowerCase(),
+          pairKey(r.pair.a, r.pair.b) ===
+          pairKey(prefer.a.toLowerCase(), prefer.b.toLowerCase()),
       )) ||
     routes[0]
 
