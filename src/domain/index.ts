@@ -105,7 +105,9 @@ export function buildSaveIndex(payload: SlimPayload): SaveIndex {
     palsByOwner: groupBy<Pal, Guid>(payload.pals, (p) => p.ownerPlayerUid),
     palsByContainer: groupBy<Pal, Guid>(payload.pals, (p) => p.containerId),
     palsByGuild: groupBy<Pal, Guid>(payload.pals, (p) => p.groupId),
-    palsByCharacterId: groupBy<Pal, string>(payload.pals, (p) => p.characterId),
+    palsByCharacterId: groupBy<Pal, string>(payload.pals, (p) =>
+      p.characterId.toLowerCase(),
+    ),
     structuresByBase: groupBy<Structure, Guid>(
       payload.structures,
       (s) => s.baseCampId,
@@ -146,12 +148,18 @@ export function baseWorkers(index: SaveIndex, baseId: Guid): Pal[] {
   return index.palsByContainer.get(base.workerContainerId) ?? []
 }
 
-/** Species histogram, most numerous first. */
+/**
+ * Species histogram, most numerous first.
+ *
+ * `id` is the species as the save spells it — the first pal's spelling, where
+ * a save has two — because it is shown as written when there is no reference
+ * data to name it. Look it up in `palsByCharacterId` lowercased.
+ */
 export function speciesCounts(
   index: SaveIndex,
 ): { id: string; count: number }[] {
-  return [...index.palsByCharacterId.entries()]
-    .map(([id, pals]) => ({ id, count: pals.length }))
+  return [...index.palsByCharacterId.values()]
+    .map((pals) => ({ id: pals[0]!.characterId, count: pals.length }))
     .sort((a, b) => b.count - a.count)
 }
 

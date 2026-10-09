@@ -27,7 +27,7 @@ import type { Column } from '../lib/export.ts'
 import type { Refdata } from '../refdata/refdata.ts'
 import { containerLocation, type ItemHit, type WornItem } from './bases.ts'
 import { WORK_TYPES } from '../lib/color.ts'
-import { ticksToDate } from '../lib/format.ts'
+import { saveClockIso } from '../lib/format.ts'
 import { ivTotal } from './index.ts'
 import {
   baseNames,
@@ -101,7 +101,9 @@ export function palColumns(
     { header: 'sanity', value: (p) => p.sanity },
     { header: 'friendship', value: (p) => p.friendship },
     { header: 'current_work', value: (p) => p.currentWork },
-    { header: 'caught', value: (p) => ticksToDate(p.ownedTime)?.toISOString() }, // prettier-ignore
+    // The host's wall clock, so no zone: a `Z` here would be a claim the save
+    // does not make.
+    { header: 'caught', value: (p) => saveClockIso(p.ownedTime) },
     { header: 'location', value: (p) => placeText(place(p), (id) => bases.get(id)) }, // prettier-ignore
     { header: 'position', value: (p) => (p.pos ? formatMapPos(posToMap(p.pos)) : '') }, // prettier-ignore
     { header: 'moves_equipped', value: (p) => moves(p.equipWaza) },

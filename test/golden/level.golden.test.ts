@@ -32,8 +32,11 @@ const EXPECTED = {
    * Distinct species *after* stripping the `BOSS_` prefix. The raw
    * `CharacterID` values number 383, because alphas are stored as a separate
    * `BOSS_Foo` id alongside the ordinary `Foo`; collapsing them is the point.
+   *
+   * Casing is folded too. It was 272 while `SheepBall` counted apart from
+   * `Sheepball` (three such pairs) and four `Boss_Foo` ids kept their prefix.
    */
-  species: 272,
+  species: 265,
   speciesRaw: 383,
   structures: 8795,
   /** Map objects whose `ItemContainer` module resolves to a real container. */
@@ -82,24 +85,26 @@ describe.skipIf(!hasSave)('golden: real Level.sav', () => {
   it('collapses BOSS_ variants onto their base species', () => {
     // Without stripping, alphas would double-count as separate species and a
     // dex view would show BOSS_Alpaca sitting next to Alpaca.
-    expect(index.pals.filter((p) => p.characterId.startsWith('BOSS_'))).toEqual(
-      [],
-    )
+    expect(index.pals.filter((p) => /^boss_/i.test(p.characterId))).toEqual([])
 
     const bosses = index.pals.filter((p) => p.isBoss)
     expect(bosses.length).toBeGreaterThan(0)
     // Every alpha's stripped id must land in the same bucket as its base form.
     for (const boss of bosses) {
-      expect(index.palsByCharacterId.has(boss.characterId)).toBe(true)
+      expect(index.palsByCharacterId.has(boss.characterId.toLowerCase())).toBe(
+        true,
+      )
     }
     // The gap between the raw and collapsed counts is exactly the number of
     // alpha species that *also* occur in ordinary form — those are the ones
     // that merge. Alpha-only species (32 here) still contribute a species
     // each, so the gap is smaller than the alpha species count.
     const plain = new Set(
-      index.pals.filter((p) => !p.isBoss).map((p) => p.characterId),
+      index.pals
+        .filter((p) => !p.isBoss)
+        .map((p) => p.characterId.toLowerCase()),
     )
-    const bossSpecies = new Set(bosses.map((p) => p.characterId))
+    const bossSpecies = new Set(bosses.map((p) => p.characterId.toLowerCase()))
     const merged = [...bossSpecies].filter((s) => plain.has(s)).length
 
     expect(EXPECTED.speciesRaw - EXPECTED.species).toBe(merged)

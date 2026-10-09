@@ -170,7 +170,8 @@ export function mergePlayerDetails(
     pals: pals.length,
     storedPals: pals.filter((p) => p.storage).length,
     players: players.length,
-    species: new Set(pals.map((p) => p.characterId)).size,
+    // Lowercased: the game writes `Sheepball` and `SheepBall` for one species.
+    species: new Set(pals.map((p) => p.characterId.toLowerCase())).size,
     guilds: guilds.filter((g) => g.type === 'Guild').length,
     organizations: guilds.filter((g) => g.type === 'Organization').length,
     bases: bases.length,

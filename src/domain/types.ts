@@ -578,7 +578,10 @@ export interface SaveIndex extends SlimPayload {
   palsByOwner: Map<Guid, Pal[]>
   palsByContainer: Map<Guid, Pal[]>
   palsByGuild: Map<Guid, Pal[]>
-  /** Species → its pals. Makes "Kitsunebi × 37" grouping instant. */
+  /**
+   * Species → its pals, keyed by the **lowercased** id: one save holds both
+   * `Sheepball` and `SheepBall`. Makes "Kitsunebi × 37" grouping instant.
+   */
   palsByCharacterId: Map<string, Pal[]>
   structuresByBase: Map<Guid, Structure[]>
   structuresByGuild: Map<Guid, Structure[]>

@@ -15,7 +15,7 @@ import {
   mergePlayerDetails,
 } from '@/parse/worker/buildIndexes.ts'
 import { jumpedTo } from '@/parse/worker/readers/characters.ts'
-import { buildSaveIndex } from '@/domain/index.ts'
+import { buildSaveIndex, speciesCounts } from '@/domain/index.ts'
 import type { SaveIndex, SaveWarning, SlimPayload } from '@/domain/types.ts'
 
 const FIXTURE = resolve(process.cwd(), 'test/fixtures/level.mini.json')
@@ -212,5 +212,40 @@ describe('jumpedTo', () => {
 
   it('reads a missing property as nothing', () => {
     expect(jumpedTo(undefined)).toBeUndefined()
+  })
+})
+
+/* -------------------------------------------------------------------------
+   The casing the game does not keep consistent
+
+   Both seen in a real save: `Boss_IceFox` beside `BOSS_IceFox`, `SheepBall`
+   beside `Sheepball`.
+   ------------------------------------------------------------------------- */
+
+describe('species ids in more than one casing', () => {
+  const fixture = () => readFileSync(FIXTURE, 'utf8')
+
+  it('strips a boss prefix however it is cased', () => {
+    const upper = buildIndexes(JSON.parse(fixture()))
+    const mixed = buildIndexes(
+      JSON.parse(fixture().replaceAll('"BOSS_', '"Boss_')),
+    )
+    const bosses = (p: SlimPayload) => p.pals.filter((x) => x.isBoss).length
+    expect(bosses(upper)).toBeGreaterThan(0)
+    expect(bosses(mixed)).toBe(bosses(upper))
+    expect(mixed.pals.some((p) => /^boss_/i.test(p.characterId))).toBe(false)
+  })
+
+  it('counts one species once, whatever its casing', () => {
+    const payload = buildIndexes(JSON.parse(fixture()))
+    payload.pals[0]!.characterId = 'Sheepball'
+    payload.pals[1]!.characterId = 'SheepBall'
+    const isSheep = (id: string) => id.toLowerCase() === 'sheepball'
+    const held = payload.pals.filter((p) => isSheep(p.characterId)).length
+    const sheep = speciesCounts(buildSaveIndex(payload)).filter((s) =>
+      isSheep(s.id),
+    )
+    expect(sheep).toHaveLength(1)
+    expect(sheep[0]!.count).toBe(held)
   })
 })

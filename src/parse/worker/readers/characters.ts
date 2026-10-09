@@ -77,8 +77,9 @@ function readWorkBonus(node: Node): Record<string, number> {
 export function readPal(entry: Node, sp: Node, instanceId: string): Pal {
   const rawId = str(sp.CharacterID) ?? ''
   // Alphas and field bosses carry a BOSS_ prefix on an otherwise ordinary
-  // species id. Strip it for lookups; keep the fact as a flag.
-  const isBoss = rawId.startsWith('BOSS_')
+  // species id. Strip it for lookups; keep the fact as a flag. In either
+  // casing: the same save holds `BOSS_IceFox` and `Boss_IceFox`.
+  const isBoss = /^boss_/i.test(rawId)
   const gender = enumTail(sp.Gender)
 
   return {

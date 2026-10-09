@@ -21,7 +21,9 @@ export function ticksToDate(ticks: number | undefined): Date | undefined {
 /**
  * A save's own clock reading, rendered without claiming to know the instant.
  *
- * Palworld writes its tick counts as a **naive wall clock**, not UTC. Measured:
+ * Palworld writes a save's `Timestamp`, and a pal's `OwnedTime`, as a **naive
+ * wall clock**, not UTC. (A player's `LastOnlineDateTime` is the exception: it
+ * *is* UTC — see below.) Measured:
  * an autosave whose folder the server named `2026.08.11-15.31.41` carries ticks
  * that `ticksToDate` renders as `15:31:41Z` — the digits agree, so the game wrote
  * whatever its own clock said with no zone attached.
@@ -34,7 +36,16 @@ export function ticksToDate(ticks: number | undefined): Date | undefined {
  *
  * Differences between two tick values are unaffected, because both sit in the
  * same unknown frame — "caught nine days before this save was written" needs no
- * timezone and is exact.
+ * timezone and is exact. That is what {@link beforeSave} is for.
+ *
+ * ## The one that is UTC
+ *
+ * `LastOnlineDateTime` in a player's save is a real instant. Measured on two
+ * servers: on a host whose clock is UTC, each player's captures begin at their
+ * last-online value; on a host ten hours ahead there are none for exactly ten
+ * hours after it, and then they begin. So `relativeTime` is right for last
+ * online and wrong for caught, and the two must never be subtracted from each
+ * other — the answer is off by the host's offset.
  */
 export function saveClock(ticks: number | undefined): string | undefined {
   const d = ticksToDate(ticks)
@@ -46,6 +57,39 @@ export function saveClock(ticks: number | undefined): string | undefined {
     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
     ` ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
   )
+}
+
+/**
+ * A wall-clock reading as ISO 8601 with no zone, for export: the digits the
+ * game wrote, and no `Z` claiming they are UTC.
+ */
+export function saveClockIso(ticks: number | undefined): string | undefined {
+  return ticksToDate(ticks)?.toISOString().slice(0, 19)
+}
+
+/**
+ * How long before the save was written something happened, in words.
+ *
+ * Both readings come off the same host clock, so their difference is exact
+ * where either one against `Date.now()` would be wrong by that host's offset.
+ * Falls back to the bare reading when the save's own time is not known.
+ */
+export function beforeSave(
+  ticks: number | undefined,
+  savedAtTicks: number | undefined,
+): string {
+  const then = ticksToDate(ticks)
+  if (!then) return '—'
+  const saved = ticksToDate(savedAtTicks)
+  if (!saved) return saveClock(ticks) ?? '—'
+  const diff = saved.getTime() - then.getTime()
+  for (const [unit, ms] of UNITS) {
+    if (diff >= ms) {
+      const n = Math.round(diff / ms)
+      return `${n} ${unit}${n === 1 ? '' : 's'} before the save`
+    }
+  }
+  return 'just before the save'
 }
 
 const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
