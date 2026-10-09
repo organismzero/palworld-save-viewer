@@ -1540,6 +1540,7 @@ function StructureDetail({
     ? index.playerByUid.get(structure.buildPlayerUid)
     : undefined
   const damaged = isDamaged(structure)
+  const waiting = index.looseEggsByFarm.get(structure.instanceId)?.length ?? 0
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1584,6 +1585,13 @@ function StructureDetail({
               label="lock"
               value={structure.locked ? 'password set' : 'unlocked'}
             />
+            {waiting > 0 && (
+              <DetailRow
+                label="eggs waiting"
+                value={count(waiting)}
+                hint="Laid here and not collected yet. They are on the farm, not in it — the save keeps each as an object of its own — and are shown with its contents."
+              />
+            )}
             <DetailRow label="asset" value={structure.mapObjectId} />
           </dl>
 

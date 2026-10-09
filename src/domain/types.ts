@@ -591,6 +591,15 @@ export interface SaveIndex extends SlimPayload {
   playersByGuild: Map<Guid, Player[]>
   /** Inverted index powering global item search: item id → where it is. */
   containersByItem: Map<string, { containerId: Guid; count: number }[]>
+  /**
+   * Eggs laid at a Breeding Farm and not yet collected, by the farm's
+   * structure id. The save keeps each as a structure of its own; the lookups
+   * above fold them into the farm, whose container answers with them in it.
+   * `structures` and `containers` still list every egg as written.
+   */
+  looseEggsByFarm: Map<Guid, Structure[]>
+  /** The same, the other way: an egg's structure id → its farm's. */
+  looseEggFarm: Map<Guid, Guid>
 }
 
 /** Positions, resolved to map space. Computed lazily by the map view. */

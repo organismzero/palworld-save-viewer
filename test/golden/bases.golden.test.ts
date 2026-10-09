@@ -26,10 +26,16 @@ import { hasLevel as hasSave, levelTree } from './load.ts'
 /** Measured from the reference save. */
 const EXPECTED = {
   bases: 4,
-  /** Structures per base, largest first. */
-  baseStructures: [1372, 853, 828, 397],
-  /** Chests inside a base camp, and out in the world. */
+  /**
+   * Structures per base, largest first. The third was 828 with the 20 eggs
+   * waiting on its Breeding Farm, which the save records as structures of
+   * their own and the index folds into the farm.
+   */
+  baseStructures: [1372, 853, 808, 397],
+  /** Chests inside a base camp, and out in the world, as the save has them. */
   baseChests: 157,
+  /** Storage a base lists: the same, less those 20 eggs. */
+  baseStorage: 137,
   worldChests: 4220,
   containers: 4599,
   orphans: 222,
@@ -284,7 +290,7 @@ describe.skipIf(!hasSave)('golden: bases and inventories', () => {
       ),
     )
     expect(perBase.reduce((n, t) => n + t.containers, 0)).toBe(
-      EXPECTED.baseChests,
+      EXPECTED.baseStorage,
     )
 
     const all = storageTotals(

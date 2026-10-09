@@ -338,6 +338,8 @@ export function CommandPalette({
         ? (index.containerById.get(st.containerId)?.slots.length ?? 0)
         : 0
     const structures = index.structures
+      // An egg waiting on a Breeding Farm is found as the farm's contents.
+      .filter((st) => !index.looseEggFarm.has(st.instanceId))
       .map((st) => ({ st, rank: matchRank(nameOfStructure(st), q) }))
       .filter((x) => x.rank !== undefined)
       .sort(

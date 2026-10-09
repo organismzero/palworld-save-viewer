@@ -659,6 +659,9 @@ export class MapController {
     }
 
     for (const s of index.structures) {
+      // An egg waiting on a Breeding Farm is part of the farm, here as on the
+      // Bases tab, and not a dot of its own on top of it.
+      if (index.looseEggFarm.has(s.instanceId)) continue
       const at = place(s.pos)
       if (!at) continue
 

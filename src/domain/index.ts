@@ -8,6 +8,7 @@
  */
 
 import type { Guid, Pal, SaveIndex, SlimPayload, Structure } from './types.ts'
+import { looseEggsByFarm } from './looseEggs.ts'
 
 function groupBy<T, K>(
   items: T[],
@@ -68,13 +69,47 @@ export function buildSaveIndex(payload: SlimPayload): SaveIndex {
     containerByStructure.set(s.instanceId, s.containerId)
   }
 
+  // Eggs waiting on a Breeding Farm are folded into it — see `looseEggs.ts`.
+  // Here and nowhere else: `payload` keeps each egg as the structure the save
+  // says it is, and every lookup below answers as if the farm held them.
+  const containerById = byId(payload.containers, (c) => c.containerId)
+  const eggsByFarm = looseEggsByFarm(payload.structures)
+  const looseEggFarm = new Map<Guid, Guid>()
+  /** The eggs' own containers, which the farm's now speaks for. */
+  const folded = new Set<Guid>()
+  for (const [farmId, eggs] of eggsByFarm) {
+    const farmContainerId = containerByStructure.get(farmId)
+    const farmContainer = farmContainerId && containerById.get(farmContainerId)
+    if (!farmContainer) continue
+    // After whatever the farm holds itself, which is the cake.
+    let slot = farmContainer.slots.reduce((n, s) => Math.max(n, s.slot + 1), 0)
+    const slots = [...farmContainer.slots]
+    for (const egg of eggs) {
+      looseEggFarm.set(egg.instanceId, farmId)
+      folded.add(egg.containerId!)
+      // Asking where an egg's container is should lead to the farm.
+      structureByContainer.set(egg.containerId!, farmId)
+      const own = containerById.get(egg.containerId!)
+      if (!own) continue
+      for (const s of own.slots) slots.push({ ...s, slot: slot++ })
+      // Emptied here, so that the egg is in one place and not two: anything
+      // that adds up every container would otherwise count it twice.
+      containerById.set(own.containerId, { ...own, slots: [] })
+    }
+    containerById.set(farmContainer.containerId, { ...farmContainer, slots })
+  }
+  const standing = (s: Structure) => !looseEggFarm.has(s.instanceId)
+
   // Inverted index powering global item search: "where are my Ancient
   // Civilization Parts?" resolves to a list rather than a scan.
   const containersByItem = new Map<
     string,
     { containerId: Guid; count: number }[]
   >()
-  for (const c of payload.containers) {
+  for (const listed of payload.containers) {
+    if (folded.has(listed.containerId)) continue
+    // The farm's, with its eggs, where it has any.
+    const c = containerById.get(listed.containerId) ?? listed
     for (const slot of c.slots) {
       const rows = containersByItem.get(slot.staticId)
       const row = rows?.find((r) => r.containerId === c.containerId)
@@ -98,7 +133,7 @@ export function buildSaveIndex(payload: SlimPayload): SaveIndex {
     guildById: byId(payload.guilds, (g) => g.groupId),
     baseById: byId(payload.bases, (b) => b.baseId),
     structureById: byId(payload.structures, (s) => s.instanceId),
-    containerById: byId(payload.containers, (c) => c.containerId),
+    containerById,
     charContainerById: byId(payload.charContainers, (c) => c.containerId),
     dynamicItemById: byId(payload.dynamicItems, (d) => d.localId),
 
@@ -108,12 +143,13 @@ export function buildSaveIndex(payload: SlimPayload): SaveIndex {
     palsByCharacterId: groupBy<Pal, string>(payload.pals, (p) =>
       p.characterId.toLowerCase(),
     ),
+    // Without the eggs: an egg on a farm is not something anybody built.
     structuresByBase: groupBy<Structure, Guid>(
-      payload.structures,
+      payload.structures.filter(standing),
       (s) => s.baseCampId,
     ),
     structuresByGuild: groupBy<Structure, Guid>(
-      payload.structures,
+      payload.structures.filter(standing),
       (s) => s.groupId,
     ),
     basesByGuild: groupBy(payload.bases, (b) => b.groupId),
@@ -122,6 +158,8 @@ export function buildSaveIndex(payload: SlimPayload): SaveIndex {
     containerByStructure,
     structureByContainer,
     containersByItem,
+    looseEggsByFarm: eggsByFarm,
+    looseEggFarm,
   }
 }
 

@@ -36,7 +36,9 @@ const EXPECTED = {
   campLevel: 23,
   markers: 15,
   pals: 3963,
-  structures: 3450,
+  // Without the 20 eggs waiting on a Breeding Farm, which the save records
+  // as structures and the index folds into the farm.
+  structures: 3430,
   organizations: 7,
   /** Distinct passive assets across the whole roster. */
   passives: 100,
