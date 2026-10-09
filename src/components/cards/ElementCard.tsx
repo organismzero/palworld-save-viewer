@@ -1,3 +1,4 @@
+import { speciesOf } from '../../domain/names.ts'
 import type { SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { BEATS, STRONG, WEAK } from '../../domain/typeChart.ts'
@@ -39,7 +40,7 @@ export function ElementCard({
   if (data) {
     pals = 0
     for (const pal of index.pals) {
-      const info = data.species[pal.characterId.toLowerCase()]
+      const info = speciesOf(data, pal)
       if (info?.element1 === el.name || info?.element2 === el.name) pals += 1
     }
   }

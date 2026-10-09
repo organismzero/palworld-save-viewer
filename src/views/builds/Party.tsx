@@ -8,6 +8,7 @@
  * says which container is their party.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import type { ReactNode } from 'react'
 
 import type { MountGap, OwnedRow, PartyAdvice } from '../../domain/recommend.ts'
@@ -42,7 +43,7 @@ function Unknown({ ctx }: { ctx: Ctx }) {
 
 function PalLink({ pal, ctx }: { pal: Pal; ctx: Ctx }) {
   const id = pal.characterId.toLowerCase()
-  const name = palName(pal, ctx.data.species[id])
+  const name = palName(pal, speciesOf(ctx.data, pal))
   return (
     <Jump
       view="pals"
@@ -198,8 +199,8 @@ export function TravelParty({
                 <span className="text-[11px] text-[var(--color-muted)]">
                   {g.carried
                     ? glider
-                      ? `ranks above the ${palName(g.carried.pal, ctx.data.species[g.carried.pal.characterId.toLowerCase()])} being carried`
-                      : `the party’s is ${palName(g.carried.pal, ctx.data.species[g.carried.pal.characterId.toLowerCase()])} at ${count(g.carried.speed)}`
+                      ? `ranks above the ${palName(g.carried.pal, speciesOf(ctx.data, g.carried.pal))} being carried`
+                      : `the party’s is ${palName(g.carried.pal, speciesOf(ctx.data, g.carried.pal))} at ${count(g.carried.speed)}`
                     : 'the party has none of this kind'}
                 </span>
               </div>

@@ -6,6 +6,7 @@
  * load a save and look.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import { ivTotal } from '../../domain/index.ts'
 import { palName } from '../../domain/palText.ts'
 import { conditions, workLevel, type PalPlace } from '../../domain/palState.ts'
@@ -32,7 +33,7 @@ export function filterPals(
   params: PalsParams,
   { index, data, place }: FilterContext,
 ): Pal[] {
-  const species = (p: Pal) => data?.species[p.characterId.toLowerCase()]
+  const species = (p: Pal) => speciesOf(data, p)
   const speciesName = (p: Pal) => species(p)?.name ?? p.characterId
   const ownerName = (p: Pal) =>
     (p.ownerPlayerUid && index.playerByUid.get(p.ownerPlayerUid)?.name) || ''

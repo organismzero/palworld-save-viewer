@@ -1,3 +1,4 @@
+import { speciesOf } from '../../domain/names.ts'
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ivTotal } from '../../domain/index.ts'
@@ -122,7 +123,7 @@ export function PlayerCard({
       {best && (
         <CardSection label="Best pal" hint={`IV ${ivTotal(best)} / 300`}>
           <span className="text-xs">
-            {palName(best, data?.species[best.characterId.toLowerCase()])}
+            {palName(best, speciesOf(data, best))}
             <span className="num ml-2 text-[var(--color-stamina)]">
               Lv.{best.level}
             </span>

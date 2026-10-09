@@ -29,7 +29,7 @@ import {
   workLevel,
 } from '../../domain/palState.ts'
 import { levelProgress } from '../../domain/guild.ts'
-import { baseNames } from '../../domain/names.ts'
+import { baseNames, speciesOf } from '../../domain/names.ts'
 import { GameIcon } from '../../components/GameIcon.tsx'
 import { CardTrigger } from '../../components/cards/CardTrigger.tsx'
 import { Jump, MapJump } from '../../components/Jump.tsx'
@@ -497,7 +497,7 @@ function PalCard({
   onSelect: (p: Pal) => void
 }) {
   const { data } = useRefdataStore()
-  const info = data?.species[pal.characterId.toLowerCase()]
+  const info = speciesOf(data, pal)
   const el = element(info?.element1)
   const owner = pal.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)?.name
@@ -637,7 +637,7 @@ function PalDetail({
   const ref = useRef<HTMLElement>(null)
   useEscape(pal !== undefined, onClose)
   useDrawerFocus(ref, pal !== undefined)
-  const info = pal ? data?.species[pal.characterId.toLowerCase()] : undefined
+  const info = pal ? speciesOf(data, pal) : undefined
   const owner = pal?.ownerPlayerUid
     ? index.playerByUid.get(pal.ownerPlayerUid)
     : undefined

@@ -7,6 +7,7 @@
  * pals: a guildmate's duplicate is not yours to put in the condenser.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import { useMemo } from 'react'
 
 import {
@@ -76,7 +77,7 @@ export function Condense({ ctx, more }: { ctx: Ctx; more: boolean }) {
 
 function Row({ row, ctx }: { row: CondenseRow; ctx: Ctx }) {
   const { keep } = row
-  const keepName = palName(keep, ctx.data.species[row.species])
+  const keepName = palName(keep, speciesOf(ctx.data, keep))
   return (
     <div className="grid gap-x-6 gap-y-2 py-3 lg:grid-cols-[13rem_1fr_15rem]">
       <CardTrigger

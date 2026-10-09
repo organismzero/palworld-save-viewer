@@ -36,7 +36,9 @@ const PST_REF = 'main'
 // 9: partner-skill and active-skill descriptions, element icons — for hover cards.
 // 10: partner-skill effects, ranch drops and a food flag — for the new Builds.
 // 11: passive descriptions lose their carriage returns — for the cheat sheet.
-const SLIM_VERSION = 11
+// 12: human NPCs, so a captured Zoe is not listed as `GrassBoss`; rows that
+// exist only as a boss; and Rayhound Cryst's icon path.
+const SLIM_VERSION = 12
 
 const CDN = `https://cdn.jsdelivr.net/gh/deafdudecomputers/PalworldSaveTools@${PST_REF}/resources`
 /** raw.githubusercontent serves text/plain and rate-limits; strictly a fallback. */
@@ -88,6 +90,14 @@ export interface SpeciesInfo {
   partnerEffects?: PassiveEffect[]
   /** Item ids it drops when assigned to a Ranch, lowercased. */
   ranchDrops?: string[]
+  /**
+   * A person, not a pal: a merchant, a syndicate thug, a tower boss out of her
+   * tower. They can be caught and put to work, so they turn up in a save's pals
+   * and need a name and a face; they have no element, no paldex number and no
+   * place in any breeding table, which is what keeps them out of every list
+   * of species to choose from.
+   */
+  human?: true
 }
 
 /**
@@ -307,7 +317,7 @@ export interface Refdata {
  * `skills` is here for the partner-skill text, whose placeholders name passives
  * by asset id — including internal ones `slimPassives` rightly throws away.
  */
-function slimCharacters(
+export function slimCharacters(
   raw: any,
   skills: any,
   items: any,
@@ -334,7 +344,7 @@ function slimCharacters(
       if (typeof level === 'number' && level > 0) work[id] = level
     }
     out[p.asset.toLowerCase()] = {
-      name: p.name ?? p.asset,
+      name: nameOf(p),
       element1: p.stats?.element_type1,
       element2: p.stats?.element_type2,
       rarity: p.stats?.rarity,
@@ -344,7 +354,7 @@ function slimCharacters(
       // `zukan ?? MAX_SAFE_INTEGER` ordering, which silently puts Blue Slime
       // and Boltmane at the top of every paldex-ordered list.
       zukan: p.stats?.zukan_index > 0 ? p.stats.zukan_index : undefined,
-      icon: p.icon,
+      icon: iconOf(p),
       work,
       partnerSkill: p.partner_skill,
       partnerSkillText: partnerSkillText(
@@ -359,7 +369,69 @@ function slimCharacters(
       ranchDrops: nonEmpty(ranchDrops(p.description, itemIds, byLength)),
     }
   }
+  // The people. `characters.json` lists them apart from the pals, and until
+  // they were read a captured one was shown under its asset id — `GrassBoss`
+  // for Zoe, `Hunter_Bat` for a Syndicate Thug. A pal of the same id wins,
+  // though there is none today.
+  for (const n of raw?.npcs ?? []) {
+    if (typeof n?.asset !== 'string') continue
+    const id = n.asset.toLowerCase()
+    if (out[id]) continue
+    const work: Record<string, number> = {}
+    for (const [job, level] of Object.entries<any>(
+      n.work_suitabilities ?? {},
+    )) {
+      if (typeof level === 'number' && level > 0) work[job] = level
+    }
+    out[id] = {
+      name: nameOf(n),
+      icon: iconOf(n),
+      work,
+      stats: slimStats(n.stats),
+      human: true,
+    }
+  }
+  // A save's `BOSS_Foo` is read as `Foo` with a flag, and looked up as `Foo`.
+  // Two dozen rows exist only in their `BOSS_` form: Panthalus's companion
+  // (`BOSS_KingWhale_otomo`), the boss-rush copies of the tower pals, and the
+  // wanted criminals who have no rank and file to be one of. Without a plain
+  // row of their own they resolved to nothing and were shown by asset id.
+  for (const [id, row] of Object.entries(out)) {
+    if (!id.startsWith('boss_')) continue
+    const plain = id.slice('boss_'.length)
+    if (out[plain]) continue
+    out[plain] = { ...row, name: row.name.replace(/\s*\(Boss\)$/, '') }
+  }
   return out
+}
+
+/**
+ * Icon paths upstream spells differently from the file they name.
+ *
+ * The CDN is case-sensitive and `characters.json` is written by hand in
+ * places. Rayhound Cryst's row asks for `T_Thunderdog_Ice…` and the file is
+ * `T_ThunderDog_Ice…`, so every one of them drew as a monogram. Checked
+ * against upstream's file list, it is the only path that differs from a real
+ * file by casing alone; the other rows without art have no file at all.
+ *
+ * Keyed by the path as upstream writes it, so that a correction there simply
+ * stops matching and this stops doing anything.
+ */
+const ICON_PATH_FIXES: Readonly<Record<string, string>> = {
+  '/icons/pals/T_Thunderdog_Ice_icon_normal.webp':
+    '/icons/pals/T_ThunderDog_Ice_icon_normal.webp',
+}
+
+function iconOf(row: any): string | undefined {
+  const icon: unknown = row?.icon
+  if (typeof icon !== 'string') return undefined
+  return ICON_PATH_FIXES[icon] ?? icon
+}
+
+/** A row's display name. Trimmed: upstream has `"Tetroise "`. */
+function nameOf(row: any): string {
+  const name = typeof row?.name === 'string' ? row.name.trim() : ''
+  return name || row.asset
 }
 
 function slimStats(raw: any): SpeciesStats | undefined {

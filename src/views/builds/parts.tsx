@@ -4,6 +4,7 @@
  * per-job worker sections. Shared by `BuildsView.tsx` and `ProductionBuilds.tsx`.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import { useMemo, type ReactNode } from 'react'
 
 import {
@@ -160,7 +161,7 @@ export function Owned({
                 focus={{
                   kind: 'pal',
                   id: r.pal.instanceId,
-                  label: palName(r.pal, ctx.data.species[id]),
+                  label: palName(r.pal, speciesOf(ctx.data, r.pal)),
                 }}
                 card={{ kind: 'pal', pal: r.pal }}
                 title="Open this pal in Pals"
@@ -174,7 +175,7 @@ export function Owned({
                   size={26}
                 />
                 <span className="min-w-0 truncate">
-                  {palName(r.pal, ctx.data.species[id])}
+                  {palName(r.pal, speciesOf(ctx.data, r.pal))}
                 </span>
               </Jump>
               {who && (

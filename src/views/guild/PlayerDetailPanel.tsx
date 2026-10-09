@@ -9,6 +9,7 @@
  * as an affordance — a drop target for exactly that file.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import { useMemo, useRef, useState } from 'react'
 
 import { ivTotal } from '../../domain/index.ts'
@@ -269,7 +270,7 @@ export function PlayerDetailPanel({
               </div>
               <ul className="space-y-1.5">
                 {topPals.map((pal) => {
-                  const info = data?.species[pal.characterId.toLowerCase()]
+                  const info = speciesOf(data, pal)
                   return (
                     <li
                       key={pal.instanceId}

@@ -33,7 +33,7 @@ import {
   worldPerPixel,
 } from '../../domain/coords.ts'
 import { baseLabel } from '../../domain/bases.ts'
-import { itemName } from '../../domain/names.ts'
+import { itemName, speciesOf } from '../../domain/names.ts'
 import { elementColor } from '../../lib/color.ts'
 import type {
   FogMask,
@@ -720,7 +720,7 @@ export class MapController {
     for (const pal of index.pals) {
       const at = place(pal.pos)
       if (!at) continue
-      const info = refdata?.species[pal.characterId.toLowerCase()]
+      const info = speciesOf(refdata, pal)
       add(
         {
           kind: 'pals',

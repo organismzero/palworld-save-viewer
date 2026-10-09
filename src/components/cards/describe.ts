@@ -7,6 +7,7 @@
  * and keeps its tests.
  */
 
+import { speciesOf } from '../../domain/names.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { WORK_TYPES, element } from '../../lib/color.ts'
 import { BEATS } from '../../domain/typeChart.ts'
@@ -26,7 +27,7 @@ export function describeCard(
   switch (desc.kind) {
     case 'pal': {
       const d = desc.raw ? undefined : data
-      const info = d?.species[desc.pal.characterId.toLowerCase()]
+      const info = speciesOf(d, desc.pal)
       const text = palTooltip(
         desc.pal,
         info,

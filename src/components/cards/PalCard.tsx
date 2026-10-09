@@ -1,3 +1,4 @@
+import { speciesOf } from '../../domain/names.ts'
 import type { Pal, SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { ivTotal } from '../../domain/index.ts'
@@ -26,7 +27,7 @@ export function PalCard({
   data: Refdata | undefined
   index: SaveIndex
 }) {
-  const info = data?.species[pal.characterId.toLowerCase()]
+  const info = speciesOf(data, pal)
   const name = palName(pal, info)
   const species = info?.name ?? pal.characterId
   const owner = pal.ownerPlayerUid

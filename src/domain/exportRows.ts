@@ -34,6 +34,7 @@ import {
   itemName,
   skillName,
   speciesName,
+  speciesOf,
   structureName,
 } from './names.ts'
 import { placeText, placer, workLevel } from './palState.ts'
@@ -62,14 +63,14 @@ export function palColumns(
   const place = placer(index)
   const bases = baseNames(index, refdata)
   const elements = (p: Pal) => {
-    const info = refdata?.species[p.characterId.toLowerCase()]
+    const info = speciesOf(refdata, p)
     return [info?.element1, info?.element2].filter(Boolean).join('; ')
   }
   const moves = (ids: string[]) =>
     ids.map((id) => skillName(refdata, id)).join('; ')
 
   return [
-    { header: 'name', value: (p) => palName(p, refdata?.species[p.characterId.toLowerCase()]) }, // prettier-ignore
+    { header: 'name', value: (p) => palName(p, speciesOf(refdata, p)) }, // prettier-ignore
     { header: 'species', value: (p) => speciesName(refdata, p.characterId) },
     { header: 'species_id', value: (p) => p.characterId },
     { header: 'nickname', value: (p) => p.nickname },

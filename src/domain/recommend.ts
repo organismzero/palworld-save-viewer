@@ -40,6 +40,7 @@
  * the ranking rather than inside it.
  */
 
+import { speciesOf } from './names.ts'
 import type {
   MountKind,
   PassiveEffect,
@@ -811,7 +812,7 @@ export function ownedMounts(
 ): OwnedMount[] {
   const rows: OwnedMount[] = []
   for (const pal of pals) {
-    const s = data.species[pal.characterId.toLowerCase()]
+    const s = speciesOf(data, pal)
     if (!s?.mount) continue
     rows.push({
       pal,
@@ -1016,9 +1017,7 @@ export function ownedProducers(
   const key = itemId.toLowerCase()
   return ownedWorkers(
     data,
-    pals.filter((p) =>
-      data.species[p.characterId.toLowerCase()]?.ranchDrops?.includes(key),
-    ),
+    pals.filter((p) => speciesOf(data, p)?.ranchDrops?.includes(key)),
     where,
     'MonsterFarm',
     spec,

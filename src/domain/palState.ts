@@ -10,6 +10,7 @@
  * get the same answers.
  */
 
+import { speciesOf } from './names.ts'
 import type { Refdata } from '../refdata/refdata.ts'
 import type { Guid, Pal, SaveIndex } from './types.ts'
 
@@ -221,7 +222,7 @@ export function learnedNotEquipped(pal: Pal): string[] {
  * the reference save sits on a job its species lacks), so one rule serves both.
  */
 export function workLevel(data: Refdata, pal: Pal, workId: string): number {
-  const base = data.species[pal.characterId.toLowerCase()]?.work?.[workId] ?? 0
+  const base = speciesOf(data, pal)?.work?.[workId] ?? 0
   if (base <= 0) return 0
   return base + (pal.workSuitabilityBonus[workId] ?? 0)
 }

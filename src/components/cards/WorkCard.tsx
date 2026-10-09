@@ -1,3 +1,4 @@
+import { speciesOf } from '../../domain/names.ts'
 import type { SaveIndex } from '../../domain/types.ts'
 import type { Refdata } from '../../refdata/refdata.ts'
 import { WORK_TYPES } from '../../lib/color.ts'
@@ -31,7 +32,7 @@ export function WorkCard({
   const byLevel = new Map<number, number>()
   if (data) {
     for (const pal of index.pals) {
-      const base = data.species[pal.characterId.toLowerCase()]?.work?.[id] ?? 0
+      const base = speciesOf(data, pal)?.work?.[id] ?? 0
       const level = base + (pal.workSuitabilityBonus[id] ?? 0)
       if (level > 0) byLevel.set(level, (byLevel.get(level) ?? 0) + 1)
     }

@@ -13,7 +13,7 @@ import {
   baseHealth,
   type AilingWorker,
 } from '../../domain/bases.ts'
-import { baseNames } from '../../domain/names.ts'
+import { baseNames, speciesOf } from '../../domain/names.ts'
 import { palName } from '../../domain/palText.ts'
 import type { Base, Guild, SaveIndex } from '../../domain/types.ts'
 import { Jump } from '../../components/Jump.tsx'
@@ -132,7 +132,7 @@ function Ailing({ ailing }: { ailing: AilingWorker[] }) {
   return (
     <ul className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-1.5">
       {ailing.slice(0, NAMED).map(({ pal, conditions }) => {
-        const name = palName(pal, data?.species[pal.characterId.toLowerCase()])
+        const name = palName(pal, speciesOf(data, pal))
         return (
           <li key={pal.instanceId} className="flex items-baseline gap-1.5">
             <Jump
