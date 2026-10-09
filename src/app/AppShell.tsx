@@ -44,7 +44,7 @@ const BuildsView = lazy(() =>
 const Tray = lazy(() =>
   import('./tray/Tray.tsx').then((m) => ({ default: m.Tray })),
 )
-import { useSaveStore } from '../store/saveStore.ts'
+import { loadAnother, useSaveStore } from '../store/saveStore.ts'
 import {
   flushSessionWrite,
   rememberPref,
@@ -352,7 +352,8 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const view = useHashSync()
   useShortcuts()
 
-  const { fileName, isSample, reset } = useSaveStore()
+  const fileName = useSaveStore((s) => s.fileName)
+  const isSample = useSaveStore((s) => s.isSample)
   const setPalette = useUiStore((s) => s.setPalette)
   const setSettings = useUiStore((s) => s.setSettings)
   const jumpSeq = useUiStore((s) => s.jumpSeq)
@@ -360,18 +361,6 @@ export function AppShell({ index }: { index: SaveIndex }) {
   const setTray = useUiStore((s) => s.setTray)
   const add = useFilePicker()
   const drop = useShellDrop()
-  const loadAnother = () => {
-    reset()
-    // The params described the world being closed. Left in place, the next
-    // save would open on this one's filters, selections and breeding target,
-    // most of which name things it does not contain.
-    useUiStore.getState().clearViewParams()
-    history.replaceState(
-      null,
-      '',
-      window.location.pathname + window.location.search,
-    )
-  }
 
   return (
     <div className="flex h-dvh flex-col" {...drop.handlers}>
@@ -529,9 +518,14 @@ export function AppShell({ index }: { index: SaveIndex }) {
         </main>
 
         {trayOpen && (
-          <Suspense fallback={null}>
-            <Tray index={index} />
-          </Suspense>
+          // Its own boundary. A pinned tray reopens on every load, so a sheet
+          // that threw under the root boundary would take the whole viewer
+          // down each time, with no way to reach the button that closes it.
+          <ErrorBoundary what="the tray">
+            <Suspense fallback={null}>
+              <Tray index={index} />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </div>
 
@@ -546,7 +540,11 @@ export function AppShell({ index }: { index: SaveIndex }) {
         onLoadAnother={loadAnother}
         onCopyLink={copyLink}
       />
-      <HoverCardLayer index={index} />
+      {/* A card that cannot draw should be a card that does not appear, not a
+          viewer replaced by an error. */}
+      <ErrorBoundary what="a hover card" fallback={() => null}>
+        <HoverCardLayer index={index} />
+      </ErrorBoundary>
       <AboutDialog />
       <SettingsDialog />
       <ShortcutsDialog />

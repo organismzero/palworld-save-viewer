@@ -11,6 +11,8 @@
  * project's entire premise.
  */
 
+import { notePath } from '../parse/sniff.ts'
+
 /**
  * Guards against someone dropping a whole SaveGames tree.
  *
@@ -36,6 +38,8 @@ export interface Dropped {
 export const TRUNCATED_NOTICE = `Stopped after ${MAX_FILES} files, so some of what was dropped was not read. Drop the rest separately.`
 
 interface FileSystemEntryLike {
+  /** From the root of the drop, with a leading slash. */
+  fullPath?: string
   isFile: boolean
   isDirectory: boolean
   file?: (cb: (f: File) => void, err: (e: unknown) => void) => void
@@ -88,7 +92,11 @@ async function walk(
 
   if (entry.isFile) {
     const file = await entryFile(entry)
-    if (file) out.push(file)
+    if (file) {
+      // Where it sat, which is how a live save is told from its own backups.
+      if (entry.fullPath) notePath(file, entry.fullPath)
+      out.push(file)
+    }
     return false
   }
 

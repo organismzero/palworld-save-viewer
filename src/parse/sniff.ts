@@ -211,12 +211,134 @@ export interface Partitioned {
   settings?: Sniffed
 }
 
+/* -------------------------------------------------------------------------
+   Where a file sat in what was dropped
+   ------------------------------------------------------------------------- */
+
+/**
+ * Paths for files that arrived by drag and drop.
+ *
+ * A folder chosen through the picker carries `webkitRelativePath`; one that was
+ * dropped does not, and the entry it came from is gone by the time anything
+ * here sees the `File`. So the drop walker writes each one down as it goes.
+ */
+const DROPPED_PATHS = new WeakMap<File, string>()
+
+export function notePath(file: File, path: string): void {
+  DROPPED_PATHS.set(file, path)
+}
+
+/** A file's path within the gesture that brought it, or just its name. */
+export function pathOf(file: File): string {
+  const path = DROPPED_PATHS.get(file) || file.webkitRelativePath || file.name
+  return path.replace(/^\/+/, '')
+}
+
+const depthOf = (path: string) => path.split('/').length - 1
+const dirOf = (path: string) =>
+  path.slice(0, Math.max(0, path.lastIndexOf('/')))
+
+/** The one nearest the top of what was dropped; the first, among equals. */
+function shallowest(of: Sniffed[]): Sniffed | undefined {
+  let best: Sniffed | undefined
+  let bestDepth = Infinity
+  for (const s of of) {
+    const d = depthOf(pathOf(s.file))
+    if (d < bestDepth) {
+      best = s
+      bestDepth = d
+    }
+  }
+  return best
+}
+
+export interface ChosenWorld {
+  level: Sniffed
+  /** Player saves and storage files to read onto it, one per file name. */
+  players: Sniffed[]
+  /** Other level saves, and copies of player files, from deeper in the drop. */
+  ignored: Sniffed[]
+}
+
+/**
+ * Which save in a drop is the world, and which files go with it.
+ *
+ * A world folder is not one world. The game keeps its autosaves inside it —
+ * `backup/world/<timestamp>/` — and each of those is a whole earlier copy: a
+ * `Level.sav`, a `LevelMeta.sav`, and a `Players/` of files with the same names
+ * as the live ones. Fifty-six of them, in the reference folder.
+ *
+ * So the level is the one **nearest the top**: the live save sits in the folder
+ * itself and every backup sits under it. Size, which this used to go by, picks
+ * whichever copy happened to be largest — an older one as readily as the live
+ * one — and then handed the other fifty-odd levels to the player reader, to be
+ * decompressed in full and refused one at a time.
+ *
+ * A player's file is the copy nearest that level, by the same reasoning. Names
+ * settle it only when the drop has no folders in it at all, where `Level.sav`
+ * is preferred and size is the last resort it always was.
+ */
+export function chooseWorld(savs: Sniffed[], storage: Sniffed[]): ChosenWorld {
+  const unnamed = savs.filter((s) => s.filenameUid === undefined)
+  // Nothing that could be a level: the caller only asks when something is, but
+  // the largest file is the least wrong answer if it ever does.
+  const candidates = unnamed.length > 0 ? unnamed : savs
+  const rank = (s: Sniffed) => {
+    const path = pathOf(s.file)
+    return [
+      depthOf(path),
+      /^level\.sav$/i.test(s.file.name) ? 0 : 1,
+      -s.file.size,
+    ]
+  }
+  const level = [...candidates].sort((a, b) => {
+    const [ra, rb] = [rank(a), rank(b)]
+    return ra[0]! - rb[0]! || ra[1]! - rb[1]! || ra[2]! - rb[2]!
+  })[0]!
+
+  const home = dirOf(pathOf(level.file))
+  const under = (path: string) => home === '' || path.startsWith(`${home}/`)
+
+  const byName = new Map<string, Sniffed>()
+  const ignored: Sniffed[] = candidates.filter((s) => s !== level)
+  const others = [
+    ...(unnamed.length > 0 ? savs.filter((s) => s.filenameUid) : []),
+    ...storage,
+  ]
+  for (const s of others) {
+    const key = s.file.name.toLowerCase()
+    const held = byName.get(key)
+    if (!held) {
+      byName.set(key, s)
+      continue
+    }
+    const [a, b] = [pathOf(held.file), pathOf(s.file)]
+    const better =
+      Number(under(b)) - Number(under(a)) || depthOf(a) - depthOf(b)
+    if (better > 0) {
+      ignored.push(held)
+      byName.set(key, s)
+    } else {
+      ignored.push(s)
+    }
+  }
+
+  return { level, players: [...byName.values()], ignored }
+}
+
 /** Sniffs a batch and splits it. */
 export function partition(files: File[]): Partitioned {
   const sniffed = files.map((f) => sniff(f))
-  const locals = sniffed.filter((s) => s.kind === 'local')
-  const metas = sniffed.filter((s) => s.kind === 'levelmeta')
-  const settings = sniffed.filter((s) => s.kind === 'settings')
+  // Nearest the top first, so that the copy kept below is the live one and not
+  // whichever backup the folder happened to list first.
+  const nearest = (kind: SaveKind) => {
+    const all = sniffed.filter((s) => s.kind === kind)
+    const top = shallowest(all)
+    return top ? [top, ...all.filter((s) => s !== top)] : all
+  }
+  const locals = nearest('local')
+  const metas = nearest('levelmeta')
+  const settings = nearest('settings')
 
   return {
     savs: sniffed.filter((s) => s.kind === 'sav'),

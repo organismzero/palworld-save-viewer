@@ -4,6 +4,8 @@ import {
   JSON_REFUSED,
   filenameUidOf,
   looksLikeDpsName,
+  chooseWorld,
+  notePath,
   partition,
   sniff,
 } from '@/parse/sniff.ts'
@@ -249,5 +251,92 @@ describe('the server settings file', () => {
     const got = sniff(fakeFile('GameUserSettings.ini').file)
     expect(got.kind).toBe('unknown')
     expect(got.reason).toMatch(/only \.ini/i)
+  })
+})
+
+/* -------------------------------------------------------------------------
+   Which save in a folder is the world
+   ------------------------------------------------------------------------- */
+
+describe('chooseWorld', () => {
+  const UID_A = 'A'.repeat(32)
+  const UID_B = 'B'.repeat(32)
+
+  /** A file as it would arrive from a dropped folder. */
+  function at(path: string, size = 1_000) {
+    const { file } = fakeFile(path.split('/').at(-1)!, size)
+    notePath(file, `/${path}`)
+    return sniff(file)
+  }
+  const split = (all: ReturnType<typeof sniff>[]) =>
+    chooseWorld(
+      all.filter((s) => s.kind === 'sav'),
+      all.filter((s) => s.kind === 'dps'),
+    )
+  const paths = (of: ReturnType<typeof sniff>[]) =>
+    of.map((s) => s.file).map((f) => `${f.name}:${f.size}`).sort() // prettier-ignore
+
+  it('takes the level nearest the top, not the largest', () => {
+    // The live save, and an older, larger autosave of the same world.
+    const live = at('World/Level.sav', 2_000)
+    const backup = at('World/backup/world/2026.08.11-15.31.41/Level.sav', 9_000)
+    const got = split([backup, live])
+    expect(got.level).toBe(live)
+    expect(got.ignored).toEqual([backup])
+    // And the other level is not handed on to be read as a player.
+    expect(got.players).toEqual([])
+  })
+
+  it('keeps one copy of each player file: the one beside that level', () => {
+    const got = split([
+      at(`World/backup/world/one/Players/${UID_A}.sav`, 1),
+      at('World/Level.sav'),
+      at(`World/Players/${UID_A}.sav`, 2),
+      at(`World/Players/${UID_A}_dps.sav`, 3),
+      at(`World/backup/world/two/Players/${UID_A}.sav`, 4),
+      at(`World/backup/world/one/Players/${UID_A}_dps.sav`, 5),
+      at('World/backup/world/one/Level.sav'),
+    ])
+    expect(paths(got.players)).toEqual([`${UID_A}.sav:2`, `${UID_A}_dps.sav:3`])
+    expect(got.ignored).toHaveLength(4)
+  })
+
+  it('keeps a player who is only in a backup, for the reader to judge', () => {
+    // Whether they are in this world is the worker's call, from the contents.
+    const got = split([
+      at('World/Level.sav'),
+      at(`World/backup/world/one/Players/${UID_B}.sav`),
+    ])
+    expect(got.players).toHaveLength(1)
+    expect(got.ignored).toEqual([])
+  })
+
+  it('goes by name, then size, when nothing was in a folder', () => {
+    const level = sniff(fakeFile('Level.sav', 10).file)
+    const other = sniff(fakeFile('Renamed.sav', 99).file)
+    const player = sniff(fakeFile(`${UID_A}.sav`, 500).file)
+    const got = chooseWorld([other, player, level], [])
+    expect(got.level).toBe(level)
+    expect(got.players).toEqual([player])
+    expect(got.ignored).toEqual([other])
+
+    const big = sniff(fakeFile('World-copy.sav', 99).file)
+    const small = sniff(fakeFile('Another.sav', 10).file)
+    expect(chooseWorld([small, big], []).level).toBe(big)
+  })
+})
+
+describe('partition — sidecar files in a folder with backups', () => {
+  it('keeps the LevelMeta nearest the top', () => {
+    const file = (path: string, size: number) => {
+      const { file } = fakeFile('LevelMeta.sav', size)
+      notePath(file, `/${path}`)
+      return file
+    }
+    const backup = file('World/backup/world/one/LevelMeta.sav', 1)
+    const live = file('World/LevelMeta.sav', 2)
+    const got = partition([backup, live])
+    expect(got.levelMeta?.file).toBe(live)
+    expect(got.rejected.map((s) => s.file)).toEqual([backup])
   })
 })

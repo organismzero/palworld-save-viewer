@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { Suspense, lazy } from 'react'
 
 import { DropZone } from './app/DropZone.tsx'
@@ -29,7 +30,21 @@ export function App() {
     fileBytes,
     reset,
     cancelLoad,
-  } = useSaveStore()
+  } = useSaveStore(
+    // Named, so a progress message or a ledger row this does not read is not
+    // a reason to render again.
+    useShallow((s) => ({
+      status: s.status,
+      index: s.index,
+      progressLabel: s.progressLabel,
+      progress: s.progress,
+      error: s.error,
+      fileName: s.fileName,
+      fileBytes: s.fileBytes,
+      reset: s.reset,
+      cancelLoad: s.cancelLoad,
+    })),
+  )
 
   if (status === 'loading') {
     return (

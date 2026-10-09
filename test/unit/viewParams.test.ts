@@ -74,6 +74,11 @@ describe('serialiseParams', () => {
     expect(serialiseParams({ q: 'a#b' })).toBe('q=a%23b')
     expect(serialiseParams({ q: 'a b' })).toBe('q=a%20b')
     expect(serialiseParams({ q: '100%' })).toBe('q=100%25')
+    // Harmless in a fragment, but `URLSearchParams` reads it back as a space.
+    expect(serialiseParams({ q: 'a+b' })).toBe('q=a%2Bb')
+    expect(new URLSearchParams(serialiseParams({ q: 'a+b' })).get('q')).toBe(
+      'a+b',
+    )
   })
 
   it('round-trips an escaped value through URLSearchParams', () => {

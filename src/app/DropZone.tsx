@@ -182,11 +182,16 @@ function ReopenButton() {
     <Button
       tone="signal"
       onClick={() => {
-        void restoreSession().then((ok) => {
-          if (ok) return
+        // A kept save that throws on the way back in is as gone as one that
+        // was evicted, and has to say so: a button that does nothing when
+        // pressed is the one outcome with no way forward.
+        const gone = () => {
           setDescriptor(undefined)
           setGone(true)
-        })
+        }
+        restoreSession().then((ok) => {
+          if (!ok) gone()
+        }, gone)
       }}
       title="Reopens the copy kept in this browser. Nothing is re-read from disk."
     >

@@ -63,8 +63,10 @@ export function parseHash(hash: string): { view?: string; qs: string } {
  * Entries to a query string, in a stable key order.
  *
  * Only the characters that would actually break a hash fragment are escaped —
- * `&`, `=`, `#`, `%` and whitespace. `,` is left alone on purpose; it is legal
- * in a fragment and it is what makes a multi-select param readable.
+ * `&`, `=`, `#`, `%` and whitespace — and `+`, which breaks nothing on the way
+ * out but is read back as a space by `URLSearchParams`. `,` is left alone on
+ * purpose; it is legal in a fragment and it is what makes a multi-select param
+ * readable.
  */
 export function serialiseParams(entries: Record<string, string>): string {
   return Object.keys(entries)
@@ -75,7 +77,7 @@ export function serialiseParams(entries: Record<string, string>): string {
 }
 
 function escapeValue(v: string): string {
-  return v.replace(/[&=#%\s]/g, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()}`) // prettier-ignore
+  return v.replace(/[&=#%+\s]/g, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()}`) // prettier-ignore
 }
 
 /** First 8 hex characters of a normalised GUID. */

@@ -16,7 +16,12 @@ import {
 import { explainParseError } from '../parse/explain.ts'
 import { parseWorldSettings } from '../parse/settings.ts'
 import { useUiStore } from './uiStore.ts'
-import { partition, type Partitioned, type Sniffed } from '../parse/sniff.ts'
+import {
+  chooseWorld,
+  partition,
+  type Partitioned,
+  type Sniffed,
+} from '../parse/sniff.ts'
 import type {
   FromWorker,
   Phase,
@@ -152,6 +157,16 @@ let nextRequestId = 1
  */
 let loadGen = 0
 
+/**
+ * Counts the times a world was closed on purpose — cancelled, or "Load
+ * another" — so a drop still working through its files can tell that the one
+ * it was for has gone.
+ *
+ * Apart from `loadGen`, which a drop bumps *itself* when it starts its level:
+ * the rest of that same drop is very much still wanted.
+ */
+let closeGen = 0
+
 /** Resolvers for in-flight requests, keyed by request id. */
 const pending = new Map<
   number,
@@ -189,11 +204,19 @@ function getWorker(): Worker {
     else entry.resolve(msg)
   })
 
-  worker.addEventListener('error', (ev) => {
-    const err = new Error(ev.message || 'worker failed')
+  const failAll = (message: string) => {
+    const err = new Error(message)
     for (const [, entry] of pending) entry.reject(err)
     pending.clear()
-  })
+  }
+  worker.addEventListener('error', (ev) =>
+    failAll(ev.message || 'worker failed'),
+  )
+  // A reply that could not be deserialised. Nothing says which request it was
+  // for, and left unanswered that request would wait for ever.
+  worker.addEventListener('messageerror', () =>
+    failAll('The reader sent back something that could not be read.'),
+  )
 
   return worker
 }
@@ -310,20 +333,14 @@ async function acceptSavs(
   set: Setter,
   get: () => SaveState,
 ) {
-  // Player files are named after their UID; a level save is not. Size cannot
-  // do this job — a compressed level save is under a megabyte, smaller than
-  // any cap that would still admit a real player file.
-  const named = savs.filter((s) => s.filenameUid !== undefined)
-  const unnamed = savs.filter((s) => s.filenameUid === undefined)
-
-  const sorted = unnamed.length > 0 ? unnamed : [...savs]
-  sorted.sort((a, b) => b.file.size - a.file.size)
-  const level = sorted[0]!
-  const dropped = [
-    ...sorted.slice(1),
-    ...(unnamed.length > 0 ? named : []),
-    ...storage,
-  ]
+  // Player files are named after their UID; a level save is not. Which of
+  // several level saves is the one meant, and which copy of each player's
+  // file goes with it, is `chooseWorld`'s to say.
+  const { level, players: dropped, ignored } = chooseWorld(savs, storage)
+  // Replacing a world that is open. Its filters, selections and breeding
+  // target name things the next one does not contain. Not on a first load:
+  // there the params came from a link, and are the point of it.
+  if (get().index) useUiStore.getState().clearViewParams()
   // Held from an earlier gesture, for this level — see `pendingPlayerFiles`.
   // Read before the reset below, which empties the list.
   const droppedNames = new Set(dropped.map((p) => p.file.name))
@@ -378,31 +395,96 @@ async function acceptSavs(
     return
   }
 
+  if (ignored.length > 0) {
+    useUiStore
+      .getState()
+      .notify(
+        `Opened the ${level.file.name} nearest the top of what was added, and left out ${ignored.length === 1 ? 'one file' : `${ignored.length} files`} from further down — backups, most likely.`,
+        { tone: 'warn', ttl: 12000 },
+      )
+  }
+
   if (players.length === 0) return
   await parsePlayerSavs(players, set)
 }
 
+/** Why a file that would not come off the disk is being refused. */
+const UNREADABLE =
+  'Could not be read. The file may have changed or moved since it was added — add it again.'
+
+const reasonOf = (err: unknown) =>
+  err instanceof Error && err.message ? err.message : UNREADABLE
+
+/** Flips ledger rows to rejected, keeping what is already known about each. */
+function refuse(set: Setter, names: string[], reason: string) {
+  set((s) => ({
+    playerFiles: {
+      ...s.playerFiles,
+      ...Object.fromEntries(
+        names.map((name) => [
+          name,
+          {
+            ...(s.playerFiles[name] ?? { fileName: name, bytes: 0 }),
+            status: 'rejected' as const,
+            reason,
+          },
+        ]),
+      ),
+    },
+  }))
+}
+
 /** Decompresses and merges raw player saves into the world already loaded. */
 async function parsePlayerSavs(players: Sniffed[], set: Setter) {
+  const gen = loadGen
   await adoptIfRestored()
+  if (gen !== loadGen) return
   set((s) => ({
     playerFiles: { ...s.playerFiles, ...ledgerFrom(players, 'parsing') },
   }))
 
-  const bufs = await Promise.all(
-    players.map(async (p) => ({
-      fileName: p.file.name,
-      buf: await p.file.arrayBuffer(),
-    })),
+  // Settled one by one: a file the game rewrote after it was picked refuses to
+  // be read, and that must cost its own row, not the whole folder's.
+  const read = await Promise.allSettled(
+    players.map((p) => p.file.arrayBuffer()),
   )
-  const msg = await request(
-    { t: 'parsePlayerSav', files: bufs },
-    bufs.map((b) => b.buf),
-  )
-  if (msg.t !== 'playersResult') return
+  if (gen !== loadGen) return
+  const bufs: { fileName: string; buf: ArrayBuffer }[] = []
+  const unread: string[] = []
+  read.forEach((r, i) => {
+    const fileName = players[i]!.file.name
+    if (r.status === 'fulfilled') bufs.push({ fileName, buf: r.value })
+    else unread.push(fileName)
+  })
+  if (unread.length > 0) refuse(set, unread, UNREADABLE)
+  if (bufs.length === 0) return
 
+  let msg: FromWorker
+  try {
+    msg = await request(
+      { t: 'parsePlayerSav', files: bufs },
+      bufs.map((b) => b.buf),
+    )
+  } catch (err) {
+    // Cancelled or overtaken: those rows are gone with the world they were for.
+    if (gen !== loadGen) return
+    refuse(
+      set,
+      bufs.map((b) => b.fileName),
+      reasonOf(err),
+    )
+    return
+  }
+  // Answered for a world that has since been closed or replaced.
+  if (msg.t !== 'playersResult' || gen !== loadGen) return
+
+  const before = useSaveStore.getState().index
+  const index = buildSaveIndex(msg.payload)
+  // The worker has this world, merge and all, so it does not need handing it
+  // again. Without this every later drop onto a restored world re-sent the lot.
+  if (adoptedFor && adoptedFor === before) adoptedFor = index
   set((s) => ({
-    index: buildSaveIndex(msg.payload),
+    index,
     playerFiles: {
       ...s.playerFiles,
       ...mergeReports(msg.reports, s.playerFiles),
@@ -449,11 +531,16 @@ async function parseLocal(file: File, set: Setter) {
     },
   }))
 
-  const buf = await file.arrayBuffer()
-  const msg = await request({ t: 'parseLocal', fileName: file.name, buf }, [
-    buf,
-  ])
-  if (msg.t !== 'localResult') return
+  const gen = loadGen
+  let msg: FromWorker
+  try {
+    const buf = await file.arrayBuffer()
+    msg = await request({ t: 'parseLocal', fileName: file.name, buf }, [buf])
+  } catch (err) {
+    if (gen === loadGen) refuse(set, [file.name], reasonOf(err))
+    return
+  }
+  if (msg.t !== 'localResult' || gen !== loadGen) return
 
   set((s) => {
     const row = {
@@ -544,11 +631,18 @@ async function applyLevelMeta(
   }
 
   set({ pendingLevelMetaFile: undefined })
-  const buf = await file.arrayBuffer()
-  const msg = await request({ t: 'parseLevelMeta', fileName: file.name, buf }, [
-    buf,
-  ])
-  if (msg.t !== 'levelMetaResult') return
+  const gen = loadGen
+  let msg: FromWorker
+  try {
+    const buf = await file.arrayBuffer()
+    msg = await request({ t: 'parseLevelMeta', fileName: file.name, buf }, [
+      buf,
+    ])
+  } catch (err) {
+    if (gen === loadGen) refuse(set, [file.name], reasonOf(err))
+    return
+  }
+  if (msg.t !== 'levelMetaResult' || gen !== loadGen) return
 
   set((s) => ({
     // A rejected drop leaves whatever was already read alone, as the other
@@ -607,7 +701,16 @@ async function applySettings(
   }
 
   set({ pendingSettingsFile: undefined })
-  const result = parseWorldSettings(await file.text(), file.name)
+  const gen = loadGen
+  let text: string
+  try {
+    text = await file.text()
+  } catch {
+    if (gen === loadGen) refuse(set, [file.name], UNREADABLE)
+    return
+  }
+  if (gen !== loadGen) return
+  const result = parseWorldSettings(text, file.name)
   set((s) => ({
     // A refused file leaves settings already read alone, as the others do.
     worldSettings: result.ok ? result.settings : s.worldSettings,
@@ -669,6 +772,11 @@ export const useSaveStore = create<SaveState>((set, get) => ({
     // A new world invalidates everything — stale container ids from a previous
     // save would silently mis-attribute against the new one.
     worker?.postMessage({ t: 'dropRaw' } satisfies ToWorker)
+    // And everything still on its way in was for the world being closed: a
+    // player merge that lands after this would put it back, behind the landing
+    // screen, for the next file to be merged into.
+    loadGen++
+    closeGen++
     set({
       status: 'idle',
       index: undefined,
@@ -691,6 +799,7 @@ export const useSaveStore = create<SaveState>((set, get) => ({
 
   cancelLoad: () => {
     loadGen++
+    closeGen++
     // Terminated, not asked to stop: the read is one synchronous pass that
     // would not see a message until it was over. The next load starts a fresh
     // worker, which is cheap beside the parse it was about to do.
@@ -711,13 +820,33 @@ export const useSaveStore = create<SaveState>((set, get) => ({
    * same call — so it is applied last, after the rest has settled.
    */
   async acceptFiles(files) {
-    const parts = await partition(files)
-    await ingestWorld(parts, set, get)
+    const parts = partition(files)
+    // Every stage runs whatever became of the one before, and none of them is
+    // allowed to reject: every caller fires this and walks away, so a failure
+    // let out of here is a row left saying "parsing" for good and nothing said.
+    const closes = closeGen
+    const stage = async (run: () => Promise<void>) => {
+      // Cancelled, or "Load another": the rest of this drop described a world
+      // nobody is waiting for. Carried on with, its sidecar files would be
+      // held and then attached to whichever world was opened next.
+      if (closes !== closeGen) return
+      try {
+        await run()
+      } catch (err) {
+        console.warn('[psv] A file could not be added.', err)
+        useUiStore
+          .getState()
+          .notify('Something that was added could not be read.', {
+            tone: 'warn',
+          })
+      }
+    }
+    await stage(() => ingestWorld(parts, set, get))
     // After `ingestWorld`, not before: that replaces the ingestion ledger
     // wholesale, so an entry written earlier would be dropped on the floor.
-    await applyLevelMeta(parts.levelMeta, set, get)
-    await applySettings(parts.settings, set, get)
-    await applyLocal(parts.local, set, get)
+    await stage(() => applyLevelMeta(parts.levelMeta, set, get))
+    await stage(() => applySettings(parts.settings, set, get))
+    await stage(() => applyLocal(parts.local, set, get))
   },
 }))
 
@@ -807,4 +936,22 @@ async function ingestWorld(
       unusable?.reason ??
       'Nothing here looks like a Palworld save. Drop the world’s Level.sav.',
   })
+}
+
+/**
+ * Close this world to open a different one.
+ *
+ * More than `reset`: the view params described the world being closed, and
+ * left in place the next save would open on this one's filters, selections and
+ * breeding target, most of which name things it does not contain. Every "Load
+ * another" goes through here so that none of them forgets.
+ */
+export function loadAnother(): void {
+  useSaveStore.getState().reset()
+  useUiStore.getState().clearViewParams()
+  history.replaceState(
+    null,
+    '',
+    window.location.pathname + window.location.search,
+  )
 }

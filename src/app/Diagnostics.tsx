@@ -9,6 +9,7 @@
  * it did not.
  */
 
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useRef, useState } from 'react'
 
 import type { SaveIndex } from '../domain/types.ts'
@@ -23,7 +24,18 @@ export function Diagnostics({ index }: { index: SaveIndex }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const { fileName, fileBytes, timings, playerFiles, localData, restoredFrom } =
-    useSaveStore()
+    useSaveStore(
+      // Named, so a progress message or a ledger row this does not read is not
+      // a reason to render again.
+      useShallow((s) => ({
+        fileName: s.fileName,
+        fileBytes: s.fileBytes,
+        timings: s.timings,
+        playerFiles: s.playerFiles,
+        localData: s.localData,
+        restoredFrom: s.restoredFrom,
+      })),
+    )
   const s = index.stats
 
   // A popover that only closes via its own button is a trap on touch.

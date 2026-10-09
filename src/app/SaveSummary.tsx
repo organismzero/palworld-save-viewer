@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import {
   HEADLINE_SETTINGS,
   changedRates,
@@ -16,9 +17,9 @@ import { CardTrigger } from '../components/cards/CardTrigger.tsx'
 import {
   bytes,
   count,
+  beforeSave,
   relativeTime,
   saveClock,
-  ticksToDate,
 } from '../lib/format.ts'
 import { formatMapPos, posToMap } from '../domain/coords.ts'
 import {
@@ -26,7 +27,11 @@ import {
   lastSeenBasis,
   lastSeenFor,
 } from '../domain/lastSeen.ts'
-import { useSaveStore, type PlayerFileState } from '../store/saveStore.ts'
+import {
+  loadAnother,
+  useSaveStore,
+  type PlayerFileState,
+} from '../store/saveStore.ts'
 import { Button } from '../components/controls.tsx'
 import { useFilePicker } from './filePicker.tsx'
 import { memberRole } from '../lib/roles.ts'
@@ -67,8 +72,19 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
     levelMeta,
     worldSettings,
     restoredFrom,
-    reset,
-  } = useSaveStore()
+  } = useSaveStore(
+    // Named, so a progress message or a ledger row this does not read is not
+    // a reason to render again.
+    useShallow((s) => ({
+      fileName: s.fileName,
+      fileBytes: s.fileBytes,
+      timings: s.timings,
+      localData: s.localData,
+      levelMeta: s.levelMeta,
+      worldSettings: s.worldSettings,
+      restoredFrom: s.restoredFrom,
+    })),
+  )
 
   // The save's own record of when it was written, from `LevelMeta.sav`. Distinct
   // from `restoredFrom`, which is when *this browser* stored a snapshot, and from
@@ -127,7 +143,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 .join(' · ')}
             </p>
           </div>
-          <Button onClick={reset}>Load another</Button>
+          <Button onClick={loadAnother}>Load another</Button>
         </header>
 
         {/* First, above the overview: what the numbers below are computed from
@@ -420,7 +436,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             rows={speciesCounts(index)
               .slice(0, 12)
               .map(({ id, count: n }) => {
-                const pals = index.palsByCharacterId.get(id) ?? []
+                const pals = index.palsByCharacterId.get(id.toLowerCase()) ?? []
                 const best = pals.reduce((a, b) =>
                   ivTotal(b) > ivTotal(a) ? b : a,
                 )
@@ -478,7 +494,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                         <PassiveChip key={name} name={name} />
                       ))}
                 </span>,
-                relativeTime(ticksToDate(p.ownedTime)),
+                beforeSave(p.ownedTime, index.meta.savedAtTicks),
               ])}
           />
         </section>
@@ -549,7 +565,16 @@ function FilesPanel({ index }: { index: SaveIndex }) {
     localData,
     levelMeta,
     worldSettings,
-  } = useSaveStore()
+  } = useSaveStore(
+    useShallow((s) => ({
+      fileName: s.fileName,
+      fileBytes: s.fileBytes,
+      playerFiles: s.playerFiles,
+      localData: s.localData,
+      levelMeta: s.levelMeta,
+      worldSettings: s.worldSettings,
+    })),
+  )
   const changed = worldSettings ? changedRates(worldSettings) : []
   const s = index.stats
   const writtenAt = saveClock(levelMeta?.savedAtTicks)
