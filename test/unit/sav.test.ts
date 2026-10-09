@@ -16,7 +16,7 @@ import {
   isDecodable,
   readContainer,
 } from '@/parse/sav/container.ts'
-import { decodeSav } from '@/parse/sav/decode.ts'
+import { decodeSav, inflate } from '@/parse/sav/decode.ts'
 
 /**
  * Builds a container by hand.
@@ -174,5 +174,56 @@ describe('decodeSav', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('malformed')
+  })
+})
+
+describe('decodeSav — headers that are not what they seem', () => {
+  it('inflates a PlZ once when its type byte says single zlib', async () => {
+    // The reference implementation keys the second pass on the type byte
+    // (0x32), not on the magic.
+    const body = new Uint8Array(deflateSync(PAYLOAD))
+    const out = new Uint8Array(12 + body.length)
+    const view = new DataView(out.buffer)
+    view.setUint32(0, PAYLOAD.length, true)
+    view.setUint32(4, body.length, true)
+    out.set([0x50, 0x6c, 0x5a, 0x31], 8) // 'PlZ', type 0x31
+    out.set(body, 12)
+
+    const result = await decodeSav(out.buffer)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.gvas).toEqual(PAYLOAD)
+  })
+
+  it('refuses an absurd declared size before trying to decompress', async () => {
+    // Handed to Oodle, `size + 64` wraps and corrupts the WASM heap for every
+    // decode after it; see the golden suite for that half.
+    const buf = buildSav(PAYLOAD, 'PlM')
+    new DataView(buf).setUint32(0, 0xffff_fff0, true)
+    const result = await decodeSav(buf)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('malformed')
+    expect(result.message).not.toMatch(/Oodle|out of bounds/i)
+  })
+
+  it('stops inflating once the output passes the declared length', async () => {
+    // 64 MB of zeros is about 62 KB of zlib. Buffered whole and checked
+    // afterwards, all 64 MB is allocated before the file is refused.
+    const bomb = new Uint8Array(deflateSync(new Uint8Array(64 * 1024 * 1024)))
+    const got = await inflate(bomb, 100)
+    expect(got.overran).toBe(true)
+    expect(got.bytes).toHaveLength(0)
+    expect(got.produced).toBeLessThan(4 * 1024 * 1024)
+  })
+
+  it('refuses a save that inflates to more than its header says', async () => {
+    const buf = buildSav(new Uint8Array(8 * 1024 * 1024), 'CNK')
+    new DataView(buf).setUint32(12, 100, true)
+    const result = await decodeSav(buf)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('malformed')
+    expect(result.message).toMatch(/header says 100/)
   })
 })

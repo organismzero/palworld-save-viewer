@@ -128,7 +128,9 @@ function readMask(
 
   const pixels = bytes.length / RGBA
   const size = Math.round(Math.sqrt(pixels))
-  if (!Number.isInteger(pixels) || size * size !== pixels) {
+  // Zero bytes is a square too, of side nothing — and a mask with no pixels has
+  // no explored fraction and nothing to draw.
+  if (pixels === 0 || !Number.isInteger(pixels) || size * size !== pixels) {
     warn.add('malformed-map-mask', `${key} is ${bytes.length} bytes`)
     return undefined
   }

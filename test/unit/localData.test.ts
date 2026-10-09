@@ -192,6 +192,26 @@ describe('readLocalData', () => {
     expect(warn.list()[0]?.kind).toBe('malformed-map-mask')
   })
 
+  it('reports an empty mask rather than returning one with no pixels', () => {
+    // Nothing is a perfect square too, and a mask of side 0 has no explored
+    // fraction and cannot be drawn.
+    const { payload, warn } = read({
+      WorldMapUISaveDataMap: {
+        type: 'MapProperty',
+        value: [
+          {
+            key: 'MainMap',
+            value: {
+              MaskTextureData: { value: { values: new Uint8Array(0) } },
+            },
+          },
+        ],
+      },
+    })
+    expect(payload.fog).toEqual([])
+    expect(warn.list()[0]?.kind).toBe('malformed-map-mask')
+  })
+
   it('reports a mask keyed by a map it has never heard of', () => {
     const { payload, warn } = read({
       WorldMapUISaveDataMap: {

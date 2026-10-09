@@ -17,6 +17,7 @@ import {
   containerLocation,
   nearestLandmark,
   searchItems,
+  MAX_GRID_CELLS,
   slotGridSize,
   slotsByIndex,
   storageTotals,
@@ -90,6 +91,13 @@ describe('slotGridSize', () => {
 
   it('gives an empty container a single row', () => {
     expect(slotGridSize([], 6)).toBe(6)
+  })
+
+  it('does not take a slot index of fifty million at its word', () => {
+    // The index is whatever the file says, and the grid draws a cell per slot.
+    const size = slotGridSize([stack(0), stack(50_000_000)], 6)
+    expect(size).toBeLessThanOrEqual(MAX_GRID_CELLS)
+    expect(size % 6).toBe(0)
   })
 })
 

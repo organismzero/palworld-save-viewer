@@ -103,6 +103,9 @@ async function readPlayerBatch(
 
   progress('players', `Reading ${files.length} player saves`)
   for (const { fileName, buf } of files) {
+    // A level save handled while this batch was yielding has replaced the
+    // world. Stop before writing another world's players into its tables.
+    if (payload !== world) break
     try {
       if (looksLikeDpsName(fileName)) {
         reports.push(readStorage(await savTree(buf), fileName, world, warn))
@@ -264,16 +267,42 @@ async function handleParsePlayerSav(
     return
   }
 
-  const { reports, warn } = await readPlayerBatch(files, payload)
+  // Held, because the batch below yields per file and a level save handled in
+  // one of those gaps replaces the module's `payload`. These files were read
+  // against this world; merging them onto whatever is there afterwards would
+  // put one world's players on another.
+  const world = payload
+  try {
+    const { reports, warn } = await readPlayerBatch(files, world)
+    if (payload !== world) {
+      post({
+        t: 'error',
+        id,
+        phase: 'players',
+        message:
+          'Another save was opened while these player saves were being read, so they were not added.',
+      })
+      return
+    }
 
-  progress('merge', 'Re-deriving ownership')
-  layStored(payload)
-  mergePlayerDetails(
-    payload,
-    [...details.values()],
-    [...carriedWarnings, ...warn.list()],
-  )
-  post({ t: 'playersResult', id, payload, reports })
+    progress('merge', 'Re-deriving ownership')
+    layStored(world)
+    mergePlayerDetails(
+      world,
+      [...details.values()],
+      [...carriedWarnings, ...warn.list()],
+    )
+    post({ t: 'playersResult', id, payload: world, reports })
+  } catch (err) {
+    // Always answered: the caller is awaiting this id and has rows on screen
+    // saying "parsing".
+    post({
+      t: 'error',
+      id,
+      phase: 'players',
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
 }
 
 /**

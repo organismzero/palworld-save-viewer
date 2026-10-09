@@ -22,7 +22,9 @@
 
 export type Json = unknown
 
-const decoder = new TextDecoder('utf-8')
+// Fatal, so that bytes which are not UTF-8 throw and `fstring` can fall back
+// to latin1. The default substitutes U+FFFD and never throws.
+const decoder = new TextDecoder('utf-8', { fatal: true })
 const utf16 = new TextDecoder('utf-16le')
 const ascii = new TextDecoder('latin1')
 
@@ -52,6 +54,16 @@ export class FArchiveReader {
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   }
 
+  /**
+   * Struct arrays whose elements are only worth keeping some of the time,
+   * keyed by the array's property path.
+   *
+   * An element still has to be read — the format gives a struct no length to
+   * skip by — but one the filter turns down is let go at once instead of being
+   * held until the whole tree is built.
+   */
+  elementFilters: Readonly<Record<string, (value: Json) => boolean>> = {}
+
   /** A reader over a slice, sharing the hint and custom-property registries. */
   sub(bytes: Uint8Array): FArchiveReader {
     return new FArchiveReader(bytes, this.typeHints, this.customProperties)
@@ -65,10 +77,42 @@ export class FArchiveReader {
     return this.offset >= this.size
   }
 
+  /**
+   * Throws rather than handing back a short read. `subarray` clamps silently,
+   * and a reader that carries on past the end turns a truncated or hostile
+   * file into plausible-looking nonsense instead of an error.
+   */
   read(n: number): Uint8Array {
+    this.need(n)
     const out = this.bytes.subarray(this.offset, this.offset + n)
     this.offset += n
     return out
+  }
+
+  private need(n: number): void {
+    if (n < 0 || this.offset + n > this.size) {
+      throw new RangeError(
+        `Read of ${n} bytes at offset ${this.offset} runs past the end of the data (${this.size} bytes).`,
+      )
+    }
+  }
+
+  /**
+   * A count read from the file, checked against what is left to read.
+   *
+   * Every element of every array, map and set costs at least one byte, so a
+   * count larger than the bytes remaining cannot be honest. Checked before
+   * allocating: the count is a u32, and four billion slots is a lot to ask for
+   * on a file's say-so.
+   */
+  count(): number {
+    const count = this.u32()
+    if (count > this.size - this.offset) {
+      throw new RangeError(
+        `A count of ${count} at offset ${this.offset - 4} is more than the ${this.size - this.offset} bytes left could hold.`,
+      )
+    }
+    return count
   }
 
   readToEnd(): Uint8Array {
@@ -76,6 +120,7 @@ export class FArchiveReader {
   }
 
   skip(n: number): void {
+    this.need(n)
     this.offset += n
   }
 
@@ -178,7 +223,7 @@ export class FArchiveReader {
   }
 
   tarray<T>(read: (r: FArchiveReader) => T): T[] {
-    const count = this.u32()
+    const count = this.count()
     const out: T[] = new Array(count)
     for (let i = 0; i < count; i++) out[i] = read(this)
     return out
@@ -386,7 +431,7 @@ export class FArchiveReader {
     const valueType = this.fstring()
     const id = this.optionalGuid()
     this.u32()
-    const count = this.u32()
+    const count = this.count()
 
     const keyPath = `${path}.Key`
     const keyStructType =
@@ -418,7 +463,7 @@ export class FArchiveReader {
     const setType = this.fstring()
     const id = this.optionalGuid()
     this.u32()
-    const count = this.u32()
+    const count = this.count()
     let structType: string | null = null
     let values: Json[]
     if (setType === 'StructProperty') {
@@ -503,7 +548,7 @@ export class FArchiveReader {
     size: number,
     path: string,
   ): Record<string, Json> {
-    const count = this.u32()
+    const count = this.count()
     if (arrayType === 'StructProperty') {
       const propName = this.fstring()
       const propType = this.fstring()
@@ -511,9 +556,13 @@ export class FArchiveReader {
       const typeName = this.fstring()
       const id = this.guid()
       this.skip(1)
+      const keep = this.elementFilters[path]
       const values: Json[] = new Array(count)
       for (let i = 0; i < count; i++) {
-        values[i] = this.structValue(typeName, `${path}.${propName}`)
+        const value = this.structValue(typeName, `${path}.${propName}`)
+        // A dropped element leaves `null` behind, so positions still mean what
+        // they meant in the file.
+        values[i] = !keep || keep(value) ? value : null
       }
       return {
         prop_name: propName,

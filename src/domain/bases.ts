@@ -117,11 +117,25 @@ export function storageTotals(
  * look deceptively exactly full.
  */
 export function slotGridSize(slots: ItemStack[], columns: number): number {
-  if (slots.length === 0) return columns
-  const highest = Math.max(...slots.map((s) => s.slot))
+  let highest = -1
+  for (const s of slots) {
+    if (Number.isFinite(s.slot) && s.slot > highest) highest = s.slot
+  }
+  if (highest < 0) return columns
   const rows = Math.ceil((highest + 1) / columns)
-  return (rows + 1) * columns
+  // The index is a raw i32 from the file and the grid draws one cell per slot,
+  // so one stack claiming slot fifty million must not be taken at its word.
+  return Math.min(
+    (rows + 1) * columns,
+    MAX_GRID_CELLS - (MAX_GRID_CELLS % columns),
+  )
 }
+
+/**
+ * The most cells a container grid will draw. Far above any real container —
+ * the largest in the reference save has a few dozen slots.
+ */
+export const MAX_GRID_CELLS = 1200
 
 /** Occupied slots by index, for rendering a grid with its gaps intact. */
 export function slotsByIndex(slots: ItemStack[]): Map<number, ItemStack> {

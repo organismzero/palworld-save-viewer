@@ -229,3 +229,36 @@ describe('propertiesUntilEnd', () => {
     )
   })
 })
+
+/* -------------------------------------------------------------------------
+   Running off the end
+   ------------------------------------------------------------------------- */
+
+describe('reading past the end of the bytes', () => {
+  it('throws rather than handing back a short read', () => {
+    // `subarray` clamps silently; left to it, this returns two bytes and moves
+    // the offset past the end.
+    expect(() => reader([1, 2]).read(4)).toThrow()
+  })
+
+  it('throws on a GUID with fewer than 16 bytes left', () => {
+    expect(() => reader([1, 2, 3]).guid()).toThrow()
+  })
+
+  it('refuses an array count the remaining bytes cannot hold', () => {
+    // The count comes straight from the file. A thousand here; the format
+    // allows four billion, and each one costs a string whether or not there
+    // are bytes behind it.
+    const data = bytes(u32(1000), new Array<number>(16).fill(0))
+    expect(() => reader(data).tarray((r) => r.guid())).toThrow()
+  })
+})
+
+describe('fstring — bytes that are not UTF-8', () => {
+  it('falls back to latin1 instead of a replacement character', () => {
+    // 0xE9 alone is not valid UTF-8. Only a fatal decoder throws on it, and
+    // the fallback depends on that throw.
+    const data = bytes(u32(4), [0x63, 0x61, 0xe9], [0])
+    expect(reader(data).fstring()).toBe('caé')
+  })
+})
