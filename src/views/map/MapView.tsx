@@ -1,9 +1,11 @@
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
 } from 'react'
 
 import type { SaveIndex } from '../../domain/types.ts'
@@ -114,7 +116,6 @@ export function MapView({ index }: { index: SaveIndex }) {
   const [resolved, setSelected] = useState<MapEntity | undefined>()
   // Nothing wanted is nothing selected, whatever was resolved last.
   const selected = wanted ? resolved : undefined
-  const [cursor, setCursor] = useState<{ mx: number; my: number }>()
   const [filterOpen, setFilterOpen] = useState(true)
   const [query, setQuery] = useState('')
   const [counts, setCounts] = useState<Record<LayerId, number>>()
@@ -359,7 +360,9 @@ export function MapView({ index }: { index: SaveIndex }) {
    * Resolve the link's selection against whatever is plotted now.
    *
    * After the client-data effect above, so a pin named in a link is on the map
-   * by the time it is looked for.
+   * by the time it is looked for. And again whenever that data changes: the
+   * pins are rebuilt from it, so the entity held from before describes a marker
+   * that is gone, and the pin it named may not be in the new file at all.
    */
   const wantedLayer = wanted?.layer
   const wantedId = wanted?.id
@@ -383,23 +386,39 @@ export function MapView({ index }: { index: SaveIndex }) {
     // A link with a selection and no position means "show me this".
     if (!restored.current && !viewportRef.current) controller.focus(entity)
     restored.current = true
-  }, [wantedLayer, wantedId, mounted, notify, setParams])
+  }, [wantedLayer, wantedId, localData, mounted, notify, setParams])
 
   /**
    * PNG export. Held as the in-flight scope rather than a boolean so the
    * button that was pressed is the one that shows it is working.
    */
   const [saving, setSaving] = useState<'viewport' | 'island'>()
+  /** How far through loading its tiles an island export is, as a percentage. */
+  const [savingPct, setSavingPct] = useState<number>()
   const fileName = useSaveStore((s) => s.fileName)
   const savePng = async (scope: 'viewport' | 'island') => {
     const controller = controllerRef.current
-    if (!controller) return
+    if (!controller?.ready) return
     setSaving(scope)
     try {
-      const blob = await controller.exportImage(scope)
-      downloadBlob(exportName(fileName, `map-${scope}`, 1, 'png'), blob)
+      const blob = await controller.exportImage(scope, (done, total) =>
+        // A whole level of tiles is a few hundred of these; the same number
+        // set again is not a render.
+        setSavingPct(Math.floor((done / total) * 100)),
+      )
+      // Nothing back means the map was torn down part-way, which is nobody's
+      // error: the art or a player save arrived and it is being rebuilt.
+      if (blob) {
+        downloadBlob(exportName(fileName, `map-${scope}`, 1, 'png'), blob)
+      }
+    } catch {
+      // It used to fail in silence, and a button that does nothing looks
+      // broken. The usual cause is a lost graphics context or an image too
+      // large for it.
+      notify('Could not save the map as a PNG.', { tone: 'warn' })
     } finally {
       setSaving(undefined)
+      setSavingPct(undefined)
     }
   }
 
@@ -535,9 +554,6 @@ export function MapView({ index }: { index: SaveIndex }) {
         aria-label="World map. Arrow keys pan, plus and minus zoom."
         onKeyDown={onMapKey}
         className="absolute inset-0 outline-none after:pointer-events-none after:absolute after:inset-0 focus-visible:after:border-2 focus-visible:after:border-[var(--color-signal)]"
-        onPointerMove={(e) =>
-          setCursor(controllerRef.current?.screenToMap(e.clientX, e.clientY))
-        }
         // The map moves under a still pointer on zoom, and a card left behind
         // would be describing whatever used to be there.
         onWheel={hideCardAt}
@@ -813,7 +829,9 @@ export function MapView({ index }: { index: SaveIndex }) {
                   }
                 >
                   {saving === scope
-                    ? '…'
+                    ? savingPct === undefined
+                      ? '…'
+                      : `${savingPct}%`
                     : scope === 'viewport'
                       ? 'view'
                       : 'all'}
@@ -830,11 +848,7 @@ export function MapView({ index }: { index: SaveIndex }) {
       {/* One dark bar rather than bare text: this sits directly on map art,
           which is warm, bright and completely unpredictable. */}
       <div className="absolute bottom-2 left-3 flex items-center gap-4 rounded-control border border-[var(--color-line)] bg-[rgb(4_10_15/0.85)] px-2 py-1">
-        <span className="num text-[11px] text-[var(--color-muted)]">
-          {cursor
-            ? `${Math.round(cursor.mx)}, ${Math.round(cursor.my)}`
-            : '—, —'}
-        </span>
+        <CursorReadout hostRef={hostRef} controllerRef={controllerRef} />
         <PromptBar className="gap-x-4 p-0 text-[11px] text-[var(--color-muted)]">
           <span className="flex items-center gap-1.5">
             <KeyHint>F</KeyHint>Filter
@@ -895,6 +909,60 @@ export function MapView({ index }: { index: SaveIndex }) {
     </div>
   )
 }
+
+/**
+ * The map coordinates under the pointer.
+ *
+ * Its own component, writing its text straight into the DOM: held in the
+ * view's state it re-rendered the whole view, legend and search results and
+ * all, on every pointermove. Here a move costs one text node, at most once a
+ * frame. Memoised on two refs, so it never renders a second time and React
+ * never has a reason to put the placeholder back.
+ */
+const CursorReadout = memo(function CursorReadout({
+  hostRef,
+  controllerRef,
+}: {
+  hostRef: RefObject<HTMLDivElement | null>
+  controllerRef: RefObject<MapController | null>
+}) {
+  const textRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let frame = 0
+    let at = { x: 0, y: 0 }
+    const write = () => {
+      frame = 0
+      const controller = controllerRef.current
+      // Between controllers there is no map to ask, and the readout says so.
+      const c = controller?.ready
+        ? controller.screenToMap(at.x, at.y)
+        : undefined
+      if (textRef.current) {
+        textRef.current.textContent = c
+          ? `${Math.round(c.mx)}, ${Math.round(c.my)}`
+          : '—, —'
+      }
+    }
+    const onMove = (e: PointerEvent) => {
+      at = { x: e.clientX, y: e.clientY }
+      if (!frame) frame = requestAnimationFrame(write)
+    }
+    host.addEventListener('pointermove', onMove)
+    return () => {
+      host.removeEventListener('pointermove', onMove)
+      cancelAnimationFrame(frame)
+    }
+  }, [hostRef, controllerRef])
+
+  return (
+    <span ref={textRef} className="num text-[11px] text-[var(--color-muted)]">
+      —, —
+    </span>
+  )
+})
 
 /**
  * The affordance for a file that is always a second drop.

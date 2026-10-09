@@ -8,12 +8,18 @@
  * this sprite count on *software* rendering, so the budget is not tight.
  */
 
+// Pixi compiles its shader and uniform sync code with `new Function`, which
+// the page's Content-Security-Policy does not allow. Despite the name, this
+// installs the versions that do without it. It has to load before a renderer
+// is made, and this is the only module that makes one.
+import 'pixi.js/unsafe-eval'
+
 import {
   Application,
-  Assets,
   CanvasSource,
   Container,
   Graphics,
+  ImageSource,
   Rectangle,
   Sprite,
   Texture,
@@ -264,6 +270,22 @@ const FOG_TINT = GROUND
  */
 const MAX_EXPORT_PX = 4096
 
+/** Tiles fetched and decoded at once while an export fills in a whole level. */
+const EXPORT_TILE_LOADS = 8
+
+/**
+ * One tile of the map art, from the moment it is asked for.
+ *
+ * `done` is what lets an export wait for a tile somebody else already started
+ * on; the rest is what has to be let go of again, since none of it is in a
+ * cache that would do that for us.
+ */
+interface Tile {
+  done: Promise<void>
+  sprite?: Sprite
+  bitmap?: ImageBitmap
+}
+
 /**
  * Pixi's extracted canvas → a PNG Blob.
  *
@@ -317,7 +339,7 @@ export class MapController {
    * that can run first. Everything that touches the scene graph checks this.
    */
   private mounted = false
-  private loadedTiles = new Set<string>()
+  private tiles = new Map<string, Tile>()
   /** Baked map edge length in px; the procedural fallback uses the same space. */
   private mapSize = 4096
 
@@ -414,7 +436,10 @@ export class MapController {
     this.fogLayer
       .removeChildren()
       .forEach((c) => c.destroy({ texture: true, textureSource: true }))
-    if (!mask) return
+    // A mask with no pixels is a malformed file, and `createImageData(0, 0)`
+    // throws. The reader refuses one too; this is for a payload restored from
+    // before it did.
+    if (!mask || !(mask.size > 0)) return
 
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = mask.size
@@ -522,6 +547,14 @@ export class MapController {
   private buildMarkers() {
     const layer = this.layers.get('markers')
     if (!layer) return
+    // A selected pin is about to be destroyed, and a ring drawn round a
+    // destroyed sprite throws. Let go of it first and find it again by id once
+    // the new ones exist; a pin the new file does not have stays unselected.
+    const reselect =
+      this.selectedMarker?.entity?.kind === 'markers'
+        ? this.selectedMarker.entity.id
+        : undefined
+    if (reselect !== undefined) this.setSelection(undefined)
     layer.removeChildren().forEach((c) => c.destroy())
     for (const e of this.entities) {
       if (e.kind === 'markers') this.markerOf.delete(e)
@@ -570,6 +603,12 @@ export class MapController {
         },
         LAYER_STYLES.markers.color,
         14,
+      )
+    }
+
+    if (reselect !== undefined) {
+      this.setSelection(
+        this.entities.find((e) => e.kind === 'markers' && e.id === reselect),
       )
     }
   }
@@ -912,6 +951,12 @@ export class MapController {
 
   /* --- tiles ---------------------------------------------------------- */
 
+  /** How a pyramid level is cut up: tiles per side, and one tile's edge in map pixels. */
+  private levelGrid(set: TileSet, level: number) {
+    const per = Math.max(1, set.size / 2 ** level / set.tile)
+    return { per, tileWorld: this.mapSize / per }
+  }
+
   /** Loads only the tiles the viewport can actually see, at a fitting zoom. */
   private async refreshTiles() {
     const set = this.opts.tiles
@@ -923,9 +968,7 @@ export class MapController {
       0,
       Math.min(set.levels - 1, Math.round(Math.log2(1 / scale))),
     )
-    const levelSize = set.size / 2 ** ideal
-    const per = Math.max(1, levelSize / set.tile)
-    const tileWorld = this.mapSize / per
+    const { per, tileWorld } = this.levelGrid(set, ideal)
 
     const view = this.app.screen
     const min = this.world.toLocal({ x: 0, y: 0 })
@@ -937,34 +980,122 @@ export class MapController {
 
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
-        const key = `${ideal}/${x}/${y}`
-        if (this.loadedTiles.has(key)) continue
-        this.loadedTiles.add(key)
-
-        const blob = await getTile(ideal, x, y)
-        if (!blob || this.destroyed) continue
-        const url = URL.createObjectURL(blob)
-        try {
-          const texture = await Assets.load<Texture>({
-            src: url,
-            parser: 'loadTextures',
-          })
-          if (this.destroyed) continue
-          const sprite = new Sprite(texture)
-          sprite.position.set(x * tileWorld, y * tileWorld)
-          sprite.width = sprite.height = tileWorld
-          // Coarser levels sit behind finer ones as they arrive. Level 0 is
-          // the sharpest, so the order is the level negated: the other way
-          // round, the fitted view's coarse tiles stayed on top for good and
-          // zooming in never got any sharper.
-          sprite.zIndex = -ideal
-          this.tileLayer.addChild(sprite)
-          this.tileLayer.sortableChildren = true
-        } finally {
-          URL.revokeObjectURL(url)
-        }
+        await this.loadTile(ideal, x, y, tileWorld)
+        if (this.destroyed) return
       }
     }
+  }
+
+  /**
+   * One tile onto the map, once. Settles when it is drawn or has given up.
+   *
+   * The texture is built here rather than by `Assets.load`, which keeps every
+   * texture it makes in a global cache under its URL. These came from one-off
+   * blob URLs that nothing could ever ask for again, so each visit to the Map
+   * tab left its tiles there for good.
+   */
+  private loadTile(
+    level: number,
+    x: number,
+    y: number,
+    tileWorld: number,
+  ): Promise<void> {
+    const key = `${level}/${x}/${y}`
+    const had = this.tiles.get(key)
+    if (had) return had.done
+
+    const tile: Tile = { done: Promise.resolve() }
+    const load = async () => {
+      const blob = await getTile(level, x, y)
+      if (!blob || this.destroyed) return
+      const bitmap = await createImageBitmap(blob)
+      // Torn down, or dropped by an export, while it was decoding.
+      if (this.destroyed || this.tiles.get(key) !== tile) {
+        bitmap.close()
+        return
+      }
+      const sprite = new Sprite(
+        new Texture({ source: new ImageSource({ resource: bitmap }) }),
+      )
+      sprite.position.set(x * tileWorld, y * tileWorld)
+      sprite.width = sprite.height = tileWorld
+      // Coarser levels sit behind finer ones as they arrive. Level 0 is
+      // the sharpest, so the order is the level negated: the other way
+      // round, the fitted view's coarse tiles stayed on top for good and
+      // zooming in never got any sharper.
+      sprite.zIndex = -level
+      this.tileLayer.addChild(sprite)
+      this.tileLayer.sortableChildren = true
+      tile.sprite = sprite
+      tile.bitmap = bitmap
+    }
+    tile.done = load().catch(() => {
+      // Unreadable or undecodable. Forgotten rather than remembered as loaded,
+      // so the next look at this ground tries again; the coarser tile beneath
+      // shows in the meantime.
+      if (this.tiles.get(key) === tile) this.tiles.delete(key)
+    })
+    this.tiles.set(key, tile)
+    return tile.done
+  }
+
+  /** Takes a tile off the map and frees what it held. */
+  private dropTile(key: string) {
+    const tile = this.tiles.get(key)
+    if (!tile) return
+    this.tiles.delete(key)
+    tile.sprite?.destroy({ texture: true, textureSource: true })
+    // Destroying the source only forgets the bitmap; closing it is what gives
+    // the decoded pixels back.
+    tile.bitmap?.close()
+  }
+
+  /**
+   * Loads every tile of the level an export at `scale` should be drawn from,
+   * and returns the ones that were not on the map already.
+   *
+   * `refreshTiles` only ever loads what the window can see at the zoom it is
+   * at, so an export of the whole island from the fitted view was made of the
+   * coarse level that view uses, stretched to 4096px.
+   *
+   * The level is rounded towards the sharper one, since a file is looked at
+   * more closely than a screen. That is still bounded: the level chosen is
+   * under twice the export's size on a side, which for the 4096px bake is
+   * level 0 and its 256 tiles.
+   */
+  private async loadLevelFor(
+    scale: number,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<string[]> {
+    const set = this.opts.tiles
+    if (!set) return []
+    const level = Math.max(
+      0,
+      Math.min(set.levels - 1, Math.floor(Math.log2(1 / scale))),
+    )
+    const { per, tileWorld } = this.levelGrid(set, level)
+
+    const wanted: { x: number; y: number }[] = []
+    const added: string[] = []
+    for (let x = 0; x < per; x++) {
+      for (let y = 0; y < per; y++) {
+        wanted.push({ x, y })
+        const key = `${level}/${x}/${y}`
+        if (!this.tiles.has(key)) added.push(key)
+      }
+    }
+
+    let next = 0
+    let done = 0
+    const worker = async () => {
+      while (next < wanted.length && !this.destroyed) {
+        const { x, y } = wanted[next++]!
+        await this.loadTile(level, x, y, tileWorld)
+        onProgress?.(++done, wanted.length)
+      }
+    }
+    await Promise.all(Array.from({ length: EXPORT_TILE_LOADS }, worker))
+    return added
   }
 
   /* --- input ---------------------------------------------------------- */
@@ -983,19 +1114,58 @@ export class MapController {
       ) as Marker | undefined
     }
 
-    canvas.addEventListener('pointerdown', (e) => {
-      dragging = true
-      last = down = { x: e.clientX, y: e.clientY }
-    })
-    // On the window, so a drag that ends outside the canvas still ends.
-    const onUp = () => {
+    // Every listener goes through here, so `destroy` takes off exactly what
+    // was put on, the canvas's own included.
+    const on = <T extends Event>(
+      target: EventTarget,
+      type: string,
+      handler: (e: T) => void,
+      options?: AddEventListenerOptions,
+    ) => {
+      const listener = handler as EventListener
+      target.addEventListener(type, listener, options)
+      this.unbind.push(() =>
+        target.removeEventListener(type, listener, options),
+      )
+    }
+
+    let captured: number | undefined
+    const endDrag = () => {
+      if (!dragging) return
       dragging = false
+      if (captured !== undefined && canvas.hasPointerCapture(captured)) {
+        canvas.releasePointerCapture(captured)
+      }
+      captured = undefined
       void this.refreshTiles()
     }
-    window.addEventListener('pointerup', onUp)
-    this.unbind.push(() => window.removeEventListener('pointerup', onUp))
 
-    canvas.addEventListener('pointermove', (e) => {
+    on<PointerEvent>(canvas, 'pointerdown', (e) => {
+      // The primary button only. A right-click opens the browser's menu, which
+      // swallows the release, and the map then followed the pointer about with
+      // no button held.
+      if (e.button !== 0) return
+      dragging = true
+      last = down = { x: e.clientX, y: e.clientY }
+      // Captured, so the drag keeps getting moves and its release when the
+      // pointer leaves the canvas, or the window.
+      try {
+        canvas.setPointerCapture(e.pointerId)
+        captured = e.pointerId
+      } catch {
+        // No such pointer any more. The window listener below still ends it.
+      }
+    })
+    // On the window, so a drag that ends outside the canvas still ends.
+    on(window, 'pointerup', endDrag)
+    // And the ways a press ends without a release ever arriving: the browser
+    // taking the pointer away, a context menu opening over it (Ctrl-click on a
+    // Mac is a primary press that does this), and the window losing focus.
+    on(window, 'pointercancel', endDrag)
+    on(window, 'blur', endDrag)
+    on(canvas, 'contextmenu', endDrag)
+
+    on<PointerEvent>(canvas, 'pointermove', (e) => {
       if (dragging) {
         this.world.x += e.clientX - last.x
         this.world.y += e.clientY - last.y
@@ -1006,7 +1176,8 @@ export class MapController {
       this.opts.onHover(hit(e)?.entity, { x: e.clientX, y: e.clientY })
     })
 
-    canvas.addEventListener(
+    on<WheelEvent>(
+      canvas,
       'wheel',
       (e) => {
         e.preventDefault()
@@ -1022,7 +1193,10 @@ export class MapController {
     // `pointerup`, not `click`: a click fires at the end of every drag too, so
     // panning the map with the pointer over a marker selected it, and panning
     // from open ground threw the selection away.
-    canvas.addEventListener('pointerup', (e) => {
+    on<PointerEvent>(canvas, 'pointerup', (e) => {
+      // `down` is only set by the primary button, so only its release is a
+      // click to measure against it.
+      if (e.button !== 0) return
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > CLICK_SLOP)
         return
       const entity = hit(e)?.entity
@@ -1173,31 +1347,61 @@ export class MapController {
    * and older and mobile GPUs cap `MAX_TEXTURE_SIZE` at 4096, which is the same
    * reasoning that fixed the tile bake at that size.
    */
-  async exportImage(scope: 'viewport' | 'island'): Promise<Blob> {
+  async exportImage(
+    scope: 'viewport' | 'island',
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<Blob | undefined> {
     if (scope === 'viewport') {
-      return canvasToBlob(this.app.renderer.extract.canvas(this.app.stage))
+      // The stage framed to the screen, not the bare stage: without a frame
+      // `extract` renders the bounds of everything in the scene, which is the
+      // whole island and every marker off its edge at whatever the zoom is.
+      // And over the ground colour, since the canvas's own background is not
+      // part of the scene and the file would be transparent where the map ends.
+      const { width, height } = this.app.screen
+      return canvasToBlob(
+        this.app.renderer.extract.canvas({
+          target: this.app.stage,
+          frame: new Rectangle(0, 0, width, height),
+          clearColor: GROUND,
+        }),
+      )
     }
+
+    const target = Math.min(1, MAX_EXPORT_PX / this.mapSize)
+    // Before anything is moved: this is the only part that waits, and the map
+    // stays the user's to drag about while it does.
+    const borrowed = await this.loadLevelFor(target, onProgress)
+    // Torn down while the tiles were loading; there is no renderer to ask.
+    if (this.destroyed) return undefined
 
     const { x, y } = this.world.position
     const scale = this.world.scale.x
     try {
-      const target = Math.min(1, MAX_EXPORT_PX / this.mapSize)
       const side = this.mapSize * target
       this.world.position.set(0, 0)
       this.world.scale.set(target)
       // Markers are sized in *screen* pixels, so they need rescaling against
       // the export transform or they come out the wrong size on the page.
       this.rescaleMarkers()
+      // Not awaited: extracting is synchronous, so the `finally` puts the map
+      // back before a frame is drawn, and only the PNG encoding is left to wait
+      // for.
       return canvasToBlob(
         this.app.renderer.extract.canvas({
           target: this.world,
           frame: new Rectangle(0, 0, side, side),
+          clearColor: GROUND,
         }),
       )
     } finally {
       this.world.position.set(x, y)
       this.world.scale.set(scale)
       this.rescaleMarkers()
+      // A whole level is far more than the window needs, so what was loaded
+      // for the export goes again. The refresh puts back any of it the view
+      // turned out to want in the meantime.
+      for (const key of borrowed) this.dropTile(key)
+      void this.refreshTiles()
     }
   }
 
@@ -1265,6 +1469,19 @@ export class MapController {
   destroy() {
     this.destroyed = true
     for (const off of this.unbind) off()
+    this.unbind = []
+    // Nothing below is in a cache or owned by a sprite, so destroying the
+    // scene does not free it: the tile art, the fog mask and the marker dot
+    // each hold a texture of their own. While the renderer is still there to
+    // give the GPU's copies back.
+    for (const key of [...this.tiles.keys()]) this.dropTile(key)
+    this.fogLayer
+      .removeChildren()
+      .forEach((c) => c.destroy({ texture: true, textureSource: true }))
+    if (this.dot !== Texture.WHITE) {
+      this.dot.destroy(true)
+      this.dot = Texture.WHITE
+    }
     try {
       this.app.destroy(true, { children: true })
     } catch {
