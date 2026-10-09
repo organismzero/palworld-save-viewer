@@ -54,7 +54,9 @@ import { useUiStore } from './uiStore.ts'
 // `mutations` and `arenaSoloClears`. An old snapshot would restore without them.
 // 4: a character that never jumped has no `pos`, where it used to have the
 // world origin. An old snapshot would restore with the pile of pals at one spot.
-export const SNAPSHOT_VERSION = 4
+// 5: a `Boss_` prefix is stripped in either casing. An old snapshot would
+// restore with those alphas as ordinary pals of a species named `Boss_…`.
+export const SNAPSHOT_VERSION = 5
 
 const KEY = 'current'
 const PREF_KEY = 'psv.remember'
@@ -117,6 +119,9 @@ export async function setRememberPref(on: boolean): Promise<void> {
     // Storage is blocked; nothing will be written either way.
   }
   if (!on) await forgetSession()
+  // Saying yes is itself a reason to write: the world on screen was opened
+  // before anyone had agreed to keep it, so nothing has been stored yet.
+  else dirty = true
 }
 
 export function sessionDescriptor(): SessionDescriptor | undefined {
@@ -169,9 +174,17 @@ export async function readSnapshot(): Promise<SessionSnapshot | undefined> {
 }
 
 export async function writeSnapshot(snap: SessionSnapshot): Promise<void> {
+  const asked = forgotten
   try {
     const d = await database()
     await d.put(SESSION_STORE, snap, KEY)
+    // Forgotten while this was on its way to disk. The delete may have run
+    // before the put landed, so take it out again, and leave no descriptor
+    // saying there is something to reopen.
+    if (asked !== forgotten) {
+      await d.delete(SESSION_STORE, KEY)
+      return
+    }
     writeDescriptor({
       fileName: snap.fileName,
       savedAt: snap.savedAt,
@@ -198,7 +211,19 @@ export async function writeSnapshot(snap: SessionSnapshot): Promise<void> {
   }
 }
 
+/**
+ * Deletes the kept save — and makes sure nothing puts it back.
+ *
+ * The world it came from is usually still open, and the tab-hidden flush would
+ * otherwise write it straight back the next time the user looked at another
+ * tab. So forgetting also drops any write that is pending or owed; a later
+ * change to the open world (another file merged in) is a new reason to write,
+ * and does.
+ */
 export async function forgetSession(): Promise<void> {
+  forgotten++
+  dirty = false
+  cancelPending()
   writeDescriptor(undefined)
   try {
     const d = await database()
@@ -288,6 +313,18 @@ function snapshotFromStore(): SessionSnapshot | undefined {
   }
 }
 
+/**
+ * Whether the open world differs from what is in storage.
+ *
+ * Set by a change worth writing, cleared by the write. Without it the flush on
+ * `pagehide` re-wrote the whole snapshot every time the tab was hidden — moving
+ * `savedAt` to "when you last looked away" and, worse, restoring a save the
+ * user had just asked to forget.
+ */
+let dirty = false
+/** Counts calls to {@link forgetSession}, so a write in flight can tell. */
+let forgotten = 0
+
 let debounce: ReturnType<typeof setTimeout> | undefined
 let idle: number | undefined
 let inFlight: Promise<void> = Promise.resolve()
@@ -312,14 +349,23 @@ function cancelIdle(handle: number): void {
   else clearTimeout(handle)
 }
 
-function run(): void {
-  idle = undefined
+function writeNow(): void {
+  if (!dirty) return
   const snap = snapshotFromStore()
   if (!snap || rememberPref() !== 'on') return
+  dirty = false
   inFlight = inFlight.then(() => writeSnapshot(snap)).catch(() => {})
 }
 
+function run(): void {
+  idle = undefined
+  writeNow()
+}
+
 function scheduleWrite(): void {
+  // Owed whether or not it is wanted yet. The preference is asked again when
+  // the write is about to happen.
+  dirty = true
   if (rememberPref() !== 'on') return
   cancelPending()
   // One second, so a Players folder of eight files coalesces into one write
@@ -338,9 +384,7 @@ function scheduleWrite(): void {
  */
 export async function flushSessionWrite(): Promise<void> {
   cancelPending()
-  const snap = snapshotFromStore()
-  if (!snap || rememberPref() !== 'on') return
-  inFlight = inFlight.then(() => writeSnapshot(snap)).catch(() => {})
+  writeNow()
   await inFlight
 }
 
@@ -406,6 +450,7 @@ export function installSessionPersistence(): () => void {
   let lastLocal = useSaveStore.getState().localData
   let lastMeta = useSaveStore.getState().levelMeta
   let lastSettings = useSaveStore.getState().worldSettings
+  let seenRestore = useSaveStore.getState().restoredFrom
 
   const unsubscribe = useSaveStore.subscribe((s) => {
     if (s.status !== 'ready') {
@@ -429,8 +474,16 @@ export function installSessionPersistence(): () => void {
     lastLocal = s.localData
     lastMeta = s.levelMeta
     lastSettings = s.worldSettings
-    // A restored world is already exactly what is in storage.
-    if (s.restoredFrom !== undefined) return
+    // A world as it has just come back is exactly what is in storage. Only
+    // that first arrival, though: `restoredFrom` stays set for the life of the
+    // world, and a file merged into it afterwards is a change like any other.
+    if (s.restoredFrom !== seenRestore) {
+      seenRestore = s.restoredFrom
+      if (s.restoredFrom !== undefined) {
+        dirty = false
+        return
+      }
+    }
     scheduleWrite()
   })
 
