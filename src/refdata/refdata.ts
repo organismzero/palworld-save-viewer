@@ -771,7 +771,26 @@ const META_KEY = `meta@${PST_REF}@${SLIM_VERSION}`
 async function store(d: IDBPDatabase, data: Refdata) {
   await d.put(REFDATA_STORE, data, KEY)
   await d.put(REFDATA_STORE, { cachedAt: Date.now() }, META_KEY)
+  // Copies under an older projection version can never be read again, and
+  // each is a megabyte and a half. Nothing else ever removed them.
+  for (const key of await d.getAllKeys(REFDATA_STORE)) {
+    if (key === KEY || key === META_KEY || typeof key !== 'string') continue
+    if (key.startsWith('refdata@') || key.startsWith('meta@')) {
+      await d.delete(REFDATA_STORE, key)
+    }
+  }
 }
+
+/**
+ * How old a cached copy may be before it is fetched again behind the user.
+ *
+ * The data follows the game's patches, which come weeks apart, and fetching it
+ * is eighteen megabytes of JSON parsed and projected on the main thread. Doing
+ * that on every visit bought nothing for this session — the fresh copy is only
+ * used by the next one — and is what "a second visit needs no network" was
+ * quietly not true of. Settings has a Refresh for anyone who cannot wait a day.
+ */
+const REVALIDATE_AFTER_MS = 24 * 60 * 60 * 1000
 
 export interface RefdataInfo {
   /** The upstream ref the data is fetched at. */
@@ -818,14 +837,27 @@ export async function loadRefdata(): Promise<{
   data: Refdata
   fromCache: boolean
 }> {
-  const d = await database()
+  // The cache is a convenience. With storage blocked — site data switched off,
+  // some hardened or embedded profiles — the data can still be fetched and
+  // held for this visit, which beats showing raw asset ids beside a network
+  // that works.
+  let d: IDBPDatabase | undefined
+  let cached: Refdata | undefined
+  try {
+    d = await database()
+    cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
+  } catch {
+    d = undefined
+  }
 
-  const cached = (await d.get(REFDATA_STORE, KEY)) as Refdata | undefined
-  if (cached) {
-    // Returning users see the full UI immediately; freshness can wait.
-    void revalidate(d)
+  if (d && cached) {
+    // Returning users see the full UI immediately; freshness can wait — for
+    // an idle moment, and for the copy to be old enough to be worth it.
+    const db = d
+    whenIdle(() => void revalidateIfStale(db))
     return { data: cached, fromCache: true }
   }
+  if (!d) return { data: await fetchAndSlim(), fromCache: false }
 
   const data = await fetchAndSlim()
   await store(d, data)
@@ -866,6 +898,26 @@ export async function fetchAndSlim(): Promise<Refdata> {
   }
 }
 
+function whenIdle(run: () => void): void {
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(run, { timeout: 10_000 })
+  } else {
+    setTimeout(run, 2000)
+  }
+}
+
+async function revalidateIfStale(d: IDBPDatabase) {
+  try {
+    const meta = (await d.get(REFDATA_STORE, META_KEY)) as
+      { cachedAt?: number } | undefined
+    const age = Date.now() - (meta?.cachedAt ?? 0)
+    if (age >= 0 && age < REVALIDATE_AFTER_MS) return
+  } catch {
+    return
+  }
+  await revalidate(d)
+}
+
 async function revalidate(d: IDBPDatabase) {
   try {
     const data = await fetchAndSlim()
@@ -894,7 +946,18 @@ export interface TileSet {
   levels: number
 }
 
-const TILESET_KEY = `tiles@${PST_REF}@${SLIM_VERSION}`
+/**
+ * The tile bake's own version. Bump it when the *tiles* change — their size,
+ * their levels, the image they are cut from.
+ *
+ * It used to be the projection version, which has nothing to do with tiles: a
+ * new field on a species made every visitor fetch the 1.9 MB map again and cut
+ * it into 341 pieces that came out identical. Starts at the projection version
+ * it was last shared with, so that splitting the two cost nobody a bake.
+ */
+const TILES_VERSION = 11
+
+const TILESET_KEY = `tiles@${PST_REF}@${TILES_VERSION}`
 
 export async function getTileSet(): Promise<TileSet | undefined> {
   const d = await database()

@@ -59,6 +59,10 @@ projected down to the fields the app uses before caching:
 | `pal_exp_table.json`      | the levelling curve behind player XP bars                                                         |
 | `breedingdata.json`       | combi ranks and the unique breeding combos                                                        |
 
+The data is fetched from that repository's `main` branch, not from a pinned commit. That is deliberate: a game patch that adds pals or items shows up here as soon as upstream has it, without a release of this app. What makes it safe to follow a branch nobody here controls is that nothing in those files is ever executed or injected. Every value is rendered as text, and an icon path can only resolve under the CDN prefix it is appended to. The worst a bad upstream change can do is show wrong names or numbers.
+
+A cached copy is used as it stands for a day before the app looks for a newer one, and it looks in the background, for the next visit. Settings has a Refresh for anyone who wants a patch's data sooner.
+
 `breedingdata.json` is the one projected most aggressively: 7.1 MB on disk down
 to ~67 KB cached. Only two of its six sections are read — the per-species combi
 rank and the 253 hand-authored combos. The other four are precomputed
