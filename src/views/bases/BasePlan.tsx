@@ -11,14 +11,18 @@
  * rotated 90° and mirrored.
  */
 
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 
 import { posToMap, worldToMap } from '../../domain/coords.ts'
 import type { Base, Guid, Structure } from '../../domain/types.ts'
 
 const SIZE = 260
 
-export function BasePlan({
+/**
+ * Memoised, and its layout with it: a base runs to several hundred dots, and
+ * the view around it re-renders for every keystroke in its search box.
+ */
+export const BasePlan = memo(function BasePlan({
   base,
   structures,
   selectedId,
@@ -46,30 +50,35 @@ export function BasePlan({
   const [active, setActive] = useState<number>()
   const dots = useRef<(SVGCircleElement | null)[]>([])
 
-  const origin = posToMap(base.pos)
-  if (!origin) return null
+  const layout = useMemo(() => {
+    const origin = posToMap(base.pos)
+    if (!origin) return undefined
 
-  const radius = worldToMap(base.areaRange)
+    const radius = worldToMap(base.areaRange)
 
-  const points = structures
-    .flatMap((s) => {
-      const at = posToMap(s.pos)
-      // A structure in the World Tree's coordinate space cannot be plotted
-      // against an overworld base; skipping beats drawing it in the wrong place.
-      if (!at || at.map !== origin.map) return []
-      return [{ s, dx: at.mx - origin.mx, dy: -(at.my - origin.my) }]
-    })
-    // Reading order, top row first, so the arrow keys sweep the plan the way
-    // the eye does rather than in the order the save happened to list things.
-    .sort((a, b) => a.dy - b.dy || a.dx - b.dx)
+    const points = structures
+      .flatMap((s) => {
+        const at = posToMap(s.pos)
+        // A structure in the World Tree's coordinate space cannot be plotted
+        // against an overworld base; skipping beats drawing it in the wrong
+        // place.
+        if (!at || at.map !== origin.map) return []
+        return [{ s, dx: at.mx - origin.mx, dy: -(at.my - origin.my) }]
+      })
+      // Reading order, top row first, so the arrow keys sweep the plan the way
+      // the eye does rather than in the order the save happened to list things.
+      .sort((a, b) => a.dy - b.dy || a.dx - b.dx)
 
-  // Fit whatever is actually there — buildings routinely sit outside the
-  // camp's nominal radius, and cropping them would be a lie about the base.
-  const extent = Math.max(
-    radius * 1.05,
-    ...points.map((p) => Math.max(Math.abs(p.dx), Math.abs(p.dy)) * 1.05),
-  )
-  const scale = SIZE / 2 / extent
+    // Fit whatever is actually there — buildings routinely sit outside the
+    // camp's nominal radius, and cropping them would be a lie about the base.
+    const extent = Math.max(
+      radius * 1.05,
+      ...points.map((p) => Math.max(Math.abs(p.dx), Math.abs(p.dy)) * 1.05),
+    )
+    return { radius, points, scale: SIZE / 2 / extent }
+  }, [base, structures])
+  if (!layout) return null
+  const { radius, points, scale } = layout
 
   /**
    * One tab stop for the whole plan, and arrow keys within it.
@@ -197,4 +206,4 @@ export function BasePlan({
       />
     </svg>
   )
-}
+})

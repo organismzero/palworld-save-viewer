@@ -62,7 +62,7 @@ export function borrowSummary(borrowed: BorrowedPal[]): string {
     return `uses ${workers} base ${workers === 1 ? 'worker' : 'workers'} nobody owns`
   }
   if (workers === 0) return `uses ${pals(fromPeople)} from ${mates}`
-  return `uses ${pals(borrowed.length)} you do not own — ${fromPeople} from ${mates}, ${workers} a base worker`
+  return `uses ${pals(borrowed.length)} you do not own — ${fromPeople} from ${mates}, ${workers} base ${workers === 1 ? 'worker' : 'workers'}`
 }
 
 /** One person to ask, or the base, and what to get from them. */

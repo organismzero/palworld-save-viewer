@@ -35,6 +35,7 @@ import {
   PAIR_PURPOSES,
 } from '../../domain/pairOutcomes.ts'
 import type { GoalId } from '../../domain/recommend.ts'
+import { MAX_SLOTS } from '../../domain/passives.ts'
 
 /**
  * Which question the view is answering: a route to a target, or what two
@@ -202,9 +203,14 @@ export function breedCodec(index: SaveIndex): ParamCodec<BreedParams> {
         // repeat, but the picker renders one chip per entry, so `pv=a,a,a,a`
         // would draw four identical chips on four duplicate React keys and then
         // announce that the four-slot limit had been reached.
-        passives: [
-          ...new Set(list(raw, 'pv').map((p) => p.toLowerCase())),
-        ].sort(),
+        //
+        // Cut to a pal's slot count after both, so the four kept are the four
+        // `encodeList` would write first and a reload keeps the same set. The
+        // domain plans for four whatever it is handed, but the picker drew a
+        // chip for every entry of a link that named hundreds.
+        passives: [...new Set(list(raw, 'pv').map((p) => p.toLowerCase()))]
+          .sort()
+          .slice(0, MAX_SLOTS),
         noSpares: bool(raw, 'pvo', d.noSpares),
         mode: raw.get('m') === 'pair' ? 'pair' : d.mode,
         // Resolved against the save's pals, which exist at decode time — unlike

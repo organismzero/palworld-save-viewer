@@ -10,11 +10,7 @@ import {
   workCoverage,
   type PlayerSummary,
 } from '../../domain/guild.ts'
-import {
-  playerGuilds,
-  speciesCounts,
-  systemGroups,
-} from '../../domain/index.ts'
+import { playerGuilds, systemGroups } from '../../domain/index.ts'
 import { formatMapPos, posToMap } from '../../domain/coords.ts'
 import { formatUptimeAgo, lastSeenFor } from '../../domain/lastSeen.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../../domain/statusNames.ts'
@@ -73,7 +69,9 @@ export function GuildView({ index }: { index: SaveIndex }) {
   const groups = systemGroups(index)
   // A jump from the command palette opens that player's detail panel, read
   // during the first render so the panel is there on first paint and cleared
-  // afterwards. See the note in BasesView.
+  // afterwards. See the note in BasesView. The jump names the player's guild
+  // too: the panel is drawn against the selected guild, and a player from the
+  // second guild opened against the first has the wrong role, bases and totals.
   const focus = useUiStore((s) => s.focus)
   const clearFocus = useUiStore((s) => s.clearFocus)
   useEffect(clearFocus, [clearFocus])
@@ -83,7 +81,18 @@ export function GuildView({ index }: { index: SaveIndex }) {
     'guild',
     GUILD_DEFAULTS,
     codec,
-    () => (focus?.kind === 'player' ? { openPlayerId: focus.id } : undefined),
+    () => {
+      if (focus?.kind !== 'player') return undefined
+      const groupId = index.playerByUid.get(focus.id)?.groupId
+      if (!groupId) return { openPlayerId: focus.id }
+      return {
+        openPlayerId: focus.id,
+        selectedId: groupId,
+        // A player filed under a system group is only on the page with those
+        // showing.
+        ...(groups.some((g) => g.groupId === groupId) && { showGroups: true }),
+      }
+    },
   )
 
   const { showGroups } = params
@@ -93,17 +102,45 @@ export function GuildView({ index }: { index: SaveIndex }) {
   const setShowGroups = (showGroups: boolean) => patch({ showGroups })
   // Falls back to the first guild so the view is never blank, but that default
   // stays out of the URL — only an explicit choice is worth linking.
-  const selectedId = params.selectedId ?? guilds[0]?.groupId
-  const setSelectedId = (id: string | undefined) => patch({ selectedId: id })
-
-  const openPlayer = params.openPlayerId
+  const linkedPlayer = params.openPlayerId
     ? index.playerByUid.get(params.openPlayerId)
     : undefined
+  // A link that names a player and no guild means that player's guild, where
+  // the first guild is not already theirs.
+  const first = guilds[0]
+  const selectedId =
+    params.selectedId ??
+    (linkedPlayer && first && !inGuild(linkedPlayer, first)
+      ? linkedPlayer.groupId
+      : undefined) ??
+    first?.groupId
+  // Changing guild closes a panel left open on a player of the other one.
+  const setSelectedId = (id: string | undefined) =>
+    setParams((prev) => {
+      const open = prev.openPlayerId
+        ? index.playerByUid.get(prev.openPlayerId)
+        : undefined
+      const target = id ? index.guildById.get(id) : undefined
+      const stays = open && target && inGuild(open, target)
+      return {
+        ...prev,
+        selectedId: id,
+        openPlayerId: stays ? prev.openPlayerId : undefined,
+      }
+    })
+
   const setOpenPlayer = (p: Player | undefined) =>
     patch({ openPlayerId: p?.playerUid })
 
   const shown = showGroups ? [...guilds, ...groups] : guilds
   const guild = shown.find((g) => g.groupId === selectedId) ?? shown[0]
+  // Checked here as well as on the select, because a link can name any guild
+  // and any player, and hiding the system groups can move the page off the
+  // guild the panel was opened in.
+  const openPlayer =
+    linkedPlayer && guild && inGuild(linkedPlayer, guild)
+      ? linkedPlayer
+      : undefined
 
   if (!guild) {
     return (
@@ -168,6 +205,17 @@ export function GuildView({ index }: { index: SaveIndex }) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * Whether `player` is one of `guild`'s: by their own group id, or by the
+ * guild's member list, which is what the Players section is drawn from.
+ */
+function inGuild(player: Player, guild: Guild): boolean {
+  return (
+    player.groupId === guild.groupId ||
+    guild.members.some((m) => m.playerUid === player.playerUid)
   )
 }
 
@@ -637,17 +685,22 @@ function Aggregates({ index, guild }: { index: SaveIndex; guild: Guild }) {
     [pals, data],
   )
 
-  const topSpecies = useMemo(
-    () =>
-      speciesCounts(index)
-        .filter(({ id }) =>
-          (index.palsByCharacterId.get(id) ?? []).some(
-            (p) => p.groupId === guild.groupId,
-          ),
-        )
-        .slice(0, 10),
-    [index, guild],
-  )
+  // Counted from this guild's pals. It used to take the world-wide counts and
+  // keep the species the guild held any of, so one Lamball here showed as the
+  // forty the whole server has. Lowercased because species ids arrive in
+  // inconsistent casing and two spellings are one species.
+  const topSpecies = useMemo(() => {
+    // Counted under the lowercased id, shown under the save's own spelling:
+    // without reference data the id is the label.
+    const tally = new Map<string, { id: string; count: number }>()
+    for (const p of pals) {
+      const key = p.characterId.toLowerCase()
+      const at = tally.get(key)
+      if (at) at.count++
+      else tally.set(key, { id: p.characterId, count: 1 })
+    }
+    return [...tally.values()].sort((a, b) => b.count - a.count).slice(0, 10)
+  }, [pals])
 
   // Said, not skipped: a guild with members and no pals used to end at the
   // contribution board, as if the rest of the page had failed to load.

@@ -1,11 +1,17 @@
 import { StoredPill } from '../../components/StoredPill.tsx'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ivTotal } from '../../domain/index.ts'
 import type { Pal, SaveIndex } from '../../domain/types.ts'
 import { WORK_TYPES, element } from '../../lib/color.ts'
-import { count, relativeTime, ticksToDate } from '../../lib/format.ts'
+import { beforeSave, count } from '../../lib/format.ts'
 import {
   CONDENSER_RANK_HELP,
   condenserStars,
@@ -157,14 +163,48 @@ export function PalsView({ index }: { index: SaveIndex }) {
 
   const place = useMemo(() => placer(index), [index])
 
+  // What narrows and orders the grid, apart from `params` as a whole: that
+  // object is replaced when a card is clicked, since the open pal is in it, and
+  // a memo keyed on it filtered and sorted every pal again on each selection.
+  // The text is deferred, so a keystroke paints in the box before the grid
+  // catches up with it.
+  const deferredQuery = useDeferredValue(query)
+  const shown = useMemo<PalsParams>(
+    () => ({
+      ...PALS_DEFAULTS,
+      query: deferredQuery,
+      elements,
+      minLevel,
+      maxLevel,
+      minIv,
+      owner,
+      gender,
+      work,
+      workMin,
+      attention,
+      flags,
+      sort,
+      reversed,
+    }),
+    [
+      deferredQuery,
+      elements,
+      minLevel,
+      maxLevel,
+      minIv,
+      owner,
+      gender,
+      work,
+      workMin,
+      attention,
+      flags,
+      sort,
+      reversed,
+    ],
+  )
   const filtered = useMemo(
-    () =>
-      filterPals(index.pals, params, {
-        index,
-        data,
-        place,
-      }),
-    [index, params, data, place],
+    () => filterPals(index.pals, shown, { index, data, place }),
+    [index, shown, data, place],
   )
 
   // The sliders' top end is whatever this world has reached, so a save from a
@@ -651,7 +691,7 @@ function PalDetail({
     : []
 
   // "Top 3% of your Kitsunebi" is far more useful than a bare number.
-  const cohort = pal ? (index.palsByCharacterId.get(pal.characterId) ?? []) : []
+  const cohort = pal ? (index.palsByCharacterId.get(pal.characterId.toLowerCase()) ?? []) : []
   const better = pal
     ? cohort.filter((p) => ivTotal(p) > ivTotal(pal)).length
     : 0
@@ -826,7 +866,7 @@ function PalDetail({
         />
         <Field
           label="caught"
-          value={relativeTime(ticksToDate(pal.ownedTime))}
+          value={beforeSave(pal.ownedTime, index.meta.savedAtTicks)}
         />
         <Field
           label="position"

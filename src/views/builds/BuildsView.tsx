@@ -16,7 +16,7 @@
  * view with the purpose's passives already picked.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { busiestPlayer } from '../../domain/guild.ts'
 import type { Player, SaveIndex } from '../../domain/types.ts'
@@ -142,6 +142,9 @@ const PRODUCTION: readonly BuildsGoal[] = ['fishing', 'food', 'cake', 'ranch']
 
 /** The purposes whose jobs can be picked in the rail. */
 const JOB_GOALS: readonly BuildsGoal[] = ['breeding', 'work', 'food', 'ranch']
+
+/** How long the opponent search waits after a keystroke before it publishes. */
+const QUERY_PAUSE = 200
 
 /** The jobs a work base starts with, before any are picked. */
 const WORK_DEFAULT = ['Mining', 'Deforest']
@@ -401,6 +404,7 @@ function Breeding({ ctx, work }: { ctx: Ctx; work: readonly string[] }) {
           ctx={ctx}
           detail={() => null}
           wanted={farm}
+          advice={farmAdvice}
           empty="None of this player’s pals carries one yet."
         />
       </Panel>
@@ -453,6 +457,7 @@ function Work({ ctx, work }: { ctx: Ctx; work: readonly string[] }) {
           ctx={ctx}
           detail={() => null}
           wanted={party}
+          advice={partyAdvice}
           empty="None of this player’s pals carries one yet."
         />
       </Panel>
@@ -557,6 +562,7 @@ function Fight({ ctx, opponent }: { ctx: Ctx; opponent: string }) {
               rows={mine}
               ctx={ctx}
               wanted={party}
+              advice={advice}
               detail={(r) => {
                 const f = r as (typeof mine)[number]
                 return (
@@ -703,6 +709,7 @@ function Travel({ ctx }: { ctx: Ctx }) {
                         .slice(0, ctx.mine)}
                       ctx={ctx}
                       wanted={party}
+                      advice={advice}
                       detail={(r) =>
                         glider ? null : (
                           <Pill tone="signal" title="ride_sprint_speed">
@@ -778,6 +785,11 @@ function WorkPicker({
     pool.some((id) => (data.species[id]?.work?.[w.id] ?? 0) > 0),
   )
   const on = new Set(selected)
+  // The last ticked box cannot be unticked. An empty set is how a link says
+  // "this goal's defaults", so emptying it by hand ticked the defaults back on
+  // — which read as the box refusing, and then as two other boxes ticking
+  // themselves.
+  const ticked = jobs.filter((w) => on.has(w.id)).length
   const toggle = (id: string) => {
     const next = new Set(on)
     if (next.has(id)) next.delete(id)
@@ -789,14 +801,24 @@ function WorkPicker({
     <div>
       <div className="label mb-2">jobs</div>
       <div className="flex flex-col gap-2">
-        {jobs.map((w) => (
-          <Checkbox
-            key={w.id}
-            checked={on.has(w.id)}
-            onChange={() => toggle(w.id)}
-            label={workName(data, w.id)}
-          />
-        ))}
+        {jobs.map((w) => {
+          const last = ticked === 1 && on.has(w.id)
+          return (
+            <span
+              key={w.id}
+              className="flex"
+              title={last ? 'At least one job stays ticked.' : undefined}
+            >
+              <Checkbox
+                checked={on.has(w.id)}
+                disabled={last}
+                onChange={() => toggle(w.id)}
+                label={workName(data, w.id)}
+                className="w-full"
+              />
+            </span>
+          )
+        })}
       </div>
     </div>
   )
@@ -824,6 +846,50 @@ function OpponentPicker({
   onQuery: (q: string) => void
   onPick: (id: string) => void
 }) {
+  // Typed into here and published a pause later. `query` lives in the view's
+  // params, so publishing each keystroke re-rendered the whole view, and the
+  // fight on the right ranks every pal in the pool each time it renders.
+  const [draft, setDraft] = useState(query)
+  // What this box was given and has since published, oldest first. A value
+  // coming back down that is in here is its own echo; anything else is news.
+  const mine = useRef([query])
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout>; q: string }>(
+    undefined,
+  )
+  const publish = useRef(onQuery)
+  useEffect(() => {
+    publish.current = onQuery
+  })
+  const flush = () => {
+    const p = pending.current
+    if (!p) return
+    clearTimeout(p.timer)
+    pending.current = undefined
+    mine.current.push(p.q)
+    publish.current(p.q)
+  }
+  const type = (q: string) => {
+    setDraft(q)
+    if (pending.current) clearTimeout(pending.current.timer)
+    pending.current = { q, timer: setTimeout(flush, QUERY_PAUSE) }
+  }
+  // Leaving the Fight purpose inside the pause still keeps what was typed.
+  useEffect(() => flush, [])
+  // A query that arrives from outside, which is a browser navigation: the box
+  // follows it. An echo is left alone, however late, so a slow render of the
+  // fight cannot put back text that has been typed past.
+  useEffect(() => {
+    const at = mine.current.indexOf(query)
+    if (at !== -1) {
+      mine.current = mine.current.slice(at)
+      return
+    }
+    mine.current = [query]
+    if (pending.current) clearTimeout(pending.current.timer)
+    pending.current = undefined
+    setDraft(query)
+  }, [query])
+
   const rows = useMemo(
     () =>
       filterSpecies(
@@ -833,11 +899,11 @@ function OpponentPicker({
           zukan: data?.species[id]?.zukan ?? Number.MAX_SAFE_INTEGER,
           elements: text.elements(id),
         })),
-        { ...NO_SPECIES_FILTER, query, elements: new Set(elements) },
+        { ...NO_SPECIES_FILTER, query: draft, elements: new Set(elements) },
       ),
     // `text` is rebuilt every render from `data`, which is in the list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pool, query, elements, data],
+    [pool, draft, elements, data],
   )
 
   return (
@@ -845,8 +911,8 @@ function OpponentPicker({
       <div className="p-4 pb-3">
         <TextInput
           label="fighting what"
-          value={query}
-          onChange={onQuery}
+          value={draft}
+          onChange={type}
           placeholder="Search species"
         />
         {/* Only the element: "reachable" and "not held" are questions about

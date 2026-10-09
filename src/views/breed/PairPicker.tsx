@@ -8,7 +8,8 @@
  */
 
 import { StoredPill } from '../../components/StoredPill.tsx'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 import type { Stock } from '../../domain/breeding.ts'
 import { ivTotal } from '../../domain/index.ts'
@@ -30,6 +31,16 @@ type Slot = 'a' | 'b'
  * A mark on the gender glyph rather than a pill: a pill on a 288px rail
  * truncates the pal's name to its first letter, and the name is the point.
  */
+/**
+ * The list row's own height (`--row-height`), fixed so the list can be
+ * windowed: a pooled guild is a couple of thousand pals, and every one was a
+ * mounted row with an icon and a hover card.
+ */
+const ROW_HEIGHT = 34
+
+/** One collator for the species sort; orders as `localeCompare` did. */
+const collator = new Intl.Collator()
+
 const PROBLEM_TONE: Record<PairProblem, string> = {
   'same-pal': 'text-[var(--color-muted)]',
   'same-gender': 'text-[var(--color-danger)]',
@@ -77,26 +88,39 @@ export function PairPicker({
     return pals
       .map((pal) => {
         const id = pal.characterId.toLowerCase()
-        return { pal, id, name: palName(pal, { name: text.name(id) }) }
+        const species = text.name(id)
+        return { pal, id, species, name: palName(pal, { name: species }) }
       })
       .filter(
-        ({ pal, id, name }) =>
+        ({ pal, id, species, name }) =>
           (elements.size === 0 ||
             text.elements(id).some((e) => elements.has(e))) &&
           (!q ||
             name.toLowerCase().includes(q) ||
-            text.name(id).toLowerCase().includes(q) ||
+            species.toLowerCase().includes(q) ||
             pal.passives.some((p) =>
               passives.name(p.toLowerCase()).toLowerCase().includes(q),
             )),
       )
       .sort(
         (x, y) =>
-          text.name(x.id).localeCompare(text.name(y.id)) ||
+          collator.compare(x.species, y.species) ||
           ivTotal(y.pal) - ivTotal(x.pal) ||
           y.pal.level - x.pal.level,
       )
   }, [pals, query, elements, text, passives])
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // See the note on the same line in PalsView.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    // Generous, so Tab from the last row on screen always has a mounted row
+    // to land on; the browser scrolls it into view and the window follows.
+    overscan: 12,
+  })
 
   // Checked against whichever parent is *not* being filled, since that is the
   // one the new pick has to go with.
@@ -149,51 +173,71 @@ export function PairPicker({
           </p>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {rows.map(({ pal, id, name }) => {
-          const problem = other
-            ? pairProblem(other, pal, assumeUnknownGender)
-            : undefined
-          const who = owner.badge(pal)
-          const chosen =
-            pal.instanceId === a?.instanceId || pal.instanceId === b?.instanceId
-          return (
-            <ListRow
-              key={pal.instanceId}
-              selected={chosen}
-              onClick={() => pick(pal)}
-              card={{ kind: 'pal', pal }}
-              className={cn(problem && !chosen && 'opacity-50')}
-            >
-              <GameIcon
-                path={text.icon(id)}
-                name={id}
-                elementName={text.element(id)}
-                size={26}
-              />
-              <span className="min-w-0 flex-1 truncate text-xs">{name}</span>
-              {who && <Pill tone="warn">{who.name}</Pill>}
-              <StoredPill pal={pal} short />
-              <span
-                className={cn(
-                  'num w-5 shrink-0 text-center text-[11px]',
-                  problem && !chosen
-                    ? PROBLEM_TONE[problem]
-                    : 'text-[var(--color-muted)]',
-                )}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <div
+          style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+        >
+          {virtualizer.getVirtualItems().map((v) => {
+            const row = rows[v.index]
+            if (!row) return null
+            const { pal, id, name } = row
+            const problem = other
+              ? pairProblem(other, pal, assumeUnknownGender)
+              : undefined
+            const who = owner.badge(pal)
+            const chosen =
+              pal.instanceId === a?.instanceId ||
+              pal.instanceId === b?.instanceId
+            return (
+              <div
+                // By pal, not by position, so the row under the cursor or
+                // holding focus stays the same element as the window moves.
+                key={pal.instanceId}
+                className="absolute inset-x-0 top-0"
+                style={{
+                  height: ROW_HEIGHT,
+                  transform: `translateY(${v.start}px)`,
+                }}
               >
-                {pal.gender === 'Male'
-                  ? '♂'
-                  : pal.gender === 'Female'
-                    ? '♀'
-                    : '?'}
-              </span>
-              <span className="num w-8 shrink-0 text-right text-[11px] text-[var(--color-muted)]">
-                lv{pal.level}
-              </span>
-            </ListRow>
-          )
-        })}
+                <ListRow
+                  selected={chosen}
+                  onClick={() => pick(pal)}
+                  card={{ kind: 'pal', pal }}
+                  className={cn('h-full', problem && !chosen && 'opacity-50')}
+                >
+                  <GameIcon
+                    path={text.icon(id)}
+                    name={id}
+                    elementName={text.element(id)}
+                    size={26}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs">
+                    {name}
+                  </span>
+                  {who && <Pill tone="warn">{who.name}</Pill>}
+                  <StoredPill pal={pal} short />
+                  <span
+                    className={cn(
+                      'num w-5 shrink-0 text-center text-[11px]',
+                      problem && !chosen
+                        ? PROBLEM_TONE[problem]
+                        : 'text-[var(--color-muted)]',
+                    )}
+                  >
+                    {pal.gender === 'Male'
+                      ? '♂'
+                      : pal.gender === 'Female'
+                        ? '♀'
+                        : '?'}
+                  </span>
+                  <span className="num w-8 shrink-0 text-right text-[11px] text-[var(--color-muted)]">
+                    lv{pal.level}
+                  </span>
+                </ListRow>
+              </div>
+            )
+          })}
+        </div>
         {rows.length === 0 && (
           <p className="px-2 py-3 text-xs text-[var(--color-muted)]">
             {pals.length === 0

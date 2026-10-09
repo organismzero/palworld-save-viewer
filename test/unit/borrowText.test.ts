@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import type { BorrowedPal } from '@/domain/breeding.ts'
 import type { Pal } from '@/domain/types.ts'
-import { borrowGroups, borrowText } from '@/views/breed/ownerText.ts'
+import {
+  borrowGroups,
+  borrowSummary,
+  borrowText,
+} from '@/views/breed/ownerText.ts'
 
 const ANN = 'a'.repeat(32)
 const BOB = 'b'.repeat(32)
@@ -65,5 +69,26 @@ describe('borrowText', () => {
 
   it('is empty for a plan that borrows nothing', () => {
     expect(borrowText([], owner, species)).toBe('')
+  })
+})
+
+describe('borrowSummary', () => {
+  it('counts base workers in the plural when there is more than one', () => {
+    const two = [lent('fox', ANN), lent('a', undefined), lent('b', undefined)]
+    expect(borrowSummary(two)).toBe(
+      'uses 3 pals you do not own — 1 from 1 guildmate, 2 base workers',
+    )
+    expect(borrowSummary(two.slice(0, 2))).toBe(
+      'uses 2 pals you do not own — 1 from 1 guildmate, 1 base worker',
+    )
+  })
+
+  it('keeps the two one-sided wordings', () => {
+    expect(borrowSummary([lent('a', undefined)])).toBe(
+      'uses 1 base worker nobody owns',
+    )
+    expect(borrowSummary([lent('fox', ANN), lent('moss', BOB)])).toBe(
+      'uses 2 pals from 2 guildmates',
+    )
   })
 })

@@ -71,6 +71,22 @@ describe('buildsCodec', () => {
     expect(out).toEqual({ gp: '1' })
   })
 
+  it('keeps only jobs there are, once each', () => {
+    const got = codec.decode(
+      new URLSearchParams('w=Mining,nope,Deforest,Mining,mining'),
+      BUILDS_DEFAULTS,
+    )
+    expect(got.work).toEqual(['Deforest', 'Mining'])
+    expect(roundTrip({ work: ['Mining', 'Cool'] }).work).toEqual(['Cool', 'Mining']) // prettier-ignore
+  })
+
+  it('reads a `w` naming no real job as the goal’s defaults', () => {
+    // Empty is what the view takes to mean "this goal's own jobs".
+    const junk = Array.from({ length: 500 }, (_, i) => `x${i}`).join(',')
+    expect(codec.decode(new URLSearchParams(`w=${junk}`), BUILDS_DEFAULTS).work).toEqual([]) // prettier-ignore
+    expect(codec.decode(new URLSearchParams('w='), BUILDS_DEFAULTS).work).toEqual([]) // prettier-ignore
+  })
+
   it('drops a member this save has never heard of', () => {
     const got = codec.decode(new URLSearchParams('gm=dddddddd'), BUILDS_DEFAULTS) // prettier-ignore
     expect(got.includeMembers).toEqual([])

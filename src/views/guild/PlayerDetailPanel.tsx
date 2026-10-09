@@ -29,8 +29,14 @@ import { tabId } from '../../lib/utils.ts'
 import { CapacityNote, ContainerGrid } from '../bases/ContainerGrid.tsx'
 import { PaldexGrid } from './Paldex.tsx'
 import { buildPaldex } from './paldex.ts'
+import {
+  buildStock,
+  reachFrom,
+  type BreedingTable,
+  type Reach,
+} from '../../domain/breeding.ts'
 import { BREED_DEFAULTS } from '../breed/params.ts'
-import { reachFor, stockFor, tableFor } from '../breed/stockCache.ts'
+import { tableFor } from '../breed/stockCache.ts'
 import { breedHref } from '../builds/buildsText.ts'
 import { useUiStore } from '../../store/uiStore.ts'
 
@@ -80,25 +86,28 @@ export function PlayerDetailPanel({
   // why this stays local rather than joining the view's hash params: which tab
   // is open is not something worth sending anybody.
   const [tab, setTab] = useState<'overview' | 'paldex'>('overview')
-  // The reach Breed would work out for this player with nothing ticked, from
-  // the same cache, so a cell's number and the plan it opens agree.
+  // The reach Breed would work out for this player with nothing ticked, so a
+  // cell's number and the plan it opens agree. Only while the paldex is the
+  // tab showing: the overview uses none of it, and it is the one expensive
+  // thing in the panel.
   const table = tableFor(data?.breeding)
-  const reach = table
-    ? reachFor(
-        stockFor(index, table, {
-          ownerUid: player.playerUid,
-          assumeUnknownGender: BREED_DEFAULTS.assumeUnknownGender,
-          includeGuild: BREED_DEFAULTS.includeGuild,
-          includeBase: BREED_DEFAULTS.includeBase,
-          includeMembers: BREED_DEFAULTS.includeMembers,
-        }),
-        table,
-      )
-    : undefined
+  const showPaldex = tab === 'paldex'
+  const reach =
+    showPaldex && table
+      ? defaultReach(index, table, player.playerUid)
+      : undefined
   const paldex = useMemo(
     () =>
-      buildPaldex(index, data, detail?.record, player.playerUid, reach?.depth),
-    [index, data, detail, player.playerUid, reach],
+      showPaldex
+        ? buildPaldex(
+            index,
+            data,
+            detail?.record,
+            player.playerUid,
+            reach?.depth,
+          )
+        : undefined,
+    [showPaldex, index, data, detail, player.playerUid, reach],
   )
   const jump = useUiStore((s) => s.jump)
 
@@ -142,7 +151,7 @@ export function PlayerDetailPanel({
         role="tabpanel"
         aria-labelledby={tabId(PLAYER_TABS, tab)}
       >
-        {tab === 'paldex' && (
+        {paldex && (
           <div className="p-4">
             <PaldexGrid
               view={paldex}
@@ -312,6 +321,46 @@ export function PlayerDetailPanel({
       </div>
     </aside>
   )
+}
+
+/**
+ * One reach per player, per save and breeding table.
+ *
+ * Its own cache and not Breed's `stockFor`: that one keeps six stocks a save,
+ * and what it really holds on to is the passive searches cached behind them.
+ * Clicking through a guild's players here would push Breed's own stock out and
+ * a ten-second search with it. Nothing is lost by building separately, since
+ * `buildStock` is a pure function of the same arguments Breed passes with its
+ * defaults, so the depths agree with the plan Breed opens.
+ *
+ * Unbounded within a save because it is bounded by the save: one entry per
+ * player. Weak on the index and the table, so both go with the save.
+ */
+const reaches = new WeakMap<
+  SaveIndex,
+  WeakMap<BreedingTable, Map<string, Reach>>
+>()
+
+function defaultReach(
+  index: SaveIndex,
+  table: BreedingTable,
+  playerUid: string,
+): Reach {
+  let byTable = reaches.get(index)
+  if (!byTable) reaches.set(index, (byTable = new WeakMap()))
+  let byPlayer = byTable.get(table)
+  if (!byPlayer) byTable.set(table, (byPlayer = new Map()))
+  let reach = byPlayer.get(playerUid)
+  if (!reach) {
+    const stock = buildStock(index, table, playerUid, {
+      assumeUnknownGender: BREED_DEFAULTS.assumeUnknownGender,
+      includeGuild: BREED_DEFAULTS.includeGuild,
+      includeBase: BREED_DEFAULTS.includeBase,
+      includeMembers: BREED_DEFAULTS.includeMembers,
+    })
+    byPlayer.set(playerUid, (reach = reachFrom(stock, table)))
+  }
+  return reach
 }
 
 /**

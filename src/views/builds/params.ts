@@ -7,7 +7,7 @@
  * it here would reject every cold deep link.
  */
 
-import { element } from '../../lib/color.ts'
+import { WORK_TYPES, element } from '../../lib/color.ts'
 import { owners } from '../breed/params.ts'
 import type { Guid, SaveIndex } from '../../domain/types.ts'
 import type { GoalId } from '../../domain/recommend.ts'
@@ -79,6 +79,8 @@ const GOALS: readonly BuildsGoal[] = [
   'condense',
 ]
 
+const WORK_IDS: ReadonlySet<string> = new Set(WORK_TYPES.map((w) => w.id))
+
 export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
   return {
     encode(v, d) {
@@ -105,7 +107,12 @@ export function buildsCodec(index: SaveIndex): ParamCodec<BuildsParams> {
       const goal = raw.get('g') as BuildsGoal | null
       return {
         goal: goal && GOALS.includes(goal) ? goal : d.goal,
-        work: [...new Set(list(raw, 'w'))].sort(),
+        // Only jobs there are. Anything else used to be carried along, and a
+        // made-up id drew a heading with two empty lists under it; a long
+        // enough `w` drew thousands. Nothing known left means the defaults.
+        work: [...new Set(list(raw, 'w'))]
+          .filter((id) => WORK_IDS.has(id))
+          .sort(),
         opponent: str(raw, 'vs', d.opponent).toLowerCase(),
         query: str(raw, 'q', d.query),
         elements: list(raw, 'el').flatMap((e) => element(e)?.name ?? []),

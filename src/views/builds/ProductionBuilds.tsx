@@ -414,10 +414,8 @@ function PartnerSection({
   empty: string
 }) {
   const held = speciesHeld(ctx.pals)
-  const picks = breedablePicks(
-    advisePassives(ctx.data.passives, spec),
-    ctx.data.passives,
-  )
+  const advice = advisePassives(ctx.data.passives, spec)
+  const picks = breedablePicks(advice, ctx.data.passives)
   const species = bestPartners(ctx.data, ctx.pool, wants, ctx.top)
   const mine = ownedPartners(
     ctx.data,
@@ -455,6 +453,7 @@ function PartnerSection({
               rows={mine}
               ctx={ctx}
               wanted={spec}
+              advice={advice}
               detail={(r) =>
                 (r as (typeof mine)[number]).effects.map((e) => (
                   <Pill key={e.type} tone="signal">
@@ -487,10 +486,8 @@ function ProducerSections({
   ctx: Ctx
 }) {
   const held = speciesHeld(ctx.pals)
-  const picks = breedablePicks(
-    advisePassives(ctx.data.passives, spec),
-    ctx.data.passives,
-  )
+  const advice = advisePassives(ctx.data.passives, spec)
+  const picks = breedablePicks(advice, ctx.data.passives)
   if (items.length === 0) {
     return (
       <p className="text-xs text-[var(--color-muted)]">
@@ -553,6 +550,7 @@ function ProducerSections({
                   rows={mine}
                   ctx={ctx}
                   wanted={spec}
+                  advice={advice}
                   detail={(r) => (
                     <Pill tone="signal" title="Ranching level">
                       Lv {(r as (typeof mine)[number]).level}

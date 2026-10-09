@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import {
@@ -127,12 +135,24 @@ export function BasesView({ index }: { index: SaveIndex }) {
     void ensure()
   }, [ensure])
 
-  const nameOfStructure = (s: Structure) => structureName(data, s)
-  const nameOfItem = (staticId: string) => itemName(data, staticId)
+  // Stable, because the memos below them list these as dependencies: as plain
+  // closures they were new on every render, so the item search ran again and
+  // the structure list regrouped on each keystroke anywhere in the view.
+  const nameOfStructure = useCallback(
+    (s: Structure) => structureName(data, s),
+    [data],
+  )
+  const nameOfItem = useCallback(
+    (staticId: string) => itemName(data, staticId),
+    [data],
+  )
 
   const bases = index.bases
   const baseNames = useMemo(() => namesOfBases(index, data), [index, data])
-  const nameOfBase = (b: Base) => baseNames.get(b.baseId) ?? 'Base'
+  const nameOfBase = useCallback(
+    (b: Base) => baseNames.get(b.baseId) ?? 'Base',
+    [baseNames],
+  )
 
   /** Structures that hold a container and sit outside any base camp. */
   const worldChests = useMemo(
@@ -209,8 +229,10 @@ export function BasesView({ index }: { index: SaveIndex }) {
 
   const { source, query, storageOnly } = params
   const selectedContainer = params.containerId
-  const patch = (p: Partial<BasesParams>) =>
-    setParams((prev) => ({ ...prev, ...p }))
+  const patch = useCallback(
+    (p: Partial<BasesParams>) => setParams((prev) => ({ ...prev, ...p })),
+    [setParams],
+  )
 
   const setSource = (source: Source) => patch({ source })
   const setSelectedContainer = (containerId: Guid | undefined) =>
@@ -282,6 +304,27 @@ export function BasesView({ index }: { index: SaveIndex }) {
       return c ? [c] : []
     })
   }, [index, source, orphans, listed])
+  // One export row per stack, counted without building the rows.
+  const visibleStacks = useMemo(
+    () => visibleContainers.reduce((n, c) => n + c.slots.length, 0),
+    [visibleContainers],
+  )
+
+  // Stable for the overview, which is memoised: it holds the base plan, and a
+  // plan of several hundred dots is not worth redrawing for a keystroke in the
+  // search box.
+  const listDamaged = useCallback(
+    () => patch({ damaged: true, storageOnly: false, builder: '' }),
+    [patch],
+  )
+  const selectStructure = useCallback(
+    (id: Guid) => {
+      const st = index.structureById.get(id)
+      if (!st) return
+      patch({ structureId: st.instanceId, containerId: st.containerId })
+    },
+    [index, patch],
+  )
 
   const openContainer = (containerId: Guid) => {
     const { source: next, structureId } = locate(index, containerId)
@@ -417,14 +460,16 @@ export function BasesView({ index }: { index: SaveIndex }) {
         <div className="flex shrink-0 justify-end border-b border-[var(--color-line)] px-3 py-1.5">
           {source.kind === 'wear' ? (
             <ExportMenu
-              rows={wornRows(index, data, worn)}
+              rows={() => wornRows(index, data, worn)}
+              count={worn.length}
               columns={WORN_COLUMNS}
               kind="wear"
               title={`Export the ${worn.length} worn items in this list`}
             />
           ) : (
             <ExportMenu
-              rows={containerRows(index, data, visibleContainers)}
+              rows={() => containerRows(index, data, visibleContainers)}
+              count={visibleStacks}
               columns={CONTAINER_COLUMNS}
               kind="storage"
               title={`Export the contents of ${visibleContainers.length} containers in this view`}
@@ -471,15 +516,8 @@ export function BasesView({ index }: { index: SaveIndex }) {
             }
             selected={selectedStructure}
             nameOfStructure={nameOfStructure}
-            onDamaged={() =>
-              patch({ damaged: true, storageOnly: false, builder: '' })
-            }
-            onSelect={(id) => {
-              const st = index.structureById.get(id)
-              if (!st) return
-              setSelectedStructure(st.instanceId)
-              setSelectedContainer(st.containerId)
-            }}
+            onDamaged={listDamaged}
+            onSelect={selectStructure}
           />
         )}
       </aside>
@@ -514,33 +552,53 @@ function SourceRail({
   source: Source
   onSelect: (s: Source) => void
 }) {
-  const worldTotals = storageTotals(
-    index,
-    worldChests.map((s) => s.containerId!),
+  // Every total in the rail is a walk over every slot of every container it
+  // counts, and none of them changes until the save does.
+  const worldTotals = useMemo(
+    () =>
+      storageTotals(
+        index,
+        worldChests.map((s) => s.containerId!),
+      ),
+    [index, worldChests],
   )
-  const orphanTotals = storageTotals(
-    index,
-    orphans.map((c) => c.containerId),
+  const orphanTotals = useMemo(
+    () =>
+      storageTotals(
+        index,
+        orphans.map((c) => c.containerId),
+      ),
+    [index, orphans],
   )
-  const unknown = orphans.filter((c) => c.ownerKind === 'unknown').length
+  const unknown = useMemo(
+    () => orphans.filter((c) => c.ownerKind === 'unknown').length,
+    [orphans],
+  )
+  const baseRows = useMemo(
+    () =>
+      bases.map((base) => {
+        const structures = index.structuresByBase.get(base.baseId) ?? []
+        return {
+          base,
+          structures: structures.length,
+          totals: storageTotals(
+            index,
+            structures.flatMap((s) => (s.containerId ? [s.containerId] : [])),
+          ),
+          workers: base.workerContainerId
+            ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
+            : 0,
+          guild: base.groupId ? index.guildById.get(base.groupId) : undefined,
+        }
+      }),
+    [index, bases],
+  )
 
   return (
     <aside className="w-[var(--rail-width)] shrink-0 space-y-3 overflow-y-auto border-r border-[var(--color-line)] p-3">
       <Panel title="Bases">
         <ul>
-          {bases.map((base) => {
-            const structures = index.structuresByBase.get(base.baseId) ?? []
-            const totals = storageTotals(
-              index,
-              structures.flatMap((s) => (s.containerId ? [s.containerId] : [])),
-            )
-            const workers = base.workerContainerId
-              ? (index.palsByContainer.get(base.workerContainerId)?.length ?? 0)
-              : 0
-            const guild = base.groupId
-              ? index.guildById.get(base.groupId)
-              : undefined
-
+          {baseRows.map(({ base, structures, totals, workers, guild }) => {
             return (
               <li key={base.baseId}>
                 <RailButton
@@ -550,7 +608,7 @@ function SourceRail({
                   title={baseNames.get(base.baseId) ?? 'Base'}
                   card={{ kind: 'base', id: base.baseId }}
                   lines={[
-                    `${count(structures.length)} structures · ${totals.containers} chests`,
+                    `${count(structures)} structures · ${totals.containers} chests`,
                     `${workers} workers · ${compact(totals.items)} items`,
                     guild
                       ? `${guild.name} · camp level ${guild.baseCampLevel}`
@@ -898,7 +956,7 @@ function StructureList({
  * reproportioned; here it has room to be read, and every dot is still a
  * shortcut into the structure it belongs to.
  */
-function BaseOverview({
+const BaseOverview = memo(function BaseOverview({
   index,
   base,
   name,
@@ -916,7 +974,38 @@ function BaseOverview({
   onDamaged: () => void
   nameOfStructure: (s: Structure) => string
 }) {
-  if (!base) {
+  // Worked out once per base and held, so the plan below, which is memoised
+  // too, is handed the same structures, chests and tints until one changes.
+  const plan = useMemo(() => {
+    if (!base) return undefined
+    const structures = index.structuresByBase.get(base.baseId) ?? []
+    const chestIds = new Set(
+      structures.flatMap((s) => (s.containerId ? [s.instanceId] : [])),
+    )
+    // One colour per builder, and only when there is more than one: a plan
+    // drawn all in one colour says nothing its legend would not.
+    const builders = buildersOf(index, structures)
+    const tints = new Map(
+      builders.length > 1
+        ? builders.map((b, i) => [b.uid, categoricalCss(i)])
+        : [],
+    )
+    return {
+      structures,
+      chestIds,
+      health: baseHealth(index, base),
+      builders,
+      tints,
+      tintOf:
+        tints.size > 0
+          ? (s: Structure) =>
+              s.buildPlayerUid ? tints.get(s.buildPlayerUid) : undefined
+          : undefined,
+      unbuilt: structures.filter((s) => !s.buildPlayerUid).length,
+    }
+  }, [index, base])
+
+  if (!base || !plan) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center">
         <p className="text-sm text-[var(--color-muted)]">
@@ -926,22 +1015,8 @@ function BaseOverview({
     )
   }
 
-  const structures = index.structuresByBase.get(base.baseId) ?? []
-  const chestIds = new Set(
-    structures.flatMap((s) => (s.containerId ? [s.instanceId] : [])),
-  )
-  const health = baseHealth(index, base)
+  const { structures, chestIds, health, builders, tints, unbuilt } = plan
   const guild = base.groupId ? index.guildById.get(base.groupId) : undefined
-
-  // One colour per builder, and only when there is more than one: a plan drawn
-  // all in one colour says nothing its legend would not.
-  const builders = buildersOf(index, structures)
-  const tints = new Map(
-    builders.length > 1
-      ? builders.map((b, i) => [b.uid, categoricalCss(i)])
-      : [],
-  )
-  const unbuilt = structures.filter((s) => !s.buildPlayerUid).length
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -954,12 +1029,7 @@ function BaseOverview({
             selectedId={selected}
             onSelect={onSelect}
             nameOf={nameOfStructure}
-            tintOf={
-              tints.size > 0
-                ? (s) =>
-                    s.buildPlayerUid ? tints.get(s.buildPlayerUid) : undefined
-                : undefined
-            }
+            tintOf={plan.tintOf}
           />
           {tints.size > 0 && (
             <ul
@@ -1044,7 +1114,7 @@ function BaseOverview({
       </div>
     </div>
   )
-}
+})
 
 /**
  * "3 of 853", in the warning colour when the 3 is something to act on.
@@ -1608,6 +1678,11 @@ function ItemSearch({
     () => searchItems(index, query, nameOfItem, Infinity),
     [index, query, nameOfItem],
   )
+  // One export row per place, counted without building the rows.
+  const places = useMemo(
+    () => hits.reduce((n, hit) => n + hit.places.length, 0),
+    [hits],
+  )
   const [expanded, setExpanded] = useState<string>()
   const [limit, setLimit] = useState(ITEM_PAGE)
   const shown = hits.slice(0, limit)
@@ -1660,7 +1735,8 @@ function ItemSearch({
                     is the question, so the answer has to keep the places. */}
                 <div className="flex justify-end px-3 py-1.5">
                   <ExportMenu
-                    rows={itemHitRows(index, data, hits)}
+                    rows={() => itemHitRows(index, data, hits)}
+                    count={places}
                     columns={ITEM_HIT_COLUMNS}
                     kind="item-search"
                     title={`Export every place these ${hits.length} items were found`}

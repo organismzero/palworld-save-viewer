@@ -24,11 +24,25 @@ import { Button } from './controls.tsx'
 
 export function ExportMenu<T>({
   rows,
+  count,
   columns,
   kind,
   title,
 }: {
-  rows: readonly T[]
+  /**
+   * The rows, or a function that builds them when a button is pressed.
+   *
+   * The function is for rows that cost something to make: resolving where
+   * every stack in a base is, on each render of the view around this, to feed
+   * two buttons that are almost never pressed.
+   */
+  rows: readonly T[] | (() => readonly T[])
+  /**
+   * With a function, how many rows it will build, for the tooltip and for
+   * disabling the buttons when there are none. Left out, the buttons stay
+   * enabled and say no number.
+   */
+  count?: number
   columns: readonly Column<T>[]
   /** Goes in the filename: `Level-pals-412.csv`. */
   kind: string
@@ -36,19 +50,26 @@ export function ExportMenu<T>({
   title?: string
 }) {
   const fileName = useSaveStore((s) => s.fileName)
-  const disabled = rows.length === 0
+  const expected = typeof rows === 'function' ? count : rows.length
+  const disabled = expected === 0
 
   const save = (ext: 'csv' | 'json') => {
-    const name = exportName(fileName, kind, rows.length, ext)
+    const built = typeof rows === 'function' ? rows() : rows
+    // Only reachable through a `count` that was an overestimate.
+    if (built.length === 0) {
+      useUiStore.getState().notify('Nothing to export')
+      return
+    }
+    const name = exportName(fileName, kind, built.length, ext)
     // The browser's own download shelf is easy to miss, and is hidden entirely
     // in some configurations.
     useUiStore.getState().notify(`Saved ${name}`)
     if (ext === 'csv') {
-      download(name, toCsv(rows, columns), CSV_MIME)
+      download(name, toCsv(built, columns), CSV_MIME)
       return
     }
     // Same columns, so the two formats cannot drift apart.
-    const objects = rows.map((row) =>
+    const objects = built.map((row) =>
       Object.fromEntries(columns.map((c) => [c.header, c.value(row) ?? null])),
     )
     download(name, JSON.stringify(objects, null, 2), JSON_MIME)
@@ -66,7 +87,9 @@ export function ExportMenu<T>({
           title={
             disabled
               ? 'Nothing to export'
-              : `Download ${rows.length.toLocaleString()} rows as ${ext.toUpperCase()}`
+              : expected === undefined
+                ? `Download as ${ext.toUpperCase()}`
+                : `Download ${expected.toLocaleString()} rows as ${ext.toUpperCase()}`
           }
           className="uppercase"
         >

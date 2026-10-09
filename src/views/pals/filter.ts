@@ -87,22 +87,50 @@ export function filterPals(
     return true
   })
 
-  const cmp: Record<SortKey, (a: Pal, b: Pal) => number> = {
-    iv: (a, b) => ivTotal(b) - ivTotal(a),
-    level: (a, b) => b.level - a.level,
-    name: (a, b) =>
-      palName(a, species(a)).localeCompare(palName(b, species(b))),
-    species: (a, b) => speciesName(a).localeCompare(speciesName(b)),
+  // One key per pal, worked out before the sort and not inside its comparator.
+  // A comparator runs about n·log n times, and the name sorts each looked up a
+  // species and built a display name on both sides of every comparison.
+  const by = <K>(key: (pal: Pal) => K, cmp: (a: K, b: K) => number) =>
+    sorted(out, key, cmp, params.reversed)
+  const sorts: Record<SortKey, () => Pal[]> = {
+    iv: () => by(ivTotal, descending),
+    level: () => by((p) => p.level, descending),
+    name: () => by((p) => palName(p, species(p)), collator.compare),
+    species: () => by(speciesName, collator.compare),
     // Unowned pals last: an empty name would otherwise sort ahead of everyone.
-    owner: (a, b) =>
-      Number(!ownerName(a)) - Number(!ownerName(b)) ||
-      ownerName(a).localeCompare(ownerName(b)),
-    hp: (a, b) => (b.hp ?? 0) - (a.hp ?? 0),
-    caught: (a, b) => (b.ownedTime ?? 0) - (a.ownedTime ?? 0),
-    rarity: (a, b) => (species(b)?.rarity ?? 0) - (species(a)?.rarity ?? 0),
+    owner: () =>
+      by(
+        ownerName,
+        (a, b) => Number(!a) - Number(!b) || collator.compare(a, b),
+      ),
+    hp: () => by((p) => p.hp ?? 0, descending),
+    caught: () => by((p) => p.ownedTime ?? 0, descending),
+    rarity: () => by((p) => species(p)?.rarity ?? 0, descending),
   }
-  const by = cmp[params.sort]
-  return out.sort(params.reversed ? (a, b) => by(b, a) : by)
+  return sorts[params.sort]()
+}
+
+/**
+ * One collator for every name comparison. With no locale and no options it
+ * orders exactly as `String.prototype.localeCompare` does, which is what this
+ * replaced, without resolving the locale again on each call.
+ */
+const collator = new Intl.Collator()
+
+const descending = (a: number, b: number) => b - a
+
+/** `pals` ordered by `cmp` over each one's `key`. Stable, as `sort` is. */
+function sorted<K>(
+  pals: Pal[],
+  key: (pal: Pal) => K,
+  cmp: (a: K, b: K) => number,
+  reversed: boolean,
+): Pal[] {
+  const keyed = pals.map((pal) => ({ pal, key: key(pal) }))
+  keyed.sort(
+    reversed ? (a, b) => cmp(b.key, a.key) : (a, b) => cmp(a.key, b.key),
+  )
+  return keyed.map((k) => k.pal)
 }
 
 /** Whether anything is narrowing the grid. Sort and selection are not filters. */

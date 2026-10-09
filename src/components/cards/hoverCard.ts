@@ -259,8 +259,11 @@ export function hideCardAt() {
 /** Closes whatever card is open. Safe to call when none is. */
 export function hideHoverCard() {
   clearTimers()
-  if (useHoverCardStore.getState().open)
-    warmUntil = performance.now() + WARM_FOR
+  // Nothing open is the usual case by far: this is the document's scroll
+  // listener, and writing the store per scroll event re-rendered the layer.
+  // A card that is merely pending has no state but the timer cleared above.
+  if (!useHoverCardStore.getState().open) return
+  warmUntil = performance.now() + WARM_FOR
   release()
   useHoverCardStore.setState({
     open: false,

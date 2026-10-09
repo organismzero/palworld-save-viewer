@@ -119,6 +119,7 @@ export function Owned({
   rows,
   ctx,
   wanted,
+  advice: given,
   detail,
   empty,
 }: {
@@ -126,10 +127,16 @@ export function Owned({
   rows: OwnedRow[]
   ctx: Ctx
   wanted: SideSpec
+  /**
+   * The advice for `wanted`, from a caller that has already worked it out.
+   * Travel draws one of these per mount kind and each used to score the whole
+   * passive table again.
+   */
+  advice?: PassiveAdvice
   detail: (row: OwnedRow) => ReactNode
   empty: string
 }) {
-  const advice = advisePassives(ctx.data.passives, wanted)
+  const advice = given ?? advisePassives(ctx.data.passives, wanted)
   const good = new Set([...advice.best, ...advice.also].map((s) => s.id))
   const bad = new Set(advice.avoid.map((s) => s.id))
 
@@ -373,6 +380,7 @@ export function WorkSections({
                   rows={mine}
                   ctx={ctx}
                   wanted={spec}
+                  advice={advice}
                   detail={(r) => (
                     <Pill
                       tone="signal"

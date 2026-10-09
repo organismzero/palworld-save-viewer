@@ -192,6 +192,24 @@ describe('breedCodec', () => {
     ).toEqual(['legend'])
   })
 
+  it('keeps a pal’s four slots of passives, the four it would write first', () => {
+    // After the dedupe and the sort, so repeats do not use up slots and the
+    // set that survives is the same one a reload decodes.
+    const decoded = codec.decode(
+      new URLSearchParams('pv=e,d,D,c,b,a,a'),
+      BREED_DEFAULTS,
+    ).passives
+    expect(decoded).toEqual(['a', 'b', 'c', 'd'])
+    expect(
+      codec.decode(
+        new URLSearchParams(
+          `pv=${codec.encode({ ...BREED_DEFAULTS, passives: decoded }, BREED_DEFAULTS).pv}`,
+        ),
+        BREED_DEFAULTS,
+      ).passives,
+    ).toEqual(decoded)
+  })
+
   it('lowercases passives and survives an unknown one', () => {
     // Validated late, like the target: reference data has not loaded when a
     // cold deep link is decoded.
