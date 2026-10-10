@@ -1,0 +1,1 @@
+import{j as o,d as s}from"./index-BB7ywp5Z.js";import{n as i}from"./AppShell-CMwhU8_n.js";function a({pal:t,short:r=!1}){const e=i(t);return e?o.jsx(s,{title:`${e}. Take it out before it can be used.`,children:r?"stored":"dim. storage"}):null}export{a as S};
