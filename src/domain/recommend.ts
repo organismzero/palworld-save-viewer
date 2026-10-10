@@ -375,10 +375,39 @@ export function breedablePicks(
  */
 export function speciesPool(data: Refdata): string[] {
   const bred = Object.keys(data.breeding?.pals ?? {})
-  if (bred.length > 0) return bred.filter((id) => data.species[id])
+  if (bred.length > 0) {
+    return bred.filter((id) => data.species[id] && !isUnreleased(data, id))
+  }
   return Object.entries(data.species)
     .filter(([, s]) => s.zukan !== undefined)
     .map(([id]) => id)
+}
+
+/**
+ * The breeding rank the game gives a species it has not released.
+ *
+ * A placeholder, not a rank: the highest real one is 3080.
+ */
+const UNRELEASED_RANK = 9999
+
+/**
+ * A species that is in the game's files and not in the game.
+ *
+ * Five of them sit in the breeding table: Boltmane and Dragostrophe, which
+ * have names waiting for them, and three that have only an asset id, which
+ * upstream spells out as "Candle Witch", "Straw Hat Cat" and "Volcanic
+ * Turtle". None has a paldex number, art, or a way to be obtained, and listed
+ * among the species to breed or build with they read as broken entries.
+ *
+ * Told by the placeholder rank together with the missing paldex number. The
+ * crossover pals have no paldex number either, and are real.
+ */
+export function isUnreleased(data: Refdata | undefined, id: string): boolean {
+  const key = id.toLowerCase()
+  return (
+    data?.breeding?.pals[key]?.combiRank === UNRELEASED_RANK &&
+    data.species[key]?.zukan === undefined
+  )
 }
 
 /**

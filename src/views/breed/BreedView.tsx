@@ -31,6 +31,7 @@ import {
   type Reach,
   type Stock,
 } from '../../domain/breeding.ts'
+import { isUnreleased } from '../../domain/recommend.ts'
 import { busiestPlayer } from '../../domain/guild.ts'
 import type { Guid, Pal, Player, SaveIndex } from '../../domain/types.ts'
 import { count } from '../../lib/format.ts'
@@ -1087,10 +1088,16 @@ function SpeciesList({
   const { data } = useRefdataStore()
 
   const all = useMemo(() => {
+    const held = new Set(index.pals.map((p) => p.characterId.toLowerCase()))
     const ids = table
-      ? [...table.rank.keys()]
+      ? // Less the species the game has not released, which nobody can breed
+        // towards — unless this save somehow holds one, and then it is real
+        // enough to list.
+        [...table.rank.keys()].filter(
+          (id) => held.has(id) || !isUnreleased(data, id),
+        )
       : // Degraded: whatever this world contains, which is short but honest.
-        [...new Set(index.pals.map((p) => p.characterId.toLowerCase()))]
+        [...held]
     return ids.map((id) => ({
       id,
       name: text.name(id),

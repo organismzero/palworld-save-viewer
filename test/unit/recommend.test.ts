@@ -24,6 +24,7 @@ import {
   ownedWorkers,
   scorePassive,
   sidesFor,
+  isUnreleased,
   opponentPool,
   speciesPool,
   strongSkills,
@@ -364,6 +365,32 @@ describe('species rankings', () => {
 
   it('only ranks real pals', () => {
     expect(pool).not.toContain('npc')
+  })
+
+  it('leaves out a species the game has not released', () => {
+    // In the files and not in the game: a placeholder rank, no paldex number.
+    const data = {
+      ...DATA,
+      species: {
+        ...DATA.species,
+        candlewitch: { ...species({}), name: 'Candle Witch' },
+        // A crossover pal: no paldex number either, but a real rank.
+        blueslime: { ...species({}), name: 'Blue Slime' },
+      },
+      breeding: {
+        ...DATA.breeding,
+        pals: {
+          ...DATA.breeding.pals,
+          candlewitch: { combiRank: 9999, ignoreCombi: true },
+          blueslime: { combiRank: 3100, ignoreCombi: true },
+        },
+      },
+    } as unknown as Refdata
+    expect(isUnreleased(data, 'CandleWitch')).toBe(true)
+    expect(isUnreleased(data, 'blueslime')).toBe(false)
+    expect(isUnreleased(undefined, 'candlewitch')).toBe(false)
+    expect(speciesPool(data)).toContain('blueslime')
+    expect(speciesPool(data)).not.toContain('candlewitch')
   })
 
   it('offers tower and raid bosses as opponents, once each', () => {
