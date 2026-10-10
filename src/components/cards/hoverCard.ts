@@ -333,10 +333,36 @@ function onPointerDown() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
-  if (e.key !== 'Escape' || !current) return
-  suppressed = current
-  hideHoverCard()
+  if (!current) return
+  if (e.key === 'Escape') {
+    suppressed = current
+    hideHoverCard()
+    return
+  }
+  // A card cannot be clicked — moving the pointer onto it closes it — so a key
+  // is the only way one can be told anything. Plain keys only, and never
+  // while typing: a card can sit open under a resting pointer while a search
+  // box has the keyboard.
+  if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return
+  const { open, desc } = useHoverCardStore.getState()
+  if (!open || !desc) return
+  onCardKey?.(desc, e.key)
+  // Whatever the key changed, the card's plain-text twin has to say too.
+  const twin = document.getElementById(DESCRIPTION_ID)
+  if (twin && describe) twin.textContent = describe(desc)
 }
+
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  )
+}
+
+let onCardKey: ((desc: CardDescriptor, key: string) => void) | undefined
 
 /**
  * Attaches the document listeners. Returns the teardown.
@@ -346,8 +372,11 @@ function onKeyDown(e: KeyboardEvent) {
  */
 export function installHoverCards(
   text: (desc: CardDescriptor) => string,
+  /** A key pressed while a card is up, for a card with something to toggle. */
+  key?: (desc: CardDescriptor, key: string) => void,
 ): () => void {
   describe = text
+  onCardKey = key
   const opts = { capture: true, passive: true } as const
   document.addEventListener('pointerover', onPointerOver, opts)
   document.addEventListener('pointermove', onPointerMove, opts)
@@ -362,6 +391,7 @@ export function installHoverCards(
   return () => {
     hideHoverCard()
     describe = undefined
+    onCardKey = undefined
     document.removeEventListener('pointerover', onPointerOver, opts)
     document.removeEventListener('pointermove', onPointerMove, opts)
     document.removeEventListener('pointerout', onPointerOut, opts)

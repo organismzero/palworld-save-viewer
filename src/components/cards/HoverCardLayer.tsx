@@ -21,6 +21,7 @@ import {
   useHoverCardStore,
   type CardDescriptor,
 } from './hoverCard.ts'
+import { REVEAL_KEY, useEggReveal } from './eggReveal.ts'
 import { PalCard } from './PalCard.tsx'
 import { BaseCard, StructureCard } from './BaseCards.tsx'
 import { CardFrame } from './CardFrame.tsx'
@@ -65,8 +66,15 @@ export function HoverCardLayer({ index }: { index: SaveIndex }) {
   }, [data, index])
   useEffect(
     () =>
-      installHoverCards((d) =>
-        describeCard(d, dataRef.current, indexRef.current),
+      installHoverCards(
+        (d) => describeCard(d, dataRef.current, indexRef.current),
+        // The one card with something to toggle: an egg, and what is in it.
+        (d, key) => {
+          if (key.toLowerCase() !== REVEAL_KEY) return
+          if (d.kind !== 'item' || !d.dynamicId) return
+          if (!indexRef.current.dynamicItemById.get(d.dynamicId)?.egg) return
+          useEggReveal.getState().toggle(d.dynamicId)
+        },
       ),
     [],
   )

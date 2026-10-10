@@ -319,6 +319,37 @@ export interface DynamicItem {
   durability?: number
   ammo?: number
   passives: string[]
+  /** What is inside, when this item is a pal egg. */
+  egg?: EggContents
+}
+
+/**
+ * The pal an egg will hatch, as the egg itself records it.
+ *
+ * How much is recorded depends on where the egg came from. One laid at a
+ * Breeding Farm is decided in full the moment it is laid: species, sex, the
+ * three IVs and the passives are all written into the egg. One found lying in
+ * the world names its species and nothing more — the rest is rolled when it
+ * hatches — and `rolled` is false.
+ *
+ * Checked against two saves of one world a fortnight apart: where a hatchling
+ * of a since-vanished bred egg was still about, ten matched their egg on every
+ * one of these fields.
+ *
+ * A spoiler by nature. Nothing shows any of it unasked — see `eggReveal.ts`.
+ */
+export interface EggContents {
+  /** With any `BOSS_` prefix stripped, as on a `Pal`. */
+  characterId: string
+  /** The egg holds an alpha. */
+  isBoss: boolean
+  /** False for a found egg: only the species is decided yet. */
+  rolled: boolean
+  gender?: Gender
+  ivHp?: number
+  ivAttack?: number
+  ivDefense?: number
+  passives: string[]
 }
 
 export interface Dungeon {

@@ -56,7 +56,9 @@ import { useUiStore } from './uiStore.ts'
 // world origin. An old snapshot would restore with the pile of pals at one spot.
 // 5: a `Boss_` prefix is stripped in either casing. An old snapshot would
 // restore with those alphas as ordinary pals of a species named `Boss_…`.
-export const SNAPSHOT_VERSION = 5
+// 6: an egg's dynamic item carries what is inside it. An old snapshot would
+// restore with every egg's contents missing.
+export const SNAPSHOT_VERSION = 6
 
 const KEY = 'current'
 const PREF_KEY = 'psv.remember'

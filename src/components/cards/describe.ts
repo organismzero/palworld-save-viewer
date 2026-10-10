@@ -13,10 +13,11 @@ import { WORK_TYPES, element } from '../../lib/color.ts'
 import { BEATS } from '../../domain/typeChart.ts'
 import { palTooltip } from '../../domain/palText.ts'
 import { passiveText } from '../../views/breed/passiveText.ts'
-import { itemText } from '../../domain/itemText.ts'
+import { eggText, itemText } from '../../domain/itemText.ts'
 import { memberRole } from '../../lib/roles.ts'
 import { baseLabel } from '../../domain/bases.ts'
-import type { SaveIndex } from '../../domain/types.ts'
+import type { EggContents, Guid, SaveIndex } from '../../domain/types.ts'
+import { REVEAL_KEY, useEggReveal } from './eggReveal.ts'
 import type { CardDescriptor } from './hoverCard.ts'
 
 export function describeCard(
@@ -75,6 +76,7 @@ export function describeCard(
         passiveNames: dynamic?.passives.map(
           (a) => data?.passives[a.toLowerCase()]?.name ?? a,
         ),
+        inside: dynamic?.egg && insideText(dynamic.egg, dynamic.localId, data),
       })
     }
     case 'player': {
@@ -155,4 +157,20 @@ export function describeCard(
 
 function join(parts: (string | false | undefined)[]): string {
   return parts.filter(Boolean).join('\n')
+}
+
+/** An egg's line in its card's twin: hidden, unless it has been opened up. */
+function insideText(
+  egg: EggContents,
+  dynamicId: Guid,
+  data: Refdata | undefined,
+): string {
+  if (!useEggReveal.getState().revealed.has(dynamicId)) {
+    return `contents hidden — press ${REVEAL_KEY.toUpperCase()} to look`
+  }
+  return eggText(
+    egg,
+    speciesOf(data, egg)?.name ?? egg.characterId,
+    egg.passives.map((a) => data?.passives[a.toLowerCase()]?.name ?? a),
+  )
 }

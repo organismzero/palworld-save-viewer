@@ -10,13 +10,14 @@
  *   property *outside* `RawData`.
  */
 
-import { arr, int, type Node } from '../../gvas.ts'
+import { arr, byte, enumTail, int, strArr, type Node } from '../../gvas.ts'
 import { nonZero, normGuid } from '../../guid.ts'
 import type { Warnings } from '../../warnings.ts'
 import type {
   CharacterContainer,
   Container,
   DynamicItem,
+  EggContents,
   Dungeon,
   ItemStack,
 } from '../../../domain/types.ts'
@@ -134,10 +135,39 @@ export function readDynamicItems(
             (p: unknown): p is string => typeof p === 'string',
           )
         : [],
+      egg: readEgg(raw),
     })
   }
 
   return items
+}
+
+/**
+ * The pal inside an egg, from the egg's own record.
+ *
+ * The record always names a species. A bred egg also carries a cut-down
+ * `SaveParameter` — the same properties a pal in the world has, less the ones
+ * that only mean something once it is out — and a found egg carries none.
+ */
+function readEgg(raw: Node): EggContents | undefined {
+  if (raw?.type !== 'egg') return undefined
+  const rawId: unknown = raw.character_id
+  if (typeof rawId !== 'string' || !rawId || rawId === 'None') return undefined
+
+  const isBoss = /^boss_/i.test(rawId)
+  const sp: Node = raw.object?.SaveParameter?.value
+  const gender = enumTail(sp?.Gender)
+  return {
+    characterId: isBoss ? rawId.slice(5) : rawId,
+    isBoss,
+    rolled: sp !== undefined,
+    gender: gender === 'Male' || gender === 'Female' ? gender : undefined,
+    ivHp: byte(sp?.Talent_HP),
+    // Talent_Shot is the attack IV, as it is on a pal.
+    ivAttack: byte(sp?.Talent_Shot),
+    ivDefense: byte(sp?.Talent_Defense),
+    passives: strArr(sp?.PassiveSkillList),
+  }
 }
 
 export function readDungeons(dungeonArray: Node): Dungeon[] {
