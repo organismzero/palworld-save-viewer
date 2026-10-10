@@ -11,6 +11,8 @@ import { useEffect, type ReactNode } from 'react'
 import { useRefdataStore } from '../store/refdataStore.ts'
 
 import { playerGuilds, speciesCounts, ivTotal } from '../domain/index.ts'
+import { speciesOf } from '../domain/names.ts'
+import { GameIcon } from '../components/GameIcon.tsx'
 import type { PlayerDetail, SaveIndex, WorldSettings } from '../domain/types.ts'
 import { STATUS_LABELS, STATUS_ORDER } from '../domain/statusNames.ts'
 import { CardTrigger } from '../components/cards/CardTrigger.tsx'
@@ -38,7 +40,6 @@ import { memberRole } from '../lib/roles.ts'
 import {
   ElementBadge,
   IVBar,
-  MonogramTile,
   OnlineDot,
   Panel,
   PassiveChip,
@@ -60,6 +61,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
   // for it; this one did not, so a link straight to `#/summary` gave cards of
   // raw ids until some other tab had been visited.
   const ensure = useRefdataStore((r) => r.ensure)
+  const data = useRefdataStore((r) => r.data)
   useEffect(() => {
     void ensure()
   }, [ensure])
@@ -293,9 +295,8 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 const pos = detail?.pos ?? player?.pos
 
                 return [
-                  // Raw like the rest of this view: no reference data.
                   <CardTrigger
-                    card={{ kind: 'player', uid: m.playerUid, raw: true }}
+                    card={{ kind: 'player', uid: m.playerUid }}
                     focusable
                     className="flex items-center gap-2"
                   >
@@ -364,7 +365,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 const player = index.playerByUid.get(d.playerUid)
                 return [
                   <CardTrigger
-                    card={{ kind: 'player', uid: d.playerUid, raw: true }}
+                    card={{ kind: 'player', uid: d.playerUid }}
                     focusable
                   >
                     {player?.name ?? <RawId>{d.playerUid.slice(0, 8)}</RawId>}
@@ -400,7 +401,7 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             ]}
             rows={index.players.map((p) => [
               <CardTrigger
-                card={{ kind: 'player', uid: p.playerUid, raw: true }}
+                card={{ kind: 'player', uid: p.playerUid }}
                 focusable
               >
                 {p.name}
@@ -440,11 +441,24 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
                 const best = pals.reduce((a, b) =>
                   ivTotal(b) > ivTotal(a) ? b : a,
                 )
+                // Named as everywhere else, with the save's own id as the
+                // fallback when the reference data did not arrive.
+                const info = data?.species[id.toLowerCase()]
+                const name = info?.name ?? id
                 return [
-                  <span className="flex items-center gap-2">
-                    <MonogramTile name={id} size={26} />
-                    {id}
-                  </span>,
+                  <CardTrigger
+                    card={{ kind: 'species', id }}
+                    focusable
+                    className="flex items-center gap-2"
+                  >
+                    <GameIcon
+                      path={info?.icon}
+                      name={name}
+                      elementName={info?.element1}
+                      size={26}
+                    />
+                    {name}
+                  </CardTrigger>,
                   n,
                   <IVBar
                     hp={best.ivHp}
@@ -465,37 +479,58 @@ export function SaveSummary({ index }: { index: SaveIndex }) {
             rows={[...index.pals]
               .sort((a, b) => ivTotal(b) - ivTotal(a))
               .slice(0, 10)
-              .map((p) => [
-                // No refdata in this view by design — it reports what the save
-                // says, raw ids and all, and a `raw` card does the same.
-                <CardTrigger
-                  card={{ kind: 'pal', pal: p, raw: true }}
-                  focusable
-                  className="flex items-center gap-2"
-                >
-                  <MonogramTile name={p.characterId} size={26} />
-                  {p.isBoss && <Pill tone="danger">alpha</Pill>}
-                  {p.characterId}
-                </CardTrigger>,
-                p.nickname ?? '—',
-                p.level,
-                <span className="flex items-center gap-2">
-                  <IVBar
-                    hp={p.ivHp}
-                    attack={p.ivAttack}
-                    defense={p.ivDefense}
-                  />
-                  <span className="text-[11px]">{ivTotal(p)}</span>
-                </span>,
-                <span className="flex flex-wrap gap-1">
-                  {p.passives.length === 0
-                    ? '—'
-                    : p.passives.map((name) => (
-                        <PassiveChip key={name} name={name} />
-                      ))}
-                </span>,
-                beforeSave(p.ownedTime, index.meta.savedAtTicks),
-              ])}
+              .map((p) => {
+                const info = speciesOf(data, p)
+                const name = info?.name ?? p.characterId
+                return [
+                  // This table used to show the save's raw ids on purpose, as a
+                  // report of what the file says. It read as a bug instead: a
+                  // `CatMage` here was a Katress on every other tab.
+                  <CardTrigger
+                    card={{ kind: 'pal', pal: p }}
+                    focusable
+                    className="flex items-center gap-2"
+                  >
+                    <GameIcon
+                      path={info?.icon}
+                      name={name}
+                      elementName={info?.element1}
+                      size={26}
+                    />
+                    {p.isBoss && !info?.human && (
+                      <Pill tone="danger">alpha</Pill>
+                    )}
+                    {name}
+                  </CardTrigger>,
+                  p.nickname ?? '—',
+                  p.level,
+                  <span className="flex items-center gap-2">
+                    <IVBar
+                      hp={p.ivHp}
+                      attack={p.ivAttack}
+                      defense={p.ivDefense}
+                    />
+                    <span className="text-[11px]">{ivTotal(p)}</span>
+                  </span>,
+                  // Capped, so four named passives wrap onto a second line instead
+                  // of pushing "caught" off the side of the table.
+                  <span className="flex max-w-[22rem] flex-wrap gap-1">
+                    {p.passives.length === 0
+                      ? '—'
+                      : p.passives.map((asset) => {
+                          const passive = data?.passives[asset.toLowerCase()]
+                          return (
+                            <PassiveChip
+                              key={asset}
+                              name={passive?.name ?? asset}
+                              rank={passive?.rank}
+                            />
+                          )
+                        })}
+                  </span>,
+                  beforeSave(p.ownedTime, index.meta.savedAtTicks),
+                ]
+              })}
           />
         </section>
 
